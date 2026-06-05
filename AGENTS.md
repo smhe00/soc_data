@@ -186,11 +186,15 @@ Team-scoped API views:
 - `GET /api/physical-partitions?team=AI%20Team`
 - `GET /api/metrics?team=AI%20Team`
 - `GET /api/quality/issues?team=AI%20Team`
+- `GET /api/import/template?team=AI%20Team`
+- `POST /api/import/excel?team=AI%20Team`
 
 Import endpoints:
 
 - `GET /api/import/template`
 - `POST /api/import/excel`
+
+Team import workbooks are scoped input workbooks, not permission enforcement. Shared sheets are reference context; scoped uploads only merge `logical_components`, `physical_partitions`, and `metrics` after backend scope validation.
 
 ## Development Principles
 

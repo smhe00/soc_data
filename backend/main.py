@@ -4,13 +4,17 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 from sqlalchemy import delete, text
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 
@@ -1009,14 +1013,15 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
             row["id"] = metric_id(row)
 
 
-def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> list[str]:
+def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_refs: dict[str, set[str]] | None = None) -> list[str]:
     errors: list[str] = []
-    project_ids = {row["id"] for row in all_rows["projects"]}
-    module_definition_ids = {row["id"] for row in all_rows["module_definitions"]}
-    scenario_ids = {row["id"] for row in all_rows["scenarios"]}
-    tier_ids = {row["id"] for row in all_rows["tiers"]}
-    component_ids = {row["id"] for row in all_rows["logical_components"]}
-    partition_ids = {row["id"] for row in all_rows["physical_partitions"]}
+    existing_refs = existing_refs or {}
+    project_ids = {row["id"] for row in all_rows["projects"]} | existing_refs.get("projects", set())
+    module_definition_ids = {row["id"] for row in all_rows["module_definitions"]} | existing_refs.get("module_definitions", set())
+    scenario_ids = {row["id"] for row in all_rows["scenarios"]} | existing_refs.get("scenarios", set())
+    tier_ids = {row["id"] for row in all_rows["tiers"]} | existing_refs.get("tiers", set())
+    component_ids = {row["id"] for row in all_rows["logical_components"]} | existing_refs.get("logical_components", set())
+    partition_ids = {row["id"] for row in all_rows["physical_partitions"]} | existing_refs.get("physical_partitions", set())
 
     for row in all_rows["scenarios"]:
         if row["project_id"] not in project_ids:
@@ -1069,8 +1074,184 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> list[str]
     return errors
 
 
+def existing_reference_ids(session: Session) -> dict[str, set[str]]:
+    return {
+        "projects": {row.id for row in session.exec(select(Project)).all()},
+        "module_definitions": {row.id for row in session.exec(select(ModuleDefinition)).all()},
+        "scenarios": {row.id for row in session.exec(select(Scenario)).all()},
+        "tiers": {row.id for row in session.exec(select(Tier)).all()},
+        "logical_components": {row.id for row in session.exec(select(LogicalComponent)).all()},
+        "physical_partitions": {row.id for row in session.exec(select(PhysicalPartition)).all()},
+    }
+
+
+def validate_team_import_scope(all_rows: dict[str, list[dict[str, Any]]], session: Session, team: str | None, scenario_id: str = "S2") -> list[str]:
+    if is_global_team(team):
+        return []
+
+    errors: list[str] = []
+    allowed_component_ids = allowed_component_ids_for_team(session, team, scenario_id) or set()
+    if not allowed_component_ids:
+        return [f"team {team} has no assigned component scope in scenario {scenario_id}"]
+
+    existing_partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+    allowed_partition_ids = {row.id for row in existing_partitions if row.logical_component_id in allowed_component_ids}
+    workbook_partition_ids = {row["id"] for row in all_rows["physical_partitions"] if row["logical_component_id"] in allowed_component_ids}
+    allowed_partition_ids |= workbook_partition_ids
+
+    immutable_logical_fields = {
+        "project_id",
+        "parent_id",
+        "module_definition_id",
+        "name",
+        "instance_type",
+        "resource_type",
+        "function_domain",
+        "hierarchy_path",
+    }
+    for row in all_rows["logical_components"]:
+        if row["id"] not in allowed_component_ids:
+            errors.append(f"logical_component {row['id']} is outside team scope {team}")
+            continue
+        existing = session.get(LogicalComponent, row["id"])
+        if existing:
+            for field in immutable_logical_fields:
+                if (row.get(field) or None) != (getattr(existing, field) or None):
+                    errors.append(f"logical_component {row['id']} cannot change structural field {field} in a team workbook")
+
+    for row in all_rows["physical_partitions"]:
+        if row["scenario_id"] != scenario_id:
+            errors.append(f"physical_partition {row['id']} uses scenario_id {row['scenario_id']}, expected {scenario_id}")
+        if row["logical_component_id"] not in allowed_component_ids:
+            errors.append(f"physical_partition {row['id']} maps outside team scope {team}")
+
+    for row in all_rows["metrics"]:
+        if row["scenario_id"] != scenario_id:
+            errors.append(f"metric {row['id']} uses scenario_id {row['scenario_id']}, expected {scenario_id}")
+        if row["subject_type"] == "logical_component" and row["subject_id"] not in allowed_component_ids:
+            errors.append(f"metric {row['id']} references logical_component outside team scope {team}")
+        elif row["subject_type"] == "physical_partition" and row["subject_id"] not in allowed_partition_ids:
+            errors.append(f"metric {row['id']} references physical_partition outside team scope {team}")
+        elif row["subject_type"] in {"tier", "scenario"}:
+            errors.append(f"metric {row['id']} uses shared subject_type {row['subject_type']}; team workbooks may only update logical_component or physical_partition metrics")
+
+    return errors
+
+
+def row_dict(row: SQLModel, columns: list[str]) -> dict[str, Any]:
+    return {column: getattr(row, column, None) for column in columns}
+
+
+def write_import_sheet(workbook: Workbook, sheet_name: str, columns: list[str], rows: list[dict[str, Any]], editable: bool = True) -> None:
+    sheet = workbook.create_sheet(sheet_name)
+    sheet.append(columns)
+    for row in rows:
+        sheet.append([row.get(column) for column in columns])
+
+    header_fill = PatternFill("solid", fgColor="0F172A" if editable else "334155")
+    header_font = Font(color="FFFFFF", bold=True)
+    for cell in sheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    for index, column in enumerate(columns, start=1):
+        max_len = max([len(str(column))] + [len(str(row.get(column) or "")) for row in rows[:100]])
+        sheet.column_dimensions[get_column_letter(index)].width = min(max(max_len + 2, 12), 36)
+
+    if sheet_name == "metrics":
+        validations = {
+            "subject_type": ["logical_component", "physical_partition"],
+            "value_type": sorted(ALLOWED_VALUE_TYPES),
+            "corner": ["typical", "best", "worst"],
+            "workload": ["nominal", "peak", "idle"],
+            "confidence": sorted(ALLOWED_CONFIDENCE),
+        }
+        for column_name, values in validations.items():
+            if column_name not in columns:
+                continue
+            column_letter = get_column_letter(columns.index(column_name) + 1)
+            validation = DataValidation(type="list", formula1=f'"{",".join(values)}"', allow_blank=False)
+            sheet.add_data_validation(validation)
+            validation.add(f"{column_letter}2:{column_letter}500")
+
+
+def build_team_import_workbook(session: Session, team: str, scenario_id: str = "S2") -> str:
+    allowed_component_ids = allowed_component_ids_for_team(session, team, scenario_id)
+    if allowed_component_ids is None:
+        raise HTTPException(status_code=400, detail="Team template is only generated for scoped teams. Use the full template for Architecture Team.")
+    if not allowed_component_ids:
+        raise HTTPException(status_code=404, detail=f"No component scope found for team {team}.")
+
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    workbook.properties.title = f"SoC team import workbook - {team}"
+
+    scope_sheet = workbook.create_sheet("responsibility_scope")
+    scope_sheet.append(["field", "value"])
+    scope_sheet.append(["team", team])
+    scope_sheet.append(["scenario_id", scenario_id])
+    scope_sheet.append(["editable_sheets", "logical_components, physical_partitions, metrics"])
+    scope_sheet.append(["rule", "Do not edit rows outside this workbook. Shared reference sheets are context only."])
+    for cell in scope_sheet[1]:
+        cell.fill = PatternFill("solid", fgColor="0F172A")
+        cell.font = Font(color="FFFFFF", bold=True)
+    scope_sheet.column_dimensions["A"].width = 22
+    scope_sheet.column_dimensions["B"].width = 90
+
+    projects = [row_dict(row, IMPORT_SHEETS["projects"][1]) for row in session.exec(select(Project)).all()]
+    scenarios = [row_dict(row, IMPORT_SHEETS["scenarios"][1]) for row in session.exec(select(Scenario)).all()]
+    tiers = [row_dict(row, IMPORT_SHEETS["tiers"][1]) for row in session.exec(select(Tier).where(Tier.scenario_id == scenario_id).order_by(Tier.tier_index)).all()]
+
+    components = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
+    scoped_components = [row for row in components if row.id in allowed_component_ids]
+    module_definition_ids = {row.module_definition_id for row in scoped_components if row.module_definition_id}
+    module_definitions = [
+        row_dict(row, IMPORT_SHEETS["module_definitions"][1])
+        for row in session.exec(select(ModuleDefinition)).all()
+        if row.id in module_definition_ids
+    ]
+    logical_components = [row_dict(row, IMPORT_SHEETS["logical_components"][1]) for row in scoped_components]
+
+    partitions = [
+        row
+        for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+        if row.logical_component_id in allowed_component_ids
+    ]
+    physical_partitions = [row_dict(row, IMPORT_SHEETS["physical_partitions"][1]) for row in partitions]
+    partition_ids = {row.id for row in partitions}
+
+    metrics = [
+        row
+        for row in session.exec(select(Metric).where(Metric.scenario_id == scenario_id)).all()
+        if (row.subject_type == "logical_component" and row.subject_id in allowed_component_ids)
+        or (row.subject_type == "physical_partition" and row.subject_id in partition_ids)
+    ]
+    metric_rows = [row_dict(row, IMPORT_SHEETS["metrics"][1]) for row in metrics]
+
+    sheet_rows = {
+        "module_definitions": module_definitions,
+        "projects": projects,
+        "scenarios": scenarios,
+        "tiers": tiers,
+        "logical_components": logical_components,
+        "physical_partitions": physical_partitions,
+        "metrics": metric_rows,
+    }
+    editable_sheets = {"logical_components", "physical_partitions", "metrics"}
+    for sheet_name, (_, columns, _) in IMPORT_SHEETS.items():
+        write_import_sheet(workbook, sheet_name, columns, sheet_rows[sheet_name], sheet_name in editable_sheets)
+
+    temp_file = NamedTemporaryFile(prefix=f"soc_{team.lower().replace(' ', '_')}_", suffix=".xlsx", delete=False)
+    temp_file.close()
+    workbook.save(temp_file.name)
+    return temp_file.name
+
+
 @app.post("/api/import/excel")
-async def import_excel(file: UploadFile = File(...)) -> dict[str, Any]:
+async def import_excel(file: UploadFile = File(...), team: str | None = None, scenario_id: str = "S2") -> dict[str, Any]:
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported.")
 
@@ -1082,14 +1263,21 @@ async def import_excel(file: UploadFile = File(...)) -> dict[str, Any]:
             temp_file.seek(0)
             all_rows[sheet_name] = read_sheet_rows(temp_file, sheet_name, columns, required)
     prepare_import_rows(all_rows)
-    errors = validate_import_rows(all_rows)
-    if errors:
-        raise HTTPException(status_code=400, detail={"errors": errors})
 
     imported: dict[str, int] = {}
     with Session(engine) as session:
+        existing_refs = existing_reference_ids(session) if not is_global_team(team) else None
+        errors = validate_import_rows(all_rows, existing_refs)
+        errors.extend(validate_team_import_scope(all_rows, session, team, scenario_id))
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+
+        editable_sheets = set(IMPORT_SHEETS) if is_global_team(team) else {"logical_components", "physical_partitions", "metrics"}
         for sheet_name, (model, _, _) in IMPORT_SHEETS.items():
             count = 0
+            if sheet_name not in editable_sheets:
+                imported[sheet_name] = count
+                continue
             for row in all_rows[sheet_name]:
                 session.merge(model(**row))
                 count += 1
@@ -1099,7 +1287,18 @@ async def import_excel(file: UploadFile = File(...)) -> dict[str, Any]:
 
 
 @app.get("/api/import/template")
-def get_import_template() -> FileResponse:
+def get_import_template(background_tasks: BackgroundTasks, team: str | None = None, scenario_id: str = "S2") -> FileResponse:
+    if not is_global_team(team):
+        with Session(engine) as session:
+            path = build_team_import_workbook(session, team or "", scenario_id)
+        background_tasks.add_task(os.remove, path)
+        safe_team = (team or "team").lower().replace(" ", "_")
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"soc_team_import_{safe_team}_{scenario_id}.xlsx",
+        )
+
     if not TEMPLATE_PATH.exists():
         raise HTTPException(status_code=404, detail="Import template has not been generated.")
     return FileResponse(

@@ -107,6 +107,14 @@ Download from the running backend:
 http://localhost:8000/api/import/template
 ```
 
+Download a subsystem-owner workbook for the selected team:
+
+```text
+http://localhost:8000/api/import/template?team=AI%20Team
+```
+
+Team workbooks keep shared sheets such as `projects`, `scenarios`, `tiers`, and `module_definitions` as context. Team uploads only upsert scoped `logical_components`, `physical_partitions`, and `metrics`; the backend rejects rows outside the team's assigned logical subtree.
+
 Verify import:
 
 ```powershell
@@ -149,6 +157,8 @@ GET /api/components/tree?team=AI%20Team
 GET /api/physical-partitions?team=AI%20Team
 GET /api/metrics?team=AI%20Team
 GET /api/quality/issues?team=AI%20Team
+GET /api/import/template?team=AI%20Team
+POST /api/import/excel?team=AI%20Team
 ```
 
 ## Useful API Endpoints

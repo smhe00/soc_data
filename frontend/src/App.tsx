@@ -189,6 +189,7 @@ interface DataPageProps {
   importing: boolean;
   importResult: ImportResult | null;
   importError: string | null;
+  selectedTeam: string;
   onImportWorkbook: (file: File) => Promise<void>;
 }
 
@@ -725,8 +726,10 @@ function ImportsView({
   importing,
   importResult,
   importError,
+  selectedTeam,
   onImportWorkbook,
-}: Pick<DataPageProps, "importing" | "importResult" | "importError" | "onImportWorkbook">): JSX.Element {
+}: Pick<DataPageProps, "importing" | "importResult" | "importError" | "selectedTeam" | "onImportWorkbook">): JSX.Element {
+  const scopedTemplateUrl = importTemplateUrl(selectedTeam);
   return (
     <div className="space-y-6">
       <Card title="Excel Import Workbench" subtitle="Phase-1 imports use a controlled workbook template mapped to the SQLite schema." icon={Upload}>
@@ -734,11 +737,11 @@ function ImportsView({
           <Upload className="mx-auto text-slate-400" size={34} />
           <div className="mt-4 text-base font-semibold text-slate-900">Upload SoC Import Workbook</div>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-            Download the V7 workbook, edit module_definitions / logical_components / physical_partitions / metrics, then upload the .xlsx file. The backend validates key references before upserting into SQLite.
+            Download the workbook for {selectedTeam}, edit logical_components / physical_partitions / metrics, then upload the .xlsx file. The backend validates references and team scope before upserting into SQLite.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
-            <a className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={importTemplateUrl}>
-              Download Template
+            <a className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={scopedTemplateUrl}>
+              Download {selectedTeam} Template
             </a>
             <label className={`cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 ${importing ? "opacity-60" : ""}`}>
               {importing ? "Importing..." : "Select .xlsx"}
@@ -949,7 +952,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     try {
       setImporting(true);
       setImportError(null);
-      const result = await uploadImportWorkbook(file);
+      const result = await uploadImportWorkbook(file, selectedTeam);
       setImportResult(result);
       await refreshApiData(selectedTeam);
     } catch (err) {
@@ -1095,6 +1098,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               importing={importing}
               importResult={importResult}
               importError={importError}
+              selectedTeam={selectedTeam}
               onImportWorkbook={handleImportWorkbook}
             />
           )}

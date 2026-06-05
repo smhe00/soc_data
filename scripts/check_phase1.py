@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import sys
 
@@ -26,6 +27,7 @@ def main() -> None:
             "/api/dashboard",
             "/api/quality/issues",
             "/api/responsibilities/teams",
+            "/api/import/template?team=AI%20Team",
         ]
         for endpoint in endpoints:
             response = client.get(endpoint)
@@ -39,6 +41,14 @@ def main() -> None:
         ai_components = client.get("/api/components?team=AI%20Team").json()
         ai_partitions = client.get("/api/physical-partitions?team=AI%20Team").json()
         ai_quality_issues = client.get("/api/quality/issues?team=AI%20Team").json()
+        team_template = client.get("/api/import/template?team=AI%20Team")
+        team_template.raise_for_status()
+        team_import = client.post(
+            "/api/import/excel?team=AI%20Team",
+            files={"file": ("ai_team.xlsx", BytesIO(team_template.content), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+        team_import.raise_for_status()
+        team_import_result = team_import.json()
 
         assert len(components) == 36, f"expected 36 components, got {len(components)}"
         assert len(partitions) == 35, f"expected 35 physical partitions, got {len(partitions)}"
@@ -48,6 +58,9 @@ def main() -> None:
         assert {row["id"] for row in ai_components} == {"B_NPU", "B_NPU_TENSOR", "B_NPU_SRAM", "B_NPU_DMA"}
         assert len(ai_partitions) == 5, f"expected 5 AI partitions, got {len(ai_partitions)}"
         assert ai_quality_issues == [], f"expected no AI quality issues, got {ai_quality_issues}"
+        assert team_import_result["imported"]["logical_components"] == 4
+        assert team_import_result["imported"]["physical_partitions"] == 5
+        assert team_import_result["imported"]["metrics"] > 0
 
         print(
             {
@@ -58,6 +71,7 @@ def main() -> None:
                 "teams": len(teams),
                 "ai_components": len(ai_components),
                 "ai_physical_partitions": len(ai_partitions),
+                "ai_team_imported": team_import_result["imported"],
             }
         )
 

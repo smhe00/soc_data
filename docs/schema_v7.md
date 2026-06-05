@@ -165,6 +165,14 @@ Key fields:
 
 In phase 1, `scope_type = subtree` means a team can see the assigned logical component and its descendants. API filtering is available through `?team=...` on component, physical partition, metric, and quality endpoints.
 
+Team-scoped Excel input uses the same SQLite schema and long-table metric format. The generated team workbook includes shared reference sheets for context, but team uploads only merge:
+
+- `logical_components`
+- `physical_partitions`
+- `metrics`
+
+The backend validates that these rows remain inside the assigned logical subtree.
+
 ### metric
 
 Unified metric table.

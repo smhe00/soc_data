@@ -86,6 +86,11 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoCè·¨Dieæ•
   - Added `GET /api/responsibilities/teams`.
   - Added `?team=` filtering for components, component tree, physical partitions, metrics, and quality issues.
   - Added a frontend team scope selector while keeping the current UI style.
+- Added the first "graceful input" path for subsystem owners:
+  - `GET /api/import/template?team=...` dynamically generates a team-scoped workbook.
+  - `POST /api/import/excel?team=...` validates team scope before import.
+  - Team workbooks keep shared sheets as context, but scoped uploads only merge `logical_components`, `physical_partitions`, and `metrics`.
+  - The frontend Imports page now downloads/uploads using the currently selected team.
 
 ## Verified
 
@@ -146,6 +151,13 @@ quality_issues: 0
 AI Team components: 4
 AI Team physical_partitions: 5
 AI Team quality_issues: 0
+```
+- Team workbook round-trip passed in `scripts/check_phase1.py`:
+
+```text
+AI Team imported logical_components: 4
+AI Team imported physical_partitions: 5
+AI Team imported metrics: 45
 ```
 
 ## Startup Commands

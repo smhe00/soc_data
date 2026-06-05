@@ -6,13 +6,17 @@ export interface ImportResult {
   errors: string[];
 }
 
-export const importTemplateUrl = `${API_BASE_URL}/api/import/template`;
+export function importTemplateUrl(team?: string): string {
+  const query = team ? `?team=${encodeURIComponent(team)}` : "";
+  return `${API_BASE_URL}/api/import/template${query}`;
+}
 
-export async function uploadImportWorkbook(file: File): Promise<ImportResult> {
+export async function uploadImportWorkbook(file: File, team?: string): Promise<ImportResult> {
   const formData = new FormData();
   formData.append("file", file);
+  const query = team ? `?team=${encodeURIComponent(team)}` : "";
 
-  const response = await fetch(`${API_BASE_URL}/api/import/excel`, {
+  const response = await fetch(`${API_BASE_URL}/api/import/excel${query}`, {
     method: "POST",
     body: formData,
   });
