@@ -159,7 +159,23 @@ GET /api/metrics?team=AI%20Team
 GET /api/quality/issues?team=AI%20Team
 GET /api/import/template?team=AI%20Team
 POST /api/import/excel?team=AI%20Team
+PUT /api/components/{component_id}/detail
 ```
+
+## Web Maintenance
+
+The Hierarchy page now includes a small Component Detail maintenance surface for physical partition mapping.
+
+For the selected logical component, users can edit:
+
+- `logical_instance_count`
+- partition `tier_id`
+- partition type
+- physical instance count
+- partition ratio
+- partition name and description
+
+The page shows live count and ratio closure before saving. Save calls `PUT /api/components/{component_id}/detail`, then refreshes component data and quality issues.
 
 ## Useful API Endpoints
 
@@ -175,6 +191,7 @@ GET /api/metrics
 GET /api/dashboard
 GET /api/quality/issues
 GET /api/responsibilities/teams
+PUT /api/components/{component_id}/detail
 GET /api/import/template
 POST /api/import/excel
 ```

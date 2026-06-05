@@ -15,6 +15,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 
@@ -144,6 +145,23 @@ class ResponsibilityAssignment(SQLModel, table=True):
     scope_type: str = "subtree"
     can_read: bool = True
     can_write: bool = True
+
+
+class PartitionInput(BaseModel):
+    id: str
+    tier_id: str
+    partition_name: str
+    partition_type: str
+    physical_instance_count: int
+    partition_ratio: float
+    description: str = ""
+
+
+class ComponentDetailUpdate(BaseModel):
+    scenario_id: str = "S2"
+    team: str | None = None
+    logical_instance_count: int
+    partitions: list[PartitionInput]
 
 
 app = FastAPI(title="SoC Cross-Die Database API", version="0.2.0")
@@ -796,6 +814,83 @@ def get_physical_partitions(scenario_id: str = "S2", team: str | None = None) ->
         if allowed is not None:
             rows = [row for row in rows if row.logical_component_id in allowed]
         return [partition_ui(session, row) for row in rows]
+
+
+@app.put("/api/components/{component_id}/detail")
+def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -> dict[str, Any]:
+    with Session(engine) as session:
+        component = session.get(LogicalComponent, component_id)
+        if not component:
+            raise HTTPException(status_code=404, detail=f"Unknown logical component: {component_id}")
+
+        allowed = allowed_component_ids_for_team(session, payload.team, payload.scenario_id)
+        if allowed is not None and component_id not in allowed:
+            raise HTTPException(status_code=403, detail=f"{component_id} is outside team scope {payload.team}")
+
+        scenario = session.get(Scenario, payload.scenario_id)
+        if not scenario:
+            raise HTTPException(status_code=400, detail=f"Unknown scenario_id: {payload.scenario_id}")
+        tier_ids = {row.id for row in session.exec(select(Tier).where(Tier.scenario_id == payload.scenario_id)).all()}
+        if payload.logical_instance_count < 0:
+            raise HTTPException(status_code=400, detail="logical_instance_count must be non-negative")
+
+        seen_partition_ids: set[str] = set()
+        for partition in payload.partitions:
+            if not partition.id:
+                raise HTTPException(status_code=400, detail="partition id is required")
+            if partition.id in seen_partition_ids:
+                raise HTTPException(status_code=400, detail=f"Duplicate partition id: {partition.id}")
+            seen_partition_ids.add(partition.id)
+            if partition.tier_id not in tier_ids:
+                raise HTTPException(status_code=400, detail=f"Unknown tier_id for scenario {payload.scenario_id}: {partition.tier_id}")
+            if partition.partition_type not in ALLOWED_PARTITION_TYPES:
+                raise HTTPException(status_code=400, detail=f"Unsupported partition_type: {partition.partition_type}")
+            if partition.physical_instance_count < 0:
+                raise HTTPException(status_code=400, detail=f"{partition.id} has negative physical_instance_count")
+            if partition.partition_ratio < 0:
+                raise HTTPException(status_code=400, detail=f"{partition.id} has negative partition_ratio")
+
+        component.logical_instance_count = payload.logical_instance_count
+        component.updated_at = now_iso()
+        session.add(component)
+
+        existing = session.exec(
+            select(PhysicalPartition).where(
+                PhysicalPartition.scenario_id == payload.scenario_id,
+                PhysicalPartition.logical_component_id == component_id,
+            )
+        ).all()
+        for partition in existing:
+            if partition.id not in seen_partition_ids:
+                session.exec(
+                    delete(Metric).where(
+                        Metric.scenario_id == payload.scenario_id,
+                        Metric.subject_type == "physical_partition",
+                        Metric.subject_id == partition.id,
+                    )
+                )
+                session.delete(partition)
+
+        for partition in payload.partitions:
+            row = PhysicalPartition(
+                id=partition.id,
+                scenario_id=payload.scenario_id,
+                logical_component_id=component_id,
+                tier_id=partition.tier_id,
+                partition_name=partition.partition_name,
+                partition_type=partition.partition_type,
+                physical_instance_count=partition.physical_instance_count,
+                partition_ratio=partition.partition_ratio,
+                description=partition.description,
+            )
+            session.merge(row)
+
+        session.commit()
+        session.refresh(component)
+        return {
+            "component": component_ui(session, component, payload.scenario_id),
+            "quality_issues": quality_issues_for(session, payload.scenario_id, payload.team),
+        }
 
 
 @app.get("/api/tiers")

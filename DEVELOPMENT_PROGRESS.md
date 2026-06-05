@@ -91,6 +91,11 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoCè·¨Dieæ•
   - `POST /api/import/excel?team=...` validates team scope before import.
   - Team workbooks keep shared sheets as context, but scoped uploads only merge `logical_components`, `physical_partitions`, and `metrics`.
   - The frontend Imports page now downloads/uploads using the currently selected team.
+- Added the first Web daily-maintenance path:
+  - `PUT /api/components/{component_id}/detail` saves `logical_instance_count` plus physical partitions for one logical component.
+  - The Hierarchy page now includes a Physical Partition Mapping editor for the selected component.
+  - The editor shows live physical count closure, partition ratio closure, and tier summary before saving.
+  - Save refreshes component data and quality issues.
 
 ## Verified
 
@@ -159,6 +164,12 @@ AI Team imported logical_components: 4
 AI Team imported physical_partitions: 5
 AI Team imported metrics: 45
 ```
+- Component detail save smoke check passed:
+
+```text
+PUT /api/components/B_NPU_TENSOR/detail -> B_NPU_TENSOR
+quality_issues: 0
+```
 
 ## Startup Commands
 
@@ -203,4 +214,5 @@ npm install --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=20
 - Add simple create/update APIs after the read-only flow is stable.
 - Split the single `App.tsx` prototype into page and component files.
 - Add basic backend API tests for the seven read-only endpoints.
-- Design Excel/export flows around team-owned subsystem workbooks before adding login or role enforcement.
+- Extend Web maintenance from physical partitions into friendly logical metric cards.
+- Add a guided mapping wizard on top of the same component detail API.

@@ -41,6 +41,29 @@ def main() -> None:
         ai_components = client.get("/api/components?team=AI%20Team").json()
         ai_partitions = client.get("/api/physical-partitions?team=AI%20Team").json()
         ai_quality_issues = client.get("/api/quality/issues?team=AI%20Team").json()
+        npu = next(row for row in ai_components if row["id"] == "B_NPU_TENSOR")
+        detail_update = client.put(
+            "/api/components/B_NPU_TENSOR/detail",
+            json={
+                "scenario_id": "S2",
+                "team": "AI Team",
+                "logical_instance_count": npu["logical_instance_count"],
+                "partitions": [
+                    {
+                        "id": partition["id"],
+                        "tier_id": partition["tier_id"],
+                        "partition_name": partition["partition_name"],
+                        "partition_type": partition["partition_type"],
+                        "physical_instance_count": partition["physical_instance_count"],
+                        "partition_ratio": partition["partition_ratio"],
+                        "description": partition["description"],
+                    }
+                    for partition in npu["partitions"]
+                ],
+            },
+        )
+        detail_update.raise_for_status()
+        detail_result = detail_update.json()
         team_template = client.get("/api/import/template?team=AI%20Team")
         team_template.raise_for_status()
         team_import = client.post(
@@ -58,6 +81,8 @@ def main() -> None:
         assert {row["id"] for row in ai_components} == {"B_NPU", "B_NPU_TENSOR", "B_NPU_SRAM", "B_NPU_DMA"}
         assert len(ai_partitions) == 5, f"expected 5 AI partitions, got {len(ai_partitions)}"
         assert ai_quality_issues == [], f"expected no AI quality issues, got {ai_quality_issues}"
+        assert detail_result["component"]["id"] == "B_NPU_TENSOR"
+        assert detail_result["quality_issues"] == []
         assert team_import_result["imported"]["logical_components"] == 4
         assert team_import_result["imported"]["physical_partitions"] == 5
         assert team_import_result["imported"]["metrics"] > 0
@@ -71,6 +96,7 @@ def main() -> None:
                 "teams": len(teams),
                 "ai_components": len(ai_components),
                 "ai_physical_partitions": len(ai_partitions),
+                "component_detail_save": detail_result["component"]["id"],
                 "ai_team_imported": team_import_result["imported"],
             }
         )

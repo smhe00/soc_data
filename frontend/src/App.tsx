@@ -23,7 +23,7 @@ import {
   Package,
   History,
 } from "lucide-react";
-import { getComponents, getComponentTree, getPhysicalPartitions } from "./api/components";
+import { getComponents, getComponentTree, getPhysicalPartitions, updateComponentDetail } from "./api/components";
 import { importTemplateUrl, uploadImportWorkbook, type ImportResult } from "./api/imports";
 import { getDashboard } from "./api/metrics";
 import { getQualityIssues, type QualityIssue } from "./api/quality";
@@ -176,6 +176,13 @@ interface TreeNodeProps {
   depth?: number;
 }
 
+interface PartitionMappingEditorProps {
+  component: BlockNode;
+  tiers: TierInfo[];
+  selectedTeam: string;
+  onSave: (component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]) => Promise<void>;
+}
+
 interface DataPageProps {
   blocks: BlockNode[];
   tree: TreeBlock[];
@@ -190,6 +197,7 @@ interface DataPageProps {
   importResult: ImportResult | null;
   importError: string | null;
   selectedTeam: string;
+  onSaveComponentDetail: (component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]) => Promise<void>;
   onImportWorkbook: (file: File) => Promise<void>;
 }
 
@@ -396,6 +404,168 @@ function TreeNode({ node, selectedId, onSelect, depth = 0 }: TreeNodeProps): JSX
   );
 }
 
+function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
+  const [logicalCount, setLogicalCount] = useState<number>(component.logical_instance_count);
+  const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLogicalCount(component.logical_instance_count);
+    setPartitions(component.partitions);
+    setSaveError(null);
+  }, [component]);
+
+  const physicalCount = partitions.reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0), 0);
+  const ratioTotal = partitions.reduce((sum, partition) => sum + Number(partition.partition_ratio || 0), 0);
+  const tierSummary = tiers
+    .map((tier) => {
+      const count = partitions.filter((partition) => partition.tier_id === tier.id).reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0), 0);
+      return count > 0 ? `${tier.id}: ${count}x` : "";
+    })
+    .filter(Boolean)
+    .join(", ");
+  const physicalClosed = physicalCount === logicalCount;
+  const ratioClosed = Math.abs(ratioTotal - 1) < 0.001;
+
+  function updatePartition(index: number, patch: Partial<PhysicalPartition>): void {
+    setPartitions((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }
+
+  function addPartition(): void {
+    const tierId = tiers[0]?.id ?? "T0";
+    const suffix = partitions.length + 1;
+    setPartitions((rows) => [
+      ...rows,
+      {
+        id: `PP_${component.id.replace(/^B_?/, "")}_${tierId}_${suffix}`,
+        scenario_id: "S2",
+        logical_component_id: component.id,
+        logical_component_name: component.name,
+        tier_id: tierId,
+        partition_name: `${component.name}_${tierId}_${suffix}`,
+        partition_type: "full",
+        physical_instance_count: 1,
+        partition_ratio: rows.length === 0 ? 1 : 0,
+        logic_area: 0,
+        sram_area: 0,
+        block_area: 0,
+        power: 0,
+        shape_type: "",
+        description: "",
+      },
+    ]);
+  }
+
+  async function save(): Promise<void> {
+    try {
+      setSaving(true);
+      setSaveError(null);
+      await onSave(component, logicalCount, partitions);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Unknown save error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card title="Physical Partition Mapping" subtitle={`Daily edit surface for ${selectedTeam}; metrics stay behind friendly fields.`} icon={SplitSquareVertical}>
+      <div className="mb-4 grid gap-3 md:grid-cols-4">
+        <label className="rounded-2xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Logical Instances</div>
+          <input
+            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            min={0}
+            type="number"
+            value={logicalCount}
+            onChange={(event) => setLogicalCount(Number(event.target.value))}
+          />
+        </label>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Physical Count</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-lg font-semibold text-slate-900">{physicalCount}/{logicalCount}</span>
+            <Badge tone={physicalClosed ? "green" : "amber"}>{physicalClosed ? "closed" : "open"}</Badge>
+          </div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Partition Ratio</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-lg font-semibold text-slate-900">{(ratioTotal * 100).toFixed(1)}%</span>
+            <Badge tone={ratioClosed ? "green" : "amber"}>{ratioClosed ? "closed" : "open"}</Badge>
+          </div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <div className="text-xs text-slate-500">Tier Summary</div>
+          <div className="mt-2 text-sm font-semibold text-slate-900">{tierSummary || "-"}</div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+        <table className="w-full min-w-[920px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-3">ID</th>
+              <th className="px-3 py-3">Name</th>
+              <th className="px-3 py-3">Tier</th>
+              <th className="px-3 py-3">Type</th>
+              <th className="px-3 py-3">Count</th>
+              <th className="px-3 py-3">Ratio</th>
+              <th className="px-3 py-3">Description</th>
+              <th className="px-3 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 bg-white">
+            {partitions.map((partition, index) => (
+              <tr key={`${partition.id}-${index}`}>
+                <td className="px-3 py-2">
+                  <input className="w-40 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono outline-none focus:border-slate-400" value={partition.id} onChange={(event) => updatePartition(index, { id: event.target.value })} />
+                </td>
+                <td className="px-3 py-2">
+                  <input className="w-48 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_name} onChange={(event) => updatePartition(index, { partition_name: event.target.value })} />
+                </td>
+                <td className="px-3 py-2">
+                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.tier_id} onChange={(event) => updatePartition(index, { tier_id: event.target.value })}>
+                    {tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.id}</option>)}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_type} onChange={(event) => updatePartition(index, { partition_type: event.target.value })}>
+                    {["full", "partial", "residual"].map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} type="number" value={partition.physical_instance_count} onChange={(event) => updatePartition(index, { physical_instance_count: Number(event.target.value) })} />
+                </td>
+                <td className="px-3 py-2">
+                  <input className="w-24 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} step={0.001} type="number" value={partition.partition_ratio} onChange={(event) => updatePartition(index, { partition_ratio: Number(event.target.value) })} />
+                </td>
+                <td className="px-3 py-2">
+                  <input className="w-56 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.description} onChange={(event) => updatePartition(index, { description: event.target.value })} />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <button className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" type="button" onClick={() => setPartitions((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}>Remove</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" type="button" onClick={addPartition}>Add Partition</button>
+        <div className="flex items-center gap-3">
+          {saveError && <span className="max-w-xl text-sm text-red-600">{saveError}</span>}
+          <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60" disabled={saving} type="button" onClick={() => void save()}>
+            {saving ? "Saving..." : "Save Mapping"}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function Dashboard({ dashboard, loading, error }: Pick<DataPageProps, "dashboard" | "loading" | "error">): JSX.Element {
   if (loading) return <Card title="Loading Dashboard" subtitle="Fetching SQLite-backed API data..." icon={Database}><div className="text-sm text-slate-500">Loading...</div></Card>;
   if (error) return <Card title="API Error" subtitle="FastAPI backend is not reachable yet." icon={AlertTriangle}><div className="text-sm text-red-600">{error}</div></Card>;
@@ -477,7 +647,15 @@ function Dashboard({ dashboard, loading, error }: Pick<DataPageProps, "dashboard
   );
 }
 
-function HierarchyView({ blocks, tree, loading, error }: Pick<DataPageProps, "blocks" | "tree" | "loading" | "error">): JSX.Element {
+function HierarchyView({
+  blocks,
+  tree,
+  tiers,
+  selectedTeam,
+  loading,
+  error,
+  onSaveComponentDetail,
+}: Pick<DataPageProps, "blocks" | "tree" | "tiers" | "selectedTeam" | "loading" | "error" | "onSaveComponentDetail">): JSX.Element {
   const [selectedId, setSelectedId] = useState<string>("B_NPU");
   useEffect(() => {
     if (blocks.length > 0 && !blocks.some((block) => block.id === selectedId)) {
@@ -562,6 +740,8 @@ function HierarchyView({ blocks, tree, loading, error }: Pick<DataPageProps, "bl
             </div>
           </div>
         </Card>
+
+        <PartitionMappingEditor component={selected} tiers={tiers} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
 
         <Card title="建模原则" subtitle="第一阶段需要先统一数据口径" icon={Settings2}>
           <div className="grid gap-4 md:grid-cols-3">
@@ -962,6 +1142,24 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     }
   }
 
+  async function handleSaveComponentDetail(component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]): Promise<void> {
+    await updateComponentDetail(component.id, {
+      scenario_id: "S2",
+      team: selectedTeam,
+      logical_instance_count: logicalInstanceCount,
+      partitions: partitions.map((partition) => ({
+        id: partition.id,
+        tier_id: partition.tier_id,
+        partition_name: partition.partition_name,
+        partition_type: partition.partition_type,
+        physical_instance_count: partition.physical_instance_count,
+        partition_ratio: partition.partition_ratio,
+        description: partition.description,
+      })),
+    });
+    await refreshApiData(selectedTeam);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1090,7 +1288,17 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
           </header>
 
           {active === "dashboard" && <Dashboard dashboard={dashboard} loading={loading} error={error} />}
-          {active === "hierarchy" && <HierarchyView blocks={blocks} tree={tree} loading={loading} error={error} />}
+          {active === "hierarchy" && (
+            <HierarchyView
+              blocks={blocks}
+              tree={tree}
+              tiers={tiers}
+              selectedTeam={selectedTeam}
+              loading={loading}
+              error={error}
+              onSaveComponentDetail={handleSaveComponentDetail}
+            />
+          )}
           {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} loading={loading} error={error} />}
           {active === "compare" && <CompareView scenarios={scenarios} loading={loading} error={error} />}
           {active === "imports" && (

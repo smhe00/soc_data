@@ -178,6 +178,7 @@ Read/API endpoints:
 - `GET /api/dashboard`
 - `GET /api/quality/issues`
 - `GET /api/responsibilities/teams`
+- `PUT /api/components/{component_id}/detail`
 
 Team-scoped API views:
 
@@ -195,6 +196,8 @@ Import endpoints:
 - `POST /api/import/excel`
 
 Team import workbooks are scoped input workbooks, not permission enforcement. Shared sheets are reference context; scoped uploads only merge `logical_components`, `physical_partitions`, and `metrics` after backend scope validation.
+
+Web maintenance currently starts with component detail physical mapping. Keep this object-oriented: users edit logical instance count and partition fields, while the API writes `logical_component` and `physical_partition` rows behind the scenes. Do not expose the raw metric long table as the primary daily-edit UI.
 
 ## Development Principles
 

@@ -1,5 +1,6 @@
-import { apiGet } from "./client";
+import { apiGet, apiJson } from "./client";
 import type { BlockNode, PhysicalPartition, TreeBlock } from "../types/component";
+import type { QualityIssue } from "./quality";
 
 function teamQuery(path: string, team?: string): string {
   return team ? `${path}?team=${encodeURIComponent(team)}` : path;
@@ -15,4 +16,28 @@ export function getComponentTree(team?: string): Promise<TreeBlock[]> {
 
 export function getPhysicalPartitions(team?: string): Promise<PhysicalPartition[]> {
   return apiGet<PhysicalPartition[]>(teamQuery("/api/physical-partitions", team));
+}
+
+export interface ComponentDetailUpdate {
+  scenario_id: string;
+  team?: string;
+  logical_instance_count: number;
+  partitions: Array<{
+    id: string;
+    tier_id: string;
+    partition_name: string;
+    partition_type: string;
+    physical_instance_count: number;
+    partition_ratio: number;
+    description: string;
+  }>;
+}
+
+export interface ComponentDetailUpdateResult {
+  component: BlockNode;
+  quality_issues: QualityIssue[];
+}
+
+export function updateComponentDetail(componentId: string, payload: ComponentDetailUpdate): Promise<ComponentDetailUpdateResult> {
+  return apiJson<ComponentDetailUpdateResult>(`/api/components/${encodeURIComponent(componentId)}/detail`, "PUT", payload);
 }
