@@ -28,7 +28,7 @@ export interface ComponentDetailUpdate {
     partition_name: string;
     partition_type: string;
     physical_instance_count: number;
-    partition_ratio: number;
+    content_share: number;
     description: string;
   }>;
 }

@@ -12,6 +12,7 @@ export interface BlockNode {
   owner_team: string;
   visibility_level: string;
   physical_instance_count: number;
+  instance_share: number;
   partition_ratio: number;
   signal_count_total: number;
   logic_area: number;
@@ -38,6 +39,8 @@ export interface PhysicalPartition {
   partition_name: string;
   partition_type: string;
   physical_instance_count: number;
+  content_share: number;
+  instance_share: number;
   partition_ratio: number;
   logic_area: number;
   sram_area: number;

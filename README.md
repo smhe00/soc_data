@@ -138,8 +138,8 @@ GET http://localhost:8000/api/quality/issues
 
 Phase-1 rules check:
 
-- `partition_ratio` closure
-- `physical_instance_count` closure for full partitions
+- equivalent instance closure: `sum(physical_instance_count * content_share) == logical_instance_count`
+- full partitions force `content_share = 1`
 - required logical metrics
 - numeric metric values
 - metric subject references
@@ -172,10 +172,10 @@ For the selected logical component, users can edit:
 - partition `tier_id`
 - partition type
 - physical instance count
-- partition ratio
+- content share for partial/residual partitions
 - partition name and description
 
-The page shows live count and ratio closure before saving. Save calls `PUT /api/components/{component_id}/detail`, then refreshes component data and quality issues.
+The page computes instance share from physical count and logical instance count. It shows equivalent instance closure before saving. Save calls `PUT /api/components/{component_id}/detail`, then refreshes component data and quality issues.
 
 ## Useful API Endpoints
 

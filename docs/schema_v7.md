@@ -128,7 +128,7 @@ Use this table for placement/mapping facts:
 - Which logical component
 - Which tier
 - How many physical copies
-- What logical content ratio
+- What content share is carried by a partial or residual partition
 
 Key fields:
 
@@ -139,13 +139,17 @@ Key fields:
 - `partition_name`
 - `partition_type`
 - `physical_instance_count`
-- `partition_ratio`
+- `content_share`
 
 `partition_type` values:
 
 - `full`: a whole logical instance/copy is realized by this partition
 - `partial`: one logical module is split across multiple tiers/partitions
 - `residual`: parent-level glue/control/interconnect not represented by child rows
+
+`instance_share` is not stored and should not be manually entered. It is computed as `physical_instance_count / logical_instance_count`.
+
+`content_share` is manually meaningful only for `partial` and `residual` rows. For `full` rows, `content_share` is always `1`.
 
 ### responsibility_assignment
 
@@ -234,9 +238,9 @@ Tier/scenario metrics:
 
 For each logical component that has physical partitions in a scenario:
 
-- `sum(partition_ratio)` should be `1.0`
-- If all related partitions are `full`, `sum(physical_instance_count)` should equal `logical_instance_count`
-- If partitions are `partial`, physical count can represent the same logical instance appearing as multiple physical pieces, so ratio closure is the primary rule
+- `sum(physical_instance_count * content_share)` should equal `logical_instance_count`
+- `full` partitions always use `content_share = 1`
+- `partial` partitions use `content_share` to describe how much of each covered logical instance is carried by that physical piece
 
 ## Current Demo Data
 

@@ -88,6 +88,7 @@ interface BlockNode {
   owner_team: string;
   visibility_level: string;
   physical_instance_count: number;
+  instance_share: number;
   partition_ratio: number;
   signal_count_total: number;
   logic_area: number;
@@ -114,6 +115,8 @@ interface PhysicalPartition {
   partition_name: string;
   partition_type: string;
   physical_instance_count: number;
+  content_share: number;
+  instance_share: number;
   partition_ratio: number;
   logic_area: number;
   sram_area: number;
@@ -262,7 +265,7 @@ const schemaTables: SchemaTable[] = [
   {
     table: "physical_partition",
     purpose: "逻辑模块到Tier的物理承载事实",
-    fields: "id, logical_component_id, tier_id, physical_instance_count, partition_ratio",
+    fields: "id, logical_component_id, tier_id, physical_instance_count, content_share",
   },
   {
     table: "metric",
@@ -416,8 +419,7 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
     setSaveError(null);
   }, [component]);
 
-  const physicalCount = partitions.reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0), 0);
-  const ratioTotal = partitions.reduce((sum, partition) => sum + Number(partition.partition_ratio || 0), 0);
+  const equivalentInstances = partitions.reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0) * Number(partition.content_share || 0), 0);
   const tierSummary = tiers
     .map((tier) => {
       const count = partitions.filter((partition) => partition.tier_id === tier.id).reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0), 0);
@@ -425,11 +427,17 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
     })
     .filter(Boolean)
     .join(", ");
-  const physicalClosed = physicalCount === logicalCount;
-  const ratioClosed = Math.abs(ratioTotal - 1) < 0.001;
+  const coverageClosed = Math.abs(equivalentInstances - logicalCount) < 0.001;
 
   function updatePartition(index: number, patch: Partial<PhysicalPartition>): void {
-    setPartitions((rows) => rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+    setPartitions((rows) =>
+      rows.map((row, rowIndex) => {
+        if (rowIndex !== index) return row;
+        const next = { ...row, ...patch };
+        if (next.partition_type === "full") next.content_share = 1;
+        return next;
+      })
+    );
   }
 
   function addPartition(): void {
@@ -446,7 +454,9 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
         partition_name: `${component.name}_${tierId}_${suffix}`,
         partition_type: "full",
         physical_instance_count: 1,
-        partition_ratio: rows.length === 0 ? 1 : 0,
+        content_share: 1,
+        instance_share: logicalCount ? 1 / logicalCount : 0,
+        partition_ratio: 1,
         logic_area: 0,
         sram_area: 0,
         block_area: 0,
@@ -483,17 +493,16 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
           />
         </label>
         <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Physical Count</div>
+          <div className="text-xs text-slate-500">Mapped Equivalent</div>
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-lg font-semibold text-slate-900">{physicalCount}/{logicalCount}</span>
-            <Badge tone={physicalClosed ? "green" : "amber"}>{physicalClosed ? "closed" : "open"}</Badge>
+            <span className="text-lg font-semibold text-slate-900">{equivalentInstances.toFixed(2)}/{logicalCount}</span>
+            <Badge tone={coverageClosed ? "green" : "amber"}>{coverageClosed ? "closed" : "open"}</Badge>
           </div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Partition Ratio</div>
+          <div className="text-xs text-slate-500">Input Rule</div>
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-lg font-semibold text-slate-900">{(ratioTotal * 100).toFixed(1)}%</span>
-            <Badge tone={ratioClosed ? "green" : "amber"}>{ratioClosed ? "closed" : "open"}</Badge>
+            <span className="text-sm font-semibold text-slate-900">full=1, partial editable</span>
           </div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
@@ -511,7 +520,8 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
               <th className="px-3 py-3">Tier</th>
               <th className="px-3 py-3">Type</th>
               <th className="px-3 py-3">Count</th>
-              <th className="px-3 py-3">Ratio</th>
+              <th className="px-3 py-3">Instance Share</th>
+              <th className="px-3 py-3">Content Share</th>
               <th className="px-3 py-3">Description</th>
               <th className="px-3 py-3"></th>
             </tr>
@@ -531,7 +541,7 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
                   </select>
                 </td>
                 <td className="px-3 py-2">
-                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_type} onChange={(event) => updatePartition(index, { partition_type: event.target.value })}>
+                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_type} onChange={(event) => updatePartition(index, { partition_type: event.target.value, content_share: event.target.value === "full" ? 1 : partition.content_share })}>
                     {["full", "partial", "residual"].map((type) => <option key={type} value={type}>{type}</option>)}
                   </select>
                 </td>
@@ -539,7 +549,18 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
                   <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} type="number" value={partition.physical_instance_count} onChange={(event) => updatePartition(index, { physical_instance_count: Number(event.target.value) })} />
                 </td>
                 <td className="px-3 py-2">
-                  <input className="w-24 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} step={0.001} type="number" value={partition.partition_ratio} onChange={(event) => updatePartition(index, { partition_ratio: Number(event.target.value) })} />
+                  <span className="text-sm font-medium text-slate-700">{logicalCount ? (Number(partition.physical_instance_count || 0) / logicalCount * 100).toFixed(1) : "0.0"}%</span>
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    className="w-24 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400 disabled:bg-slate-50 disabled:text-slate-400"
+                    disabled={partition.partition_type === "full"}
+                    min={0}
+                    step={0.001}
+                    type="number"
+                    value={partition.partition_type === "full" ? 1 : partition.content_share}
+                    onChange={(event) => updatePartition(index, { content_share: Number(event.target.value) })}
+                  />
                 </td>
                 <td className="px-3 py-2">
                   <input className="w-56 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.description} onChange={(event) => updatePartition(index, { description: event.target.value })} />
@@ -732,8 +753,8 @@ function HierarchyView({
               <div className="text-sm font-medium text-slate-900">Physical Coverage</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge tone="blue">physical {selected.physical_instance_count}x</Badge>
-                <Badge tone={Math.abs(selected.partition_ratio - 1) < 0.001 ? "green" : "amber"}>
-                  ratio {(selected.partition_ratio * 100).toFixed(0)}%
+                <Badge tone={Math.abs(selected.instance_share - 1) < 0.001 ? "green" : "amber"}>
+                  mapped {(selected.instance_share * 100).toFixed(0)}%
                 </Badge>
                 {children.length > 0 && <Badge>{children.length} child rows</Badge>}
               </div>
@@ -800,7 +821,7 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
         </div>
       </Card>
 
-      <Card title="Physical Partitions" subtitle="V7 uses physical_instance_count for quantity and partition_ratio for logical content share." icon={SplitSquareVertical}>
+      <Card title="Physical Partitions" subtitle="physical_instance_count is quantity; content_share is only meaningful for partial/residual content split." icon={SplitSquareVertical}>
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -809,7 +830,7 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
                 <th className="px-4 py-3">Logical Block</th>
                 <th className="px-4 py-3">Tier</th>
                 <th className="px-4 py-3">Physical Count</th>
-                <th className="px-4 py-3">Ratio</th>
+                <th className="px-4 py-3">Content Share</th>
                 <th className="px-4 py-3">Type</th>
               </tr>
             </thead>
@@ -820,7 +841,7 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
                   <td className="px-4 py-3 text-slate-600">{partition.logical_component_name}</td>
                   <td className="px-4 py-3"><Badge tone="blue">{partition.tier_id}</Badge></td>
                   <td className="px-4 py-3 text-slate-600">{partition.physical_instance_count}</td>
-                  <td className="px-4 py-3 text-slate-600">{(partition.partition_ratio * 100).toFixed(0)}%</td>
+                  <td className="px-4 py-3 text-slate-600">{(partition.content_share * 100).toFixed(0)}%</td>
                   <td className="px-4 py-3">
                     <Badge tone={partition.partition_type === "partial" ? "amber" : partition.partition_type === "residual" ? "slate" : "green"}>
                       {partition.partition_type}
@@ -1009,7 +1030,7 @@ function QualityView({ qualityIssues, loading, error }: Pick<DataPageProps, "qua
         <div className="space-y-3">
           {qualityIssues.length === 0 && (
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
-              No open quality issues for the selected demo scenario. Partition ratios, full-instance counts, and numeric metrics are closed.
+              No open quality issues for the selected demo scenario. Equivalent instance coverage and numeric metrics are closed.
             </div>
           )}
           {qualityIssues.map((issue) => (
@@ -1153,7 +1174,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         partition_name: partition.partition_name,
         partition_type: partition.partition_type,
         physical_instance_count: partition.physical_instance_count,
-        partition_ratio: partition.partition_ratio,
+        content_share: partition.partition_type === "full" ? 1 : partition.content_share,
         description: partition.description,
       })),
     });

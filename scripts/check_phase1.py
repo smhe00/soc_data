@@ -55,7 +55,7 @@ def main() -> None:
                         "partition_name": partition["partition_name"],
                         "partition_type": partition["partition_type"],
                         "physical_instance_count": partition["physical_instance_count"],
-                        "partition_ratio": partition["partition_ratio"],
+                        "content_share": partition["content_share"],
                         "description": partition["description"],
                     }
                     for partition in npu["partitions"]

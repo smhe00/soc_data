@@ -115,6 +115,7 @@ class PhysicalPartition(SQLModel, table=True):
     partition_type: str
     physical_instance_count: int = 1
     partition_ratio: float = 1
+    content_share: float = 1
     description: str = ""
 
 
@@ -153,7 +154,8 @@ class PartitionInput(BaseModel):
     partition_name: str
     partition_type: str
     physical_instance_count: int
-    partition_ratio: float
+    content_share: float | None = None
+    partition_ratio: float | None = None
     description: str = ""
 
 
@@ -186,6 +188,16 @@ def ensure_sqlite_schema_compatibility() -> None:
             connection.execute(text("ALTER TABLE logicalcomponent ADD COLUMN owner_team VARCHAR DEFAULT 'Architecture Team'"))
         if "visibility_level" not in columns:
             connection.execute(text("ALTER TABLE logicalcomponent ADD COLUMN visibility_level VARCHAR DEFAULT 'team'"))
+        partition_rows = connection.execute(text("PRAGMA table_info(physicalpartition)")).fetchall()
+        partition_columns = {row[1] for row in partition_rows}
+        if "content_share" not in partition_columns:
+            connection.execute(text("ALTER TABLE physicalpartition ADD COLUMN content_share FLOAT DEFAULT 1"))
+            connection.execute(
+                text(
+                    "UPDATE physicalpartition "
+                    "SET content_share = CASE WHEN partition_type = 'full' THEN 1 ELSE partition_ratio END"
+                )
+            )
 
 
 def number_or_zero(value: Any) -> float:
@@ -393,7 +405,7 @@ def seed_data() -> None:
             ("PP_PMU_T2", "B_PMU", "T2", "AON_PMU_SENSOR_BOTTOM", "full", 1, 1.00),
         ]
         partitions = [
-            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, physical_instance_count=count, partition_ratio=ratio, description=f"{name} maps {logical_id} to {tier_id}.")
+            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {logical_id} to {tier_id}.")
             for id, logical_id, tier_id, name, ptype, count, ratio in partition_rows
         ]
 
@@ -498,6 +510,16 @@ def metric_number(metrics: dict[str, Metric], name: str) -> float:
     return number_or_zero(metrics[name].metric_value) if name in metrics else 0
 
 
+def normalized_content_share(partition_type: str, value: float | None) -> float:
+    if partition_type == "full":
+        return 1.0
+    return float(value if value is not None else 1.0)
+
+
+def partition_equivalent_instances(partition: PhysicalPartition) -> float:
+    return partition.physical_instance_count * normalized_content_share(partition.partition_type, partition.content_share)
+
+
 def is_global_team(team: str | None) -> bool:
     return not team or team in {"Architecture Team", "All", "All Teams"}
 
@@ -557,6 +579,8 @@ def partition_ids_for_components(session: Session, scenario_id: str, component_i
 def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, Any]:
     logical = session.get(LogicalComponent, partition.logical_component_id)
     metrics = metrics_for(session, partition.scenario_id, "physical_partition", partition.id)
+    logical_count = logical.logical_instance_count if logical and logical.logical_instance_count else 0
+    content_share = normalized_content_share(partition.partition_type, partition.content_share)
     return {
         "id": partition.id,
         "scenario_id": partition.scenario_id,
@@ -566,7 +590,9 @@ def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, An
         "partition_name": partition.partition_name,
         "partition_type": partition.partition_type,
         "physical_instance_count": partition.physical_instance_count,
-        "partition_ratio": partition.partition_ratio,
+        "content_share": content_share,
+        "instance_share": round(partition.physical_instance_count / logical_count, 4) if logical_count else 0,
+        "partition_ratio": content_share,
         "logic_area": metric_number(metrics, "logic_area"),
         "sram_area": metric_number(metrics, "sram_area"),
         "block_area": metric_number(metrics, "block_area"),
@@ -588,8 +614,8 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
     confidence_order = {"approved": 0, "review": 1, "draft": 2}
     confidence = min((metric.confidence for metric in metrics.values()), key=lambda item: confidence_order.get(item, 9), default="draft")
     partition_rows = [partition_ui(session, partition) for partition in partitions]
-    physical_instance_count = sum(row["physical_instance_count"] for row in partition_rows)
-    partition_ratio = round(sum(row["partition_ratio"] for row in partition_rows), 4)
+    physical_instance_count = round(sum(row["physical_instance_count"] * row["content_share"] for row in partition_rows), 4)
+    instance_share = round(physical_instance_count / component.logical_instance_count, 4) if component.logical_instance_count else 0
     block_area = metric_number(metrics, "block_area")
     if not block_area:
         block_area = sum(row["logic_area"] + row["sram_area"] + row["block_area"] for row in partition_rows)
@@ -605,7 +631,8 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "owner_team": component.owner_team,
         "visibility_level": component.visibility_level,
         "physical_instance_count": physical_instance_count,
-        "partition_ratio": partition_ratio,
+        "instance_share": instance_share,
+        "partition_ratio": instance_share,
         "signal_count_total": metric_number(metrics, "signal_count_total"),
         "logic_area": metric_number(metrics, "logic_area"),
         "sram_area": metric_number(metrics, "sram_area"),
@@ -693,30 +720,29 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
         if not component_partitions:
             continue
 
-        ratio_total = sum(partition.partition_ratio for partition in component_partitions)
-        if abs(ratio_total - 1.0) > 0.001:
+        equivalent_instances = sum(partition_equivalent_instances(partition) for partition in component_partitions)
+        if abs(equivalent_instances - component.logical_instance_count) > 0.001:
             issues.append(
                 make_quality_issue(
                     "High",
-                    "Partition ratio not closed",
-                    f"{component.name} partition_ratio sums to {ratio_total:.3f}, expected 1.000.",
-                    "Adjust physical_partitions so the logical content share closes to 100%.",
+                    "Implementation coverage not closed",
+                    f"{component.name} maps to {equivalent_instances:.3f} equivalent instances, expected {component.logical_instance_count}.",
+                    "Adjust physical_instance_count and content_share so count * content_share closes to the logical instance count.",
                     "logical_component",
                     component.id,
                 )
             )
 
-        if all(partition.partition_type == "full" for partition in component_partitions):
-            physical_count = sum(partition.physical_instance_count for partition in component_partitions)
-            if physical_count != component.logical_instance_count:
+        for partition in component_partitions:
+            if partition.partition_type == "full" and abs(partition.content_share - 1.0) > 0.001:
                 issues.append(
                     make_quality_issue(
-                        "High",
-                        "Physical count not closed",
-                        f"{component.name} logical_instance_count={component.logical_instance_count}, but full physical partitions sum to {physical_count}.",
-                        "Update physical_instance_count or split the mapping with partial partitions.",
-                        "logical_component",
-                        component.id,
+                        "Medium",
+                        "Full partition content_share must be 1",
+                        f"{partition.id} is full but content_share={partition.content_share}.",
+                        "Set full partitions to content_share=1 or change the partition_type to partial.",
+                        "physical_partition",
+                        partition.id,
                     )
                 )
 
@@ -847,8 +873,11 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 raise HTTPException(status_code=400, detail=f"Unsupported partition_type: {partition.partition_type}")
             if partition.physical_instance_count < 0:
                 raise HTTPException(status_code=400, detail=f"{partition.id} has negative physical_instance_count")
-            if partition.partition_ratio < 0:
-                raise HTTPException(status_code=400, detail=f"{partition.id} has negative partition_ratio")
+            content_share = normalized_content_share(partition.partition_type, partition.content_share if partition.content_share is not None else partition.partition_ratio)
+            if content_share < 0:
+                raise HTTPException(status_code=400, detail=f"{partition.id} has negative content_share")
+            if partition.partition_type == "full" and abs(content_share - 1.0) > 0.001:
+                raise HTTPException(status_code=400, detail=f"{partition.id} is full, so content_share must be 1")
 
         component.logical_instance_count = payload.logical_instance_count
         component.updated_at = now_iso()
@@ -872,6 +901,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 session.delete(partition)
 
         for partition in payload.partitions:
+            content_share = normalized_content_share(partition.partition_type, partition.content_share if partition.content_share is not None else partition.partition_ratio)
             row = PhysicalPartition(
                 id=partition.id,
                 scenario_id=payload.scenario_id,
@@ -880,7 +910,8 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 partition_name=partition.partition_name,
                 partition_type=partition.partition_type,
                 physical_instance_count=partition.physical_instance_count,
-                partition_ratio=partition.partition_ratio,
+                partition_ratio=content_share,
+                content_share=content_share,
                 description=partition.description,
             )
             session.merge(row)
@@ -1028,8 +1059,8 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
     ),
     "physical_partitions": (
         PhysicalPartition,
-        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count", "partition_ratio", "description"],
-        {"id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count", "partition_ratio"},
+        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count", "content_share", "description"],
+        {"id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count"},
     ),
     "metrics": (
         Metric,
@@ -1058,10 +1089,11 @@ def read_sheet_rows(workbook_file: SpooledTemporaryFile[bytes], sheet_name: str,
         raise HTTPException(status_code=400, detail=f"Missing sheet: {sheet_name}")
     sheet = workbook[sheet_name]
     header = [str(cell.value or "").strip() for cell in sheet[1]]
-    missing = [column for column in expected_columns if column not in header]
+    aliases = {"content_share": "partition_ratio"} if sheet_name == "physical_partitions" else {}
+    missing = [column for column in expected_columns if column not in header and aliases.get(column) not in header]
     if missing:
         raise HTTPException(status_code=400, detail=f"Sheet {sheet_name} is missing columns: {', '.join(missing)}")
-    indexes = {column: header.index(column) for column in expected_columns}
+    indexes = {column: header.index(column if column in header else aliases[column]) for column in expected_columns}
     rows: list[dict[str, Any]] = []
     for row_index, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
         record = {column: normalize_cell(row[indexes[column]]) for column in expected_columns}
@@ -1097,7 +1129,9 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
         row["updated_at"] = row.get("updated_at") or created
     for row in all_rows["physical_partitions"]:
         row["physical_instance_count"] = int(row["physical_instance_count"])
-        row["partition_ratio"] = float(row["partition_ratio"])
+        raw_content_share = row.get("content_share")
+        row["content_share"] = normalized_content_share(row["partition_type"], float(raw_content_share) if raw_content_share is not None else None)
+        row["partition_ratio"] = row["content_share"]
     for row in all_rows["metrics"]:
         row["metric_value"] = str(row["metric_value"])
         row["metric_unit"] = row.get("metric_unit") or ""
@@ -1142,8 +1176,8 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
             errors.append(f"physical_partition {row['id']} uses unsupported partition_type {row['partition_type']}")
         if row["physical_instance_count"] < 0:
             errors.append(f"physical_partition {row['id']} has negative physical_instance_count")
-        if row["partition_ratio"] < 0:
-            errors.append(f"physical_partition {row['id']} has negative partition_ratio")
+        if row["content_share"] < 0:
+            errors.append(f"physical_partition {row['id']} has negative content_share")
     for row in all_rows["metrics"]:
         if row["scenario_id"] not in scenario_ids:
             errors.append(f"metric {row['id']} references missing scenario_id {row['scenario_id']}")

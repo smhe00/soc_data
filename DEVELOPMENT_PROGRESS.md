@@ -94,8 +94,14 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoCè·¨Dieæ•
 - Added the first Web daily-maintenance path:
   - `PUT /api/components/{component_id}/detail` saves `logical_instance_count` plus physical partitions for one logical component.
   - The Hierarchy page now includes a Physical Partition Mapping editor for the selected component.
-  - The editor shows live physical count closure, partition ratio closure, and tier summary before saving.
+  - The editor shows live equivalent instance closure and tier summary before saving.
   - Save refreshes component data and quality issues.
+- Clarified physical partition coverage semantics:
+  - `physical_instance_count` remains the manually maintained quantity.
+  - `content_share` replaces the user-facing `partition_ratio` concept.
+  - `content_share` is fixed to `1` for `full` partitions and only editable for `partial` / `residual`.
+  - `instance_share` is computed from `physical_instance_count / logical_instance_count` and is not manually entered.
+  - Quality closure now checks `sum(physical_instance_count * content_share) == logical_instance_count`.
 
 ## Verified
 
