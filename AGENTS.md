@@ -159,6 +159,14 @@ It includes:
 
 Demo seeding is controlled by:
 
+macOS/Linux:
+
+```sh
+export SEED_DEMO=true
+```
+
+Windows PowerShell:
+
 ```powershell
 $env:SEED_DEMO="true"
 ```

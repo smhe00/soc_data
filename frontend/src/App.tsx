@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -14,6 +14,7 @@ import {
   MemoryStick,
   RadioTower,
   Boxes,
+  ChevronDown,
   ChevronRight,
   FileText,
   Settings2,
@@ -22,6 +23,8 @@ import {
   Flame,
   Package,
   History,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { getComponents, getComponentTree, getPhysicalPartitions, updateComponentDetail } from "./api/components";
 import { importTemplateUrl, uploadImportWorkbook, type ImportResult } from "./api/imports";
@@ -37,7 +40,8 @@ type RiskLevel = "Low" | "Medium" | "High";
 type ConfidenceLevel = "approved" | "review" | "draft";
 type SeverityLevel = "High" | "Medium" | "Low";
 type BadgeTone = "slate" | "blue" | "green" | "amber" | "red" | "violet";
-type TabId = "dashboard" | "hierarchy" | "tiers" | "compare" | "imports" | "quality" | "schema";
+type TabId = "dashboard" | "hierarchy" | "tiers" | "implementation" | "compare" | "imports" | "quality" | "schema";
+type ThemeMode = "light" | "dark";
 
 interface Project {
   id: string;
@@ -148,6 +152,39 @@ interface SchemaTable {
   fields: string;
 }
 
+interface StackTierDefinition {
+  id: string;
+  name: string;
+  role: string;
+  process: string;
+  thicknessUm: number;
+  color: string;
+}
+
+interface StackInterfaceDefinition {
+  id: string;
+  fromTierId: string;
+  toTierId: string;
+  orientation: "Face-to-Face" | "Face-to-Back" | "Back-to-Face" | "Back-to-Back";
+  interconnect: "HB" | "TSV" | "HB + TSV";
+  hbPitchUm: number;
+  upperTsvPitchUm: number;
+  upperTsvKeepOutUm: number;
+  lowerTsvPitchUm: number;
+  lowerTsvKeepOutUm: number;
+  description: string;
+}
+
+type StackImplementationType = "Monolithic" | "Wafer-to-Wafer" | "2.5D Interposer";
+
+interface PackageEscapeDefinition {
+  pitchUm: number;
+  keepOutUm: number;
+  description: string;
+}
+
+type DieSide = "Face" | "Back";
+
 interface TabItem {
   id: TabId;
   label: string;
@@ -183,6 +220,8 @@ interface TreeNodeProps {
   node: TreeBlock;
   selectedId: string;
   onSelect: (id: string) => void;
+  expandedIds: Set<string>;
+  onToggle: (id: string) => void;
   depth?: number;
 }
 
@@ -290,11 +329,129 @@ const tabs: TabItem[] = [
   { id: "dashboard", label: "总览", icon: BarChart3 },
   { id: "hierarchy", label: "Block层次", icon: GitBranch },
   { id: "tiers", label: "3D Tier", icon: Layers3 },
+  { id: "implementation", label: "实现方案", icon: Package },
   { id: "compare", label: "方案对比", icon: SplitSquareVertical },
   { id: "imports", label: "数据导入", icon: Upload },
   { id: "quality", label: "数据质量", icon: AlertTriangle },
   { id: "schema", label: "数据模型", icon: Database },
 ];
+
+const defaultStackTiers: StackTierDefinition[] = [
+  { id: "T1", name: "Tier 1", role: "Compute logic", process: "N3E", thicknessUm: 45, color: "bg-sky-100 border-sky-300 text-sky-950" },
+  { id: "T2", name: "Tier 2", role: "SRAM / cache", process: "N5", thicknessUm: 55, color: "bg-emerald-100 border-emerald-300 text-emerald-950" },
+  { id: "T3", name: "Tier 3", role: "IO / analog", process: "N6", thicknessUm: 70, color: "bg-amber-100 border-amber-300 text-amber-950" },
+];
+
+const defaultStackInterfaces: StackInterfaceDefinition[] = [
+  {
+    id: "I12",
+    fromTierId: "T1",
+    toTierId: "T2",
+    orientation: "Face-to-Face",
+    interconnect: "HB",
+    hbPitchUm: 0.8,
+    upperTsvPitchUm: 0,
+    upperTsvKeepOutUm: 0,
+    lowerTsvPitchUm: 0,
+    lowerTsvKeepOutUm: 0,
+    description: "Fine-pitch hybrid bonding for high-bandwidth compute/cache links.",
+  },
+  {
+    id: "I23",
+    fromTierId: "T2",
+    toTierId: "T3",
+    orientation: "Back-to-Face",
+    interconnect: "HB + TSV",
+    hbPitchUm: 0.8,
+    upperTsvPitchUm: 5,
+    upperTsvKeepOutUm: 8,
+    lowerTsvPitchUm: 0,
+    lowerTsvKeepOutUm: 0,
+    description: "Hybrid bond plus TSV escape for lower tier power, IO, and control.",
+  },
+];
+
+const defaultPackageEscape: PackageEscapeDefinition = {
+  pitchUm: 10,
+  keepOutUm: 12,
+  description: "Package-side TSV escape from bottom die back side to bumps.",
+};
+
+const orientationOptions: StackInterfaceDefinition["orientation"][] = ["Face-to-Face", "Face-to-Back", "Back-to-Face", "Back-to-Back"];
+
+function getUpperInterfaceSide(orientation: StackInterfaceDefinition["orientation"]): DieSide {
+  return orientation.startsWith("Face") ? "Face" : "Back";
+}
+
+function getLowerInterfaceSide(orientation: StackInterfaceDefinition["orientation"]): DieSide {
+  return orientation.endsWith("Face") ? "Face" : "Back";
+}
+
+function getOppositeSide(side: DieSide): DieSide {
+  return side === "Face" ? "Back" : "Face";
+}
+
+function usesUpperTsv(interfaceItem: StackInterfaceDefinition): boolean {
+  return interfaceItem.interconnect.includes("TSV") && getUpperInterfaceSide(interfaceItem.orientation) === "Back";
+}
+
+function usesLowerTsv(interfaceItem: StackInterfaceDefinition): boolean {
+  return interfaceItem.interconnect.includes("TSV") && getLowerInterfaceSide(interfaceItem.orientation) === "Back";
+}
+
+function makeOrientation(upperSide: DieSide, lowerSide: DieSide): StackInterfaceDefinition["orientation"] {
+  return `${upperSide}-to-${lowerSide}` as StackInterfaceDefinition["orientation"];
+}
+
+function getAllowedOrientationOptions(index: number, interfaces: StackInterfaceDefinition[]): StackInterfaceDefinition["orientation"][] {
+  if (index === 0) return orientationOptions;
+  const previous = interfaces[index - 1];
+  if (!previous) return orientationOptions;
+  const requiredUpperSide = getOppositeSide(getLowerInterfaceSide(previous.orientation));
+  return orientationOptions.filter((orientation) => getUpperInterfaceSide(orientation) === requiredUpperSide);
+}
+
+function normalizeInterfaceOrientations(interfaces: StackInterfaceDefinition[]): StackInterfaceDefinition[] {
+  return interfaces.reduce<StackInterfaceDefinition[]>((normalized, item, index) => {
+    if (index === 0) return [item];
+    const previous = normalized[index - 1];
+    const requiredUpperSide = getOppositeSide(getLowerInterfaceSide(previous.orientation));
+    if (getUpperInterfaceSide(item.orientation) === requiredUpperSide) return [...normalized, item];
+    return [...normalized, { ...item, orientation: makeOrientation(requiredUpperSide, getLowerInterfaceSide(item.orientation)) }];
+  }, []);
+}
+
+function withInterfaceParameterDefaults(interfaceItem: StackInterfaceDefinition): StackInterfaceDefinition {
+  return {
+    ...interfaceItem,
+    hbPitchUm: interfaceItem.interconnect.includes("HB") && interfaceItem.hbPitchUm === 0 ? 0.8 : interfaceItem.hbPitchUm,
+    upperTsvPitchUm: usesUpperTsv(interfaceItem) && interfaceItem.upperTsvPitchUm === 0 ? 5 : interfaceItem.upperTsvPitchUm,
+    upperTsvKeepOutUm: usesUpperTsv(interfaceItem) && interfaceItem.upperTsvKeepOutUm === 0 ? 8 : interfaceItem.upperTsvKeepOutUm,
+    lowerTsvPitchUm: usesLowerTsv(interfaceItem) && interfaceItem.lowerTsvPitchUm === 0 ? 5 : interfaceItem.lowerTsvPitchUm,
+    lowerTsvKeepOutUm: usesLowerTsv(interfaceItem) && interfaceItem.lowerTsvKeepOutUm === 0 ? 8 : interfaceItem.lowerTsvKeepOutUm,
+  };
+}
+
+function normalizeInterfaces(interfaces: StackInterfaceDefinition[]): StackInterfaceDefinition[] {
+  return normalizeInterfaceOrientations(interfaces).map(withInterfaceParameterDefaults);
+}
+
+function getBottomInterface(tiers: StackTierDefinition[], interfaces: StackInterfaceDefinition[]): StackInterfaceDefinition | undefined {
+  if (tiers.length < 2) return undefined;
+  const upperTier = tiers[tiers.length - 2];
+  const bottomTier = tiers[tiers.length - 1];
+  return interfaces.find((item) => item.fromTierId === upperTier.id && item.toTierId === bottomTier.id);
+}
+
+function getDerivedBottomBumpSide(tiers: StackTierDefinition[], interfaces: StackInterfaceDefinition[]): "Face" | "Back" {
+  const bottomInterface = getBottomInterface(tiers, interfaces);
+  if (!bottomInterface) return "Face";
+  return getLowerInterfaceSide(bottomInterface.orientation) === "Face" ? "Back" : "Face";
+}
+
+function requiresPackageTsv(tiers: StackTierDefinition[], interfaces: StackInterfaceDefinition[]): boolean {
+  return getDerivedBottomBumpSide(tiers, interfaces) === "Back";
+}
 
 function Badge({ children, tone = "slate" }: BadgeProps): JSX.Element {
   const styles: Record<BadgeTone, string> = {
@@ -406,30 +563,85 @@ function severityTone(severity: SeverityLevel): BadgeTone {
   return "slate";
 }
 
-function TreeNode({ node, selectedId, onSelect, depth = 0 }: TreeNodeProps): JSX.Element {
+function collectExpandableIds(nodes: TreeBlock[]): string[] {
+  return nodes.flatMap((node) => [node.children.length > 0 ? node.id : "", ...collectExpandableIds(node.children)]).filter(Boolean);
+}
+
+function findAncestorPath(nodes: TreeBlock[], targetId: string, ancestors: string[] = []): string[] {
+  for (const node of nodes) {
+    if (node.id === targetId) return ancestors;
+    const childPath = findAncestorPath(node.children, targetId, [...ancestors, node.id]);
+    if (childPath.length > 0) return childPath;
+  }
+  return [];
+}
+
+function filterTree(nodes: TreeBlock[], query: string): TreeBlock[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return nodes;
+
+  return nodes
+    .map((node) => {
+      const filteredChildren = filterTree(node.children, normalizedQuery);
+      const haystack = [node.id, node.name, node.domain, node.resource, node.owner_team, node.hierarchy_path].join(" ").toLowerCase();
+      if (haystack.includes(normalizedQuery) || filteredChildren.length > 0) {
+        return { ...node, children: filteredChildren };
+      }
+      return null;
+    })
+    .filter((node): node is TreeBlock => node !== null);
+}
+
+function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0 }: TreeNodeProps): JSX.Element {
   const hasChildren = node.children.length > 0;
+  const expanded = expandedIds.has(node.id);
   const active = selectedId === node.id;
 
   return (
     <div>
-      <button
-        onClick={() => onSelect(node.id)}
-        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
+      <div
+        className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm transition ${
           active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
         }`}
-        style={{ paddingLeft: `${12 + depth * 18}px` }}
-        type="button"
+        style={{ paddingLeft: `${8 + depth * 18}px` }}
       >
-        {hasChildren ? <ChevronRight size={14} className="shrink-0" /> : <span className="w-3.5" />}
-        <ResourceIcon resource={node.resource} />
-        <span className="truncate font-medium">{node.name}</span>
-        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
-          {node.tier}
-        </span>
-      </button>
+        {hasChildren ? (
+          <button
+            aria-label={expanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
+            className={`grid h-6 w-6 shrink-0 place-items-center rounded-md transition ${
+              active ? "text-white hover:bg-white/15" : "text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle(node.id);
+            }}
+            type="button"
+          >
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        ) : (
+          <span className="w-6 shrink-0" />
+        )}
+        <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect(node.id)} type="button">
+          <ResourceIcon resource={node.resource} />
+          <span className="truncate font-medium">{node.name}</span>
+          <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
+            {node.tier}
+          </span>
+        </button>
+      </div>
       {hasChildren &&
+        expanded &&
         node.children.map((child) => (
-          <TreeNode key={child.id} node={child} selectedId={selectedId} onSelect={onSelect} depth={depth + 1} />
+          <TreeNode
+            key={child.id}
+            node={child}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            expandedIds={expandedIds}
+            onToggle={onToggle}
+            depth={depth + 1}
+          />
         ))}
     </div>
   );
@@ -710,11 +922,46 @@ function HierarchyView({
   onSaveComponentDetail,
 }: Pick<DataPageProps, "blocks" | "tree" | "tiers" | "selectedTeam" | "loading" | "error" | "onSaveComponentDetail">): JSX.Element {
   const [selectedId, setSelectedId] = useState<string>("B_NPU");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
   useEffect(() => {
     if (blocks.length > 0 && !blocks.some((block) => block.id === selectedId)) {
       setSelectedId(blocks[0].id);
     }
   }, [blocks, selectedId]);
+
+  useEffect(() => {
+    if (tree.length === 0) return;
+    const expandableIds = new Set(collectExpandableIds(tree));
+    const selectedPath = findAncestorPath(tree, selectedId).filter((id) => expandableIds.has(id));
+    setExpandedIds((current) => {
+      const next = new Set([...current].filter((id) => expandableIds.has(id)));
+      if (next.size === 0) {
+        tree.forEach((node) => {
+          if (node.children.length > 0) next.add(node.id);
+        });
+      }
+      selectedPath.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [tree, selectedId]);
+
+  const visibleTree = useMemo(() => filterTree(tree, searchQuery), [tree, searchQuery]);
+  const displayedExpandedIds = useMemo(() => {
+    if (!searchQuery.trim()) return expandedIds;
+    return new Set(collectExpandableIds(visibleTree));
+  }, [expandedIds, searchQuery, visibleTree]);
+  const toggleNode = (id: string): void => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const expandAll = (): void => setExpandedIds(new Set(collectExpandableIds(tree)));
+  const collapseAll = (): void => setExpandedIds(new Set(findAncestorPath(tree, selectedId)));
 
   if (loading) return <Card title="Loading Block Hierarchy" subtitle="Fetching component tree..." icon={GitBranch}><div className="text-sm text-slate-500">Loading...</div></Card>;
   if (error) return <Card title="API Error" subtitle="FastAPI backend is not reachable yet." icon={AlertTriangle}><div className="text-sm text-red-600">{error}</div></Card>;
@@ -725,15 +972,54 @@ function HierarchyView({
 
   return (
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
-      <Card title="Block Hierarchy" subtitle="logical_component keeps hierarchy and logical instance count compact" icon={GitBranch}>
+      <Card
+        title="Block Hierarchy"
+        subtitle="logical_component keeps hierarchy and logical instance count compact"
+        icon={GitBranch}
+        right={
+          <div className="flex items-center gap-2">
+            <button
+              aria-label="Expand all blocks"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+              onClick={expandAll}
+              title="展开全部"
+              type="button"
+            >
+              <ChevronDown size={15} />
+            </button>
+            <button
+              aria-label="Collapse all blocks"
+              className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+              onClick={collapseAll}
+              title="折叠全部"
+              type="button"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        }
+      >
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
           <Search size={16} className="text-slate-400" />
-          <input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" placeholder="Search block / alias / domain" />
+          <input
+            className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search block / alias / domain"
+            value={searchQuery}
+          />
         </div>
         <div className="space-y-1">
-          {tree.map((node) => (
-            <TreeNode key={node.id} node={node} selectedId={selectedId} onSelect={setSelectedId} />
+          {visibleTree.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              expandedIds={displayedExpandedIds}
+              onToggle={toggleNode}
+            />
           ))}
+          {visibleTree.length === 0 && <div className="rounded-lg bg-slate-50 px-3 py-4 text-sm text-slate-500">No matching blocks.</div>}
         </div>
       </Card>
 
@@ -895,6 +1181,450 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
               ))}
             </tbody>
           </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function StackCrossSection({
+  tiers,
+  interfaces,
+  stackType,
+  packageEscape,
+}: {
+  tiers: StackTierDefinition[];
+  interfaces: StackInterfaceDefinition[];
+  stackType: StackImplementationType;
+  packageEscape: PackageEscapeDefinition;
+}): JSX.Element {
+  const stackLabel = stackType === "Monolithic" ? "Single die" : stackType === "Wafer-to-Wafer" ? "W2W" : "2.5D";
+  const bottomBumpSide = getDerivedBottomBumpSide(tiers, interfaces);
+  const bottomRequiresTsv = requiresPackageTsv(tiers, interfaces);
+  const bottomTier = tiers[tiers.length - 1];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">{stackLabel} Section</div>
+          <div className="text-xs text-slate-500">{tiers.length} layer{tiers.length > 1 ? "s" : ""}, top to bottom</div>
+        </div>
+        <Badge tone="blue">{stackLabel}</Badge>
+      </div>
+
+      <div className="space-y-1.5">
+        {tiers.map((tier, index) => {
+          const interfaceBelow = interfaces.find((item) => item.fromTierId === tier.id && item.toTierId === tiers[index + 1]?.id);
+          const tierHeight = Math.max(40, Math.min(68, tier.thicknessUm * 0.8));
+
+          return (
+            <div key={tier.id}>
+              <div className={`relative flex items-center justify-between overflow-hidden rounded-md border px-3 ${tier.color}`} style={{ height: `${tierHeight}px` }}>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">{tier.name}</div>
+                  <div className="truncate text-[11px] opacity-75">{tier.role}</div>
+                </div>
+                <div className="grid text-right text-[11px]">
+                  <span>{tier.process}</span>
+                  <span>{tier.thicknessUm} um</span>
+                </div>
+                <div className="absolute inset-x-0 top-1.5 h-px bg-white/70" />
+                <div className="absolute inset-x-0 bottom-1.5 h-px bg-slate-900/10" />
+              </div>
+
+              {interfaceBelow && (
+                <div className="relative mx-4 flex min-h-9 items-center">
+                  <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 border-t border-dashed border-slate-300" />
+                  <div className="mx-auto grid min-w-72 grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 shadow-sm">
+                    <div className="text-right text-[11px] font-medium text-slate-600">{interfaceBelow.orientation}</div>
+                    <div className="flex items-center gap-0.5">
+                      {Array.from({ length: interfaceBelow.interconnect.includes("HB") ? 9 : 5 }).map((_, dotIndex) => (
+                        <span key={dotIndex} className="h-1 w-1 rounded-full bg-slate-800" />
+                      ))}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {interfaceBelow.interconnect.includes("HB") && `HB ${interfaceBelow.hbPitchUm} um`}
+                      {interfaceBelow.interconnect.includes("HB") && interfaceBelow.interconnect.includes("TSV") && " / "}
+                      {usesUpperTsv(interfaceBelow) && `U-TSV ${interfaceBelow.upperTsvPitchUm} um`}
+                      {usesUpperTsv(interfaceBelow) && usesLowerTsv(interfaceBelow) && " / "}
+                      {usesLowerTsv(interfaceBelow) && `L-TSV ${interfaceBelow.lowerTsvPitchUm} um`}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+        <div className="flex items-center justify-between gap-3 text-[11px]">
+          <span className="font-medium text-slate-600">Package bump side</span>
+          <span className="text-slate-500">bottom die {bottomBumpSide.toLowerCase()} side toward bumps</span>
+        </div>
+        <div className="mt-1 flex items-center gap-1.5">
+          {Array.from({ length: 12 }).map((_, bumpIndex) => (
+            <span key={bumpIndex} className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+          ))}
+          <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium ${bottomRequiresTsv ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+            {bottomRequiresTsv ? `${bottomTier?.id ?? "Bottom"}-to-BUMP TSV / ${packageEscape.pitchUm} um` : "direct bump escape"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JSX.Element {
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>("S2");
+  const [stackType, setStackType] = useState<StackImplementationType>("Wafer-to-Wafer");
+  const [tiers, setTiers] = useState<StackTierDefinition[]>(defaultStackTiers);
+  const [interfaces, setInterfaces] = useState<StackInterfaceDefinition[]>(defaultStackInterfaces);
+  const [packageEscape, setPackageEscape] = useState<PackageEscapeDefinition>(defaultPackageEscape);
+  const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? scenarios[0];
+  const bottomRequiresPackageTsv = requiresPackageTsv(tiers, interfaces);
+  const derivedBottomBumpSide = getDerivedBottomBumpSide(tiers, interfaces);
+  const bottomTierId = tiers[tiers.length - 1]?.id ?? "BOTTOM";
+
+  const setTierCount = (count: number): void => {
+    const boundedCount = Math.max(1, Math.min(5, count));
+    setTiers((current) => {
+      const next = [...current];
+      while (next.length < boundedCount) {
+        const index = next.length + 1;
+        next.push({
+          id: `T${index}`,
+          name: `Tier ${index}`,
+          role: index === 1 ? "Compute logic" : "Memory / IO",
+          process: index === 1 ? "N3E" : "N5",
+          thicknessUm: 55,
+          color: ["bg-sky-100 border-sky-300 text-sky-950", "bg-emerald-100 border-emerald-300 text-emerald-950", "bg-amber-100 border-amber-300 text-amber-950", "bg-violet-100 border-violet-300 text-violet-950", "bg-rose-100 border-rose-300 text-rose-950"][index - 1],
+        });
+      }
+      return next.slice(0, boundedCount);
+    });
+    setInterfaces((current) =>
+      normalizeInterfaces(Array.from({ length: boundedCount - 1 }, (_, index) => {
+        const fromTierId = `T${index + 1}`;
+        const toTierId = `T${index + 2}`;
+        return (
+          current.find((item) => item.fromTierId === fromTierId && item.toTierId === toTierId) ?? {
+            id: `I${index + 1}${index + 2}`,
+            fromTierId,
+            toTierId,
+            orientation: index === 0 ? "Face-to-Face" : "Back-to-Face",
+            interconnect: index === 0 ? "HB" : "HB + TSV",
+            hbPitchUm: 0.8,
+            upperTsvPitchUm: index === 0 ? 0 : 5,
+            upperTsvKeepOutUm: index === 0 ? 0 : 8,
+            lowerTsvPitchUm: 0,
+            lowerTsvKeepOutUm: 0,
+            description: "W2W interface definition.",
+          }
+        );
+      })),
+    );
+  };
+
+  const applyScenarioDefaults = (scenarioId: string): void => {
+    setSelectedScenarioId(scenarioId);
+    if (scenarioId === "S1") {
+      setStackType("Monolithic");
+      setTiers([{ ...defaultStackTiers[0], id: "T1", name: "Single Die", role: "Monolithic SoC", process: "N3E", thicknessUm: 70 }]);
+      setInterfaces([]);
+      setPackageEscape(defaultPackageEscape);
+      return;
+    }
+    if (scenarioId === "S3") {
+      setStackType("2.5D Interposer");
+      setTiers([
+        { ...defaultStackTiers[0], id: "T1", name: "Compute Die", role: "Advanced logic chiplet", process: "N4P", thicknessUm: 55 },
+        { ...defaultStackTiers[1], id: "T2", name: "IO / Memory Die", role: "IO, PHY, and memory companion", process: "N6", thicknessUm: 70 },
+      ]);
+      setInterfaces(normalizeInterfaces([
+        {
+          id: "I12",
+          fromTierId: "T1",
+          toTierId: "T2",
+          orientation: "Back-to-Face",
+          interconnect: "TSV",
+          hbPitchUm: 0,
+          upperTsvPitchUm: 40,
+          upperTsvKeepOutUm: 20,
+          lowerTsvPitchUm: 0,
+          lowerTsvKeepOutUm: 0,
+          description: "Interposer-level connection placeholder for cost-optimized option.",
+        },
+      ]));
+      setPackageEscape({ pitchUm: 40, keepOutUm: 20, description: "Package escape through interposer-level TSV path." });
+      return;
+    }
+    setStackType("Wafer-to-Wafer");
+    setTiers(defaultStackTiers);
+    setInterfaces(normalizeInterfaces(defaultStackInterfaces));
+    setPackageEscape(defaultPackageEscape);
+  };
+
+  const updateStackType = (nextType: StackImplementationType): void => {
+    setStackType(nextType);
+    if (nextType === "Monolithic") {
+      setTierCount(1);
+    } else if (tiers.length === 1) {
+      setTierCount(2);
+    }
+  };
+
+  const updateTier = <K extends keyof StackTierDefinition>(id: string, key: K, value: StackTierDefinition[K]): void => {
+    setTiers((current) => current.map((tier) => (tier.id === id ? { ...tier, [key]: value } : tier)));
+  };
+
+  const updateInterface = <K extends keyof StackInterfaceDefinition>(id: string, key: K, value: StackInterfaceDefinition[K]): void => {
+    setInterfaces((current) => normalizeInterfaces(current.map((item) => (item.id === id ? { ...item, [key]: value } : item))));
+  };
+
+  const updatePackageEscape = <K extends keyof PackageEscapeDefinition>(key: K, value: PackageEscapeDefinition[K]): void => {
+    setPackageEscape((current) => ({ ...current, [key]: value }));
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card title="Scenario Implementation" subtitle="Implementation form for one project scenario" icon={Package}>
+        <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_170px_110px_1fr]">
+          <label className="grid gap-1" htmlFor="implementation-scenario">
+            <span className="text-xs font-medium text-slate-500">Scenario</span>
+            <select
+              id="implementation-scenario"
+              className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none"
+              onChange={(event) => applyScenarioDefaults(event.target.value)}
+              value={selectedScenario?.id ?? selectedScenarioId}
+            >
+              {scenarios.map((scenario) => (
+                <option key={scenario.id} value={scenario.id}>
+                  {scenario.id} - {scenario.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1" htmlFor="stack-type">
+            <span className="text-xs font-medium text-slate-500">Stack Type</span>
+            <select
+              id="stack-type"
+              className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none"
+              onChange={(event) => updateStackType(event.target.value as StackImplementationType)}
+              value={stackType}
+            >
+              <option>Monolithic</option>
+              <option>Wafer-to-Wafer</option>
+              <option>2.5D Interposer</option>
+            </select>
+          </label>
+          <label className="grid gap-1" htmlFor="tier-count">
+            <span className="text-xs font-medium text-slate-500">Layer Count</span>
+            <input id="tier-count" className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none" max={5} min={1} onChange={(event) => setTierCount(Number(event.target.value))} type="number" value={tiers.length} />
+          </label>
+          <div className="grid content-end">
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="blue">{tiers.length} layer{tiers.length > 1 ? "s" : ""}</Badge>
+              <Badge tone="green">{interfaces.filter((item) => item.interconnect.includes("HB")).length} HB</Badge>
+              <Badge tone="amber">{interfaces.filter((item) => item.interconnect.includes("TSV")).length} TSV</Badge>
+              <Badge tone="slate">bump side: {derivedBottomBumpSide}</Badge>
+              <Badge tone={bottomRequiresPackageTsv ? "amber" : "green"}>{bottomRequiresPackageTsv ? `${bottomTierId}-to-BUMP TSV` : "direct bump"}</Badge>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <Card title="Layer / Die Definitions" subtitle="Top to bottom physical implementation order" icon={Layers3}>
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="w-14 px-3 py-2">Layer</th>
+                  <th className="w-28 px-3 py-2">Name</th>
+                  <th className="w-20 px-3 py-2">Process</th>
+                  <th className="px-3 py-2">Role</th>
+                  <th className="w-24 px-3 py-2">Thick um</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {tiers.map((tier, index) => (
+                  <tr key={tier.id}>
+                    <td className="px-3 py-2">
+                      <div className="text-xs font-semibold text-slate-900">{tier.id}</div>
+                      <div className="text-[11px] text-slate-500">L{index + 1}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input aria-label={`${tier.id} name`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "name", event.target.value)} value={tier.name} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input aria-label={`${tier.id} process`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "process", event.target.value)} value={tier.process} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input aria-label={`${tier.id} role`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "role", event.target.value)} value={tier.role} />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input aria-label={`${tier.id} thickness`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "thicknessUm", Number(event.target.value))} type="number" value={tier.thicknessUm} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card title="Cross Section" subtitle="Live implementation preview" icon={SplitSquareVertical}>
+          <StackCrossSection tiers={tiers} interfaces={interfaces} stackType={stackType} packageEscape={packageEscape} />
+        </Card>
+      </div>
+
+      <Card title="Inter-Layer Interfaces" subtitle="Direction, bonding type, TSV usage, and pitch" icon={Gauge}>
+        <div className={`mb-3 rounded-xl border px-3 py-2 text-sm ${bottomRequiresPackageTsv ? "border-amber-100 bg-amber-50 text-amber-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
+          Bottom bump side is derived from the last die-to-die orientation. {bottomRequiresPackageTsv ? `${bottomTierId}-to-BUMP TSV is required because the bottom die back side faces bumps.` : `Bottom die face side faces bumps, so direct bump escape is allowed.`}
+        </div>
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          {interfaces.length === 0 ? (
+            <div className="bg-white px-4 py-5 text-sm text-slate-500">Single-layer implementation: no inter-layer interface is required for this scenario.</div>
+          ) : (
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="w-24 px-3 py-2">Interface</th>
+                  <th className="w-40 px-3 py-2">Direction</th>
+                  <th className="w-32 px-3 py-2">Type</th>
+                  <th className="w-24 px-3 py-2">HB Pitch</th>
+                  <th className="w-24 px-3 py-2">Upper TSV</th>
+                  <th className="w-24 px-3 py-2">Upper KO</th>
+                  <th className="w-24 px-3 py-2">Lower TSV</th>
+                  <th className="w-24 px-3 py-2">Lower KO</th>
+                  <th className="px-3 py-2">Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {interfaces.map((item, index) => (
+                  <tr key={item.id}>
+                    <td className="px-3 py-2 font-semibold text-slate-900">
+                      {item.fromTierId}-{item.toTierId}
+                    </td>
+                    <td className="px-3 py-2">
+                      <select aria-label={`${item.fromTierId} to ${item.toTierId} direction`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateInterface(item.id, "orientation", event.target.value as StackInterfaceDefinition["orientation"])} value={item.orientation}>
+                        {getAllowedOrientationOptions(index, interfaces).map((orientation) => (
+                          <option key={orientation}>{orientation}</option>
+                        ))}
+                      </select>
+                      {index > 0 && <div className="mt-1 text-[10px] text-slate-400">upper side: {getUpperInterfaceSide(item.orientation)}</div>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <select aria-label={`${item.fromTierId} to ${item.toTierId} interconnect`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateInterface(item.id, "interconnect", event.target.value as StackInterfaceDefinition["interconnect"])} value={item.interconnect}>
+                        <option>HB</option>
+                        <option>TSV</option>
+                        <option>HB + TSV</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${item.fromTierId} to ${item.toTierId} HB pitch`}
+                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                        disabled={!item.interconnect.includes("HB")}
+                        onChange={(event) => updateInterface(item.id, "hbPitchUm", Number(event.target.value))}
+                        step="0.1"
+                        type="number"
+                        value={item.hbPitchUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${item.fromTierId} to ${item.toTierId} upper TSV pitch`}
+                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                        disabled={!usesUpperTsv(item)}
+                        onChange={(event) => updateInterface(item.id, "upperTsvPitchUm", Number(event.target.value))}
+                        step="0.1"
+                        type="number"
+                        value={item.upperTsvPitchUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${item.fromTierId} to ${item.toTierId} upper TSV keep-out`}
+                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                        disabled={!usesUpperTsv(item)}
+                        onChange={(event) => updateInterface(item.id, "upperTsvKeepOutUm", Number(event.target.value))}
+                        step="0.5"
+                        type="number"
+                        value={item.upperTsvKeepOutUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${item.fromTierId} to ${item.toTierId} lower TSV pitch`}
+                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                        disabled={!usesLowerTsv(item)}
+                        onChange={(event) => updateInterface(item.id, "lowerTsvPitchUm", Number(event.target.value))}
+                        step="0.1"
+                        type="number"
+                        value={item.lowerTsvPitchUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${item.fromTierId} to ${item.toTierId} lower TSV keep-out`}
+                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                        disabled={!usesLowerTsv(item)}
+                        onChange={(event) => updateInterface(item.id, "lowerTsvKeepOutUm", Number(event.target.value))}
+                        step="0.5"
+                        type="number"
+                        value={item.lowerTsvKeepOutUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input aria-label={`${item.fromTierId} to ${item.toTierId} note`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateInterface(item.id, "description", event.target.value)} value={item.description} />
+                    </td>
+                  </tr>
+                ))}
+                {bottomRequiresPackageTsv && (
+                  <tr className="bg-amber-50/60">
+                    <td className="px-3 py-2 font-semibold text-slate-900">{bottomTierId}-BUMP</td>
+                    <td className="px-3 py-2 text-sm text-slate-600">Back-to-Bump</td>
+	                    <td className="px-3 py-2">
+	                      <Badge tone="amber">TSV</Badge>
+	                    </td>
+		                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
+		                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
+		                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
+		                    <td className="px-3 py-2">
+	                      <input
+	                        aria-label={`${bottomTierId} to bump TSV pitch`}
+                        className="h-8 w-full rounded-md border border-amber-200 bg-white px-2 text-sm outline-none"
+                        onChange={(event) => updatePackageEscape("pitchUm", Number(event.target.value))}
+                        step="0.1"
+                        type="number"
+                        value={packageEscape.pitchUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${bottomTierId} to bump keep-out`}
+                        className="h-8 w-full rounded-md border border-amber-200 bg-white px-2 text-sm outline-none"
+                        onChange={(event) => updatePackageEscape("keepOutUm", Number(event.target.value))}
+                        step="0.5"
+                        type="number"
+                        value={packageEscape.keepOutUm}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        aria-label={`${bottomTierId} to bump note`}
+                        className="h-8 w-full rounded-md border border-amber-200 bg-white px-2 text-sm outline-none"
+                        onChange={(event) => updatePackageEscape("description", event.target.value)}
+                        value={packageEscape.description}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </Card>
     </div>
@@ -1156,6 +1886,12 @@ function SchemaView(): JSX.Element {
 
 export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [active, setActive] = useState<TabId>("dashboard");
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "light";
+    const savedTheme = window.localStorage.getItem("soc-theme");
+    if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [blocks, setBlocks] = useState<BlockNode[]>([]);
   const [tree, setTree] = useState<TreeBlock[]>([]);
@@ -1171,6 +1907,10 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const activeTab = tabs.find((tab) => tab.id === active) ?? tabs[0];
+
+  useEffect(() => {
+    window.localStorage.setItem("soc-theme", theme);
+  }, [theme]);
 
   async function refreshApiData(team = selectedTeam): Promise<void> {
     const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData, teamData] = await Promise.all([
@@ -1265,7 +2005,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   }, [selectedTeam]);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className={`min-h-screen bg-slate-100 text-slate-900 theme-${theme}`}>
       <div className="flex min-h-screen">
         <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white p-5 lg:block">
           <div className="flex items-center gap-3">
@@ -1316,6 +2056,15 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">第一阶段MVP：统一项目、方案、block层次、process/tier、核心指标、数据来源和质量检查，为后续AI解析和工程评估引擎打基础。</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <button
+                  aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white"
+                  onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+                  type="button"
+                >
+                  {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+                  {theme === "dark" ? "白天" : "夜晚"}
+                </button>
                 <select
                   value={selectedTeam}
                   onChange={(event) => setSelectedTeam(event.target.value)}
@@ -1365,6 +2114,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
             />
           )}
           {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} loading={loading} error={error} />}
+          {active === "implementation" && <ImplementationView scenarios={scenarios} />}
           {active === "compare" && <CompareView scenarios={scenarios} loading={loading} error={error} />}
           {active === "imports" && (
             <ImportsView

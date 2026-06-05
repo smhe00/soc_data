@@ -1,14 +1,22 @@
 # Development Progress
 
-## Current Workspace
+## Project Root
 
-Project path:
+Set `PROJECT_ROOT` to the repository root on your machine. All paths in this document are relative to that directory.
 
-```powershell
-C:\Users\smhe00\Documents\soc-cross-die-database
+macOS/Linux:
+
+```sh
+export PROJECT_ROOT=/path/to/soc_database
+cd "$PROJECT_ROOT"
 ```
 
-The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoC跨Die数据库`, but current development should use the English path above.
+Windows PowerShell:
+
+```powershell
+$env:PROJECT_ROOT="C:/path/to/soc_database"
+cd $env:PROJECT_ROOT
+```
 
 ## Completed
 
@@ -112,27 +120,27 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoC跨Die�
 - `uv sync` completed successfully.
 - Backend Python syntax check passed:
 
-```powershell
-uv run python -m py_compile backend\main.py
+```sh
+uv run python -m py_compile backend/main.py
 ```
 
 - Backend imports passed:
 
-```powershell
+```sh
 uv run python -c "import fastapi, sqlmodel, uvicorn; import backend.main; print('backend imports ok')"
 ```
 
 - Frontend dependencies installed successfully after retrying npm with stronger fetch retry options.
 - Frontend production build passed:
 
-```powershell
+```sh
 npm run build
 ```
 
 - Demo Excel import passed:
 
-```powershell
-uv run python scripts\verify_import.py
+```sh
+uv run python scripts/verify_import.py
 ```
 
 Expected V7 imported counts:
@@ -148,7 +156,7 @@ metrics: 17
 ```
 - Frontend production build passed after the V7 UI/data update:
 
-```powershell
+```sh
 cd frontend
 npm run build
 ```
@@ -185,16 +193,16 @@ quality_issues: 0
 
 Start backend:
 
-```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database
+```sh
+cd "$PROJECT_ROOT"
 uv sync
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Start frontend in another PowerShell:
+Start frontend in another terminal:
 
-```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+```sh
+cd "$PROJECT_ROOT/frontend"
 npm run dev
 ```
 
@@ -208,15 +216,15 @@ http://localhost:5173/
 
 If `npm install` fails with `ECONNRESET`, retry with:
 
-```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+```sh
+cd "$PROJECT_ROOT/frontend"
 npm install --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 ```
 
 ## Known Notes
 
 - npm reported 2 moderate vulnerabilities after install. Do not run `npm audit fix --force` blindly because it may introduce breaking dependency upgrades.
-- The old Chinese directory may remain locked while an existing Codex workspace or terminal is attached to it. Close old sessions before deleting it.
+- Old local working copies may remain locked while an existing Codex workspace or terminal is attached to them. Close old sessions before deleting them.
 - This MVP intentionally does not include Docker, PostgreSQL, Alembic, complex auth, AI features, auto partition optimization, or thermal surrogate modeling.
 
 ## Suggested Next Steps

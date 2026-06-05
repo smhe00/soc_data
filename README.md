@@ -12,38 +12,86 @@ Gitee:
 https://gitee.com/smhe/soc_database.git
 ```
 
-## Backend
+## Project Root
+
+Set `PROJECT_ROOT` to the repository root on your machine. All paths below are relative to this directory.
+
+macOS/Linux:
+
+```sh
+export PROJECT_ROOT=/path/to/soc_database
+cd "$PROJECT_ROOT"
+```
+
+Windows PowerShell:
 
 ```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database
+$env:PROJECT_ROOT="C:/path/to/soc_database"
+cd $env:PROJECT_ROOT
+```
+
+## Backend
+
+macOS/Linux:
+
+```sh
+cd "$PROJECT_ROOT"
+uv sync
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Windows PowerShell:
+
+```powershell
+cd $env:PROJECT_ROOT
 uv sync
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The backend creates `backend/soc_3dic.db` on startup.
 
-Stop the backend from the same PowerShell window with `Ctrl + C`.
+Stop the backend from the same terminal with `Ctrl + C`.
 
 If Windows leaves an orphaned `uvicorn --reload` child process on port 8000, run:
 
 ```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database
-powershell -ExecutionPolicy Bypass -File scripts\stop_backend.ps1
+cd $env:PROJECT_ROOT
+powershell -ExecutionPolicy Bypass -File ./scripts/stop_backend.ps1
 ```
 
 Demo seed is enabled by default. It refreshes the built-in `P001 / S1-S3` demo data.
 
 Disable demo seed when you want to preserve manually imported data:
 
+macOS/Linux:
+
+```sh
+cd "$PROJECT_ROOT"
+SEED_DEMO=false uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Windows PowerShell:
+
 ```powershell
+cd $env:PROJECT_ROOT
 $env:SEED_DEMO="false"
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ## Frontend
 
+macOS/Linux:
+
+```sh
+cd "$PROJECT_ROOT/frontend"
+npm install
+npm run dev
+```
+
+Windows PowerShell:
+
 ```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+cd (Join-Path $env:PROJECT_ROOT "frontend")
 npm install
 npm run dev
 ```
@@ -99,7 +147,7 @@ Seeded dataset:
 Current V7 workbook:
 
 ```text
-templates\soc_mapping_metrics_review_v7.xlsx
+templates/soc_mapping_metrics_review_v7.xlsx
 ```
 
 Download from the running backend:
@@ -118,15 +166,15 @@ Team workbooks keep shared sheets such as `projects`, `scenarios`, `tiers`, and 
 
 Verify import:
 
-```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database
-uv run python scripts\verify_import.py
+```sh
+cd "$PROJECT_ROOT"
+uv run python scripts/verify_import.py
 ```
 
 Run the phase-1 API/data smoke check:
 
-```powershell
-uv run python scripts\check_phase1.py
+```sh
+uv run python scripts/check_phase1.py
 ```
 
 ## Quality Checks
