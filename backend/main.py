@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -69,6 +69,8 @@ class LogicalComponent(SQLModel, table=True):
     function_domain: str
     hierarchy_path: str
     logical_instance_count: int = 1
+    owner_team: str = "Architecture Team"
+    visibility_level: str = "team"
     description: str = ""
     created_at: str
     updated_at: str
@@ -128,6 +130,18 @@ class Metric(SQLModel, table=True):
     created_at: str
 
 
+class ResponsibilityAssignment(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    project_id: str = Field(foreign_key="project.id")
+    scenario_id: str = Field(foreign_key="scenario.id")
+    user_id: str
+    team_name: str
+    logical_component_id: str = Field(foreign_key="logicalcomponent.id")
+    scope_type: str = "subtree"
+    can_read: bool = True
+    can_write: bool = True
+
+
 app = FastAPI(title="SoC Cross-Die Database API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
@@ -140,6 +154,16 @@ app.add_middleware(
 
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
+
+
+def ensure_sqlite_schema_compatibility() -> None:
+    with engine.begin() as connection:
+        rows = connection.execute(text("PRAGMA table_info(logicalcomponent)")).fetchall()
+        columns = {row[1] for row in rows}
+        if "owner_team" not in columns:
+            connection.execute(text("ALTER TABLE logicalcomponent ADD COLUMN owner_team VARCHAR DEFAULT 'Architecture Team'"))
+        if "visibility_level" not in columns:
+            connection.execute(text("ALTER TABLE logicalcomponent ADD COLUMN visibility_level VARCHAR DEFAULT 'team'"))
 
 
 def number_or_zero(value: Any) -> float:
@@ -163,6 +187,7 @@ def seed_data() -> None:
         session.exec(delete(Metric).where(Metric.scenario_id.in_(demo_scenarios)))
         session.exec(delete(PhysicalPartition).where(PhysicalPartition.scenario_id.in_(demo_scenarios)))
         session.exec(delete(Tier).where(Tier.scenario_id.in_(demo_scenarios)))
+        session.exec(delete(ResponsibilityAssignment).where(ResponsibilityAssignment.project_id == "P001"))
         session.exec(delete(LogicalComponent).where(LogicalComponent.project_id == "P001"))
         session.exec(delete(ModuleDefinition).where(ModuleDefinition.id.like("MD_%")))
         session.exec(delete(Scenario).where(Scenario.id.in_(demo_scenarios)))
@@ -207,11 +232,31 @@ def seed_data() -> None:
             ModuleDefinition(id="MD_NOC", name="COHERENT_NOC", module_type="interconnect", ip_owner="Platform Team", reuse_class="platform_fabric", description="Coherent system fabric and QoS."),
         ]
 
+        owner_overrides = {
+            "B0": "Architecture Team",
+            "B_CPU": "CPU Team",
+            "B_GPU": "GPU Team",
+            "B_NPU": "AI Team",
+            "B_ISP": "Camera Team",
+            "B_MEDIA": "Media Team",
+            "B_DISPLAY": "Display Team",
+            "B_MODEM": "Modem Team",
+            "B_MEM": "Memory Team",
+            "B_NOC": "Platform Team",
+            "B_IO": "PHY Team",
+            "B_SEC": "Security Team",
+            "B_PMU": "Power Team",
+        }
+        owner_by_component: dict[str, str] = {}
+
         def logical(row: tuple[str, str | None, str | None, str, str, str, str, int, str]) -> LogicalComponent:
             id, parent_id, module_definition_id, name, instance_type, resource_type, function_domain, count, description = row
             path = name if parent_id is None else f"{logical_paths[parent_id]}/{name}"
             logical_paths[id] = path
-            return LogicalComponent(id=id, project_id="P001", parent_id=parent_id, module_definition_id=module_definition_id, name=name, instance_type=instance_type, resource_type=resource_type, function_domain=function_domain, hierarchy_path=path, logical_instance_count=count, description=description, created_at=created, updated_at=created)
+            owner_team = owner_overrides.get(id) or (owner_by_component[parent_id] if parent_id else "Architecture Team")
+            owner_by_component[id] = owner_team
+            visibility_level = "public_summary" if id == "B0" else "team"
+            return LogicalComponent(id=id, project_id="P001", parent_id=parent_id, module_definition_id=module_definition_id, name=name, instance_type=instance_type, resource_type=resource_type, function_domain=function_domain, hierarchy_path=path, logical_instance_count=count, owner_team=owner_team, visibility_level=visibility_level, description=description, created_at=created, updated_at=created)
 
         logical_paths: dict[str, str] = {}
         logical_rows: list[tuple[str, str | None, str | None, str, str, str, str, int, str]] = [
@@ -253,6 +298,35 @@ def seed_data() -> None:
             ("B_PMU", "B0", None, "AON_PMU_SENSOR_HUB", "subsystem", "mixed", "Always On", 1, "Always-on PMU, sensor hub, clock/reset, and low-power control."),
         ]
         logical_components = [logical(row) for row in logical_rows]
+        responsibility_roots = [
+            ("Architecture Team", "arch_lead", "B0"),
+            ("CPU Team", "cpu_owner", "B_CPU"),
+            ("GPU Team", "gpu_owner", "B_GPU"),
+            ("AI Team", "ai_owner", "B_NPU"),
+            ("Camera Team", "camera_owner", "B_ISP"),
+            ("Media Team", "media_owner", "B_MEDIA"),
+            ("Display Team", "display_owner", "B_DISPLAY"),
+            ("Modem Team", "modem_owner", "B_MODEM"),
+            ("Memory Team", "memory_owner", "B_MEM"),
+            ("Platform Team", "platform_owner", "B_NOC"),
+            ("PHY Team", "phy_owner", "B_IO"),
+            ("Security Team", "security_owner", "B_SEC"),
+            ("Power Team", "power_owner", "B_PMU"),
+        ]
+        responsibilities = [
+            ResponsibilityAssignment(
+                id=f"RA_{team.upper().replace(' ', '_')}_{root}",
+                project_id="P001",
+                scenario_id="S2",
+                user_id=user_id,
+                team_name=team,
+                logical_component_id=root,
+                scope_type="subtree",
+                can_read=True,
+                can_write=True,
+            )
+            for team, user_id, root in responsibility_roots
+        ]
         tiers = [
             Tier(id="T0", scenario_id="S2", tier_index=0, name="Compute Logic Tier", process_id="PN3E", role="CPU/GPU/NPU/ISP/media high-performance logic", orientation="Face-down", thickness_um=42, area_limit_mm2=72.0, description="Advanced logic tier with hot compute blocks and fine-pitch hybrid bonding."),
             Tier(id="T1", scenario_id="S2", tier_index=1, name="SRAM + Cache Tier", process_id="PN5", role="Large SRAM/cache plus medium logic", orientation="Face-up / Face-to-face", thickness_um=48, area_limit_mm2=64.0, description="Cache/SRAM-heavy tier serving CPU/GPU/NPU and modem memories."),
@@ -341,7 +415,7 @@ def seed_data() -> None:
             metric("M_SCENARIO_S3_POWER", "S3", "scenario", "S3", "power", 47.0, "W", "power", "number", "typical", "peak", "review", "2.5D option peak workload power."),
         ])
 
-        for row in projects + scenarios + process_nodes + module_definitions + logical_components + tiers + partitions + metrics:
+        for row in projects + scenarios + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities:
             session.merge(row)
         session.commit()
 
@@ -382,6 +456,7 @@ def metric(
 @app.on_event("startup")
 def on_startup() -> None:
     create_db_and_tables()
+    ensure_sqlite_schema_compatibility()
     if os.getenv("SEED_DEMO", "true").lower() in {"1", "true", "yes", "on"}:
         seed_data()
 
@@ -399,6 +474,62 @@ def metrics_for(session: Session, scenario_id: str, subject_type: str, subject_i
 
 def metric_number(metrics: dict[str, Metric], name: str) -> float:
     return number_or_zero(metrics[name].metric_value) if name in metrics else 0
+
+
+def is_global_team(team: str | None) -> bool:
+    return not team or team in {"Architecture Team", "All", "All Teams"}
+
+
+def allowed_component_ids_for_team(session: Session, team: str | None, scenario_id: str = "S2") -> set[str] | None:
+    if is_global_team(team):
+        return None
+
+    components = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
+    by_id = {component.id: component for component in components}
+    assignments = session.exec(
+        select(ResponsibilityAssignment).where(
+            ResponsibilityAssignment.scenario_id == scenario_id,
+            ResponsibilityAssignment.team_name == team,
+            ResponsibilityAssignment.can_read == True,
+        )
+    ).all()
+    root_ids = [assignment.logical_component_id for assignment in assignments]
+    if not root_ids:
+        root_ids = [
+            component.id
+            for component in components
+            if component.owner_team == team
+            and (not component.parent_id or by_id.get(component.parent_id, component).owner_team != team)
+        ]
+
+    allowed: set[str] = set()
+    for root_id in root_ids:
+        root = by_id.get(root_id)
+        if not root:
+            continue
+        for component in components:
+            if component.id == root.id or component.hierarchy_path.startswith(f"{root.hierarchy_path}/"):
+                allowed.add(component.id)
+    return allowed
+
+
+def component_rows_for_team(session: Session, team: str | None, scenario_id: str = "S2") -> tuple[list[LogicalComponent], set[str] | None]:
+    rows = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
+    allowed = allowed_component_ids_for_team(session, team, scenario_id)
+    if allowed is None:
+        return rows, None
+    return [row for row in rows if row.id in allowed], allowed
+
+
+def scope_component_items(items: list[dict[str, Any]], allowed: set[str] | None) -> list[dict[str, Any]]:
+    if allowed is None:
+        return items
+    return [{**item, "parent": item["parent"] if item["parent"] in allowed else None} for item in items]
+
+
+def partition_ids_for_components(session: Session, scenario_id: str, component_ids: set[str]) -> set[str]:
+    rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+    return {row.id for row in rows if row.logical_component_id in component_ids}
 
 
 def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, Any]:
@@ -449,6 +580,8 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "resource": component.resource_type,
         "hierarchy_path": component.hierarchy_path,
         "logical_instance_count": component.logical_instance_count,
+        "owner_team": component.owner_team,
+        "visibility_level": component.visibility_level,
         "physical_instance_count": physical_instance_count,
         "partition_ratio": partition_ratio,
         "signal_count_total": metric_number(metrics, "signal_count_total"),
@@ -511,11 +644,20 @@ def make_quality_issue(
     }
 
 
-def quality_issues_for(session: Session, scenario_id: str = "S2") -> list[dict[str, str]]:
+def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
-    components = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
+    components, allowed_component_ids = component_rows_for_team(session, team, scenario_id)
     partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
     metrics = session.exec(select(Metric).where(Metric.scenario_id == scenario_id)).all()
+    if allowed_component_ids is not None:
+        partitions = [row for row in partitions if row.logical_component_id in allowed_component_ids]
+        allowed_partition_ids = {row.id for row in partitions}
+        metrics = [
+            row
+            for row in metrics
+            if (row.subject_type == "logical_component" and row.subject_id in allowed_component_ids)
+            or (row.subject_type == "physical_partition" and row.subject_id in allowed_partition_ids)
+        ]
     partitions_by_component: dict[str, list[PhysicalPartition]] = {}
     metrics_by_subject: dict[tuple[str, str], dict[str, Metric]] = {}
 
@@ -629,23 +771,26 @@ def get_module_definitions() -> list[ModuleDefinition]:
 
 
 @app.get("/api/components")
-def get_components(scenario_id: str = "S2") -> list[dict[str, Any]]:
+def get_components(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
     with Session(engine) as session:
-        rows = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
-        return [component_ui(session, row, scenario_id) for row in rows]
+        rows, allowed = component_rows_for_team(session, team, scenario_id)
+        return scope_component_items([component_ui(session, row, scenario_id) for row in rows], allowed)
 
 
 @app.get("/api/components/tree")
-def get_component_tree(scenario_id: str = "S2") -> list[dict[str, Any]]:
+def get_component_tree(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
     with Session(engine) as session:
-        rows = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
-        return build_component_tree([component_ui(session, row, scenario_id) for row in rows])
+        rows, allowed = component_rows_for_team(session, team, scenario_id)
+        return build_component_tree(scope_component_items([component_ui(session, row, scenario_id) for row in rows], allowed))
 
 
 @app.get("/api/physical-partitions")
-def get_physical_partitions(scenario_id: str = "S2") -> list[dict[str, Any]]:
+def get_physical_partitions(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
     with Session(engine) as session:
+        allowed = allowed_component_ids_for_team(session, team, scenario_id)
         rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+        if allowed is not None:
+            rows = [row for row in rows if row.logical_component_id in allowed]
         return [partition_ui(session, row) for row in rows]
 
 
@@ -677,18 +822,43 @@ def get_tiers(scenario_id: str = "S2") -> list[dict[str, Any]]:
 
 
 @app.get("/api/metrics")
-def get_metrics(scenario_id: str | None = None) -> list[Metric]:
+def get_metrics(scenario_id: str | None = None, team: str | None = None) -> list[Metric]:
     with Session(engine) as session:
         statement = select(Metric)
         if scenario_id:
             statement = statement.where(Metric.scenario_id == scenario_id)
-        return list(session.exec(statement).all())
+        rows = list(session.exec(statement).all())
+        if is_global_team(team):
+            return rows
+        scoped_scenario_id = scenario_id or "S2"
+        allowed_component_ids = allowed_component_ids_for_team(session, team, scoped_scenario_id) or set()
+        allowed_partition_ids = partition_ids_for_components(session, scoped_scenario_id, allowed_component_ids)
+        return [
+            row
+            for row in rows
+            if row.scenario_id == scoped_scenario_id
+            and (
+                (row.subject_type == "logical_component" and row.subject_id in allowed_component_ids)
+                or (row.subject_type == "physical_partition" and row.subject_id in allowed_partition_ids)
+            )
+        ]
 
 
 @app.get("/api/quality/issues")
-def get_quality_issues(scenario_id: str = "S2") -> list[dict[str, str]]:
+def get_quality_issues(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:
     with Session(engine) as session:
-        return quality_issues_for(session, scenario_id)
+        return quality_issues_for(session, scenario_id, team)
+
+
+@app.get("/api/responsibilities/teams")
+def get_responsibility_teams(scenario_id: str = "S2") -> list[str]:
+    with Session(engine) as session:
+        assignments = session.exec(
+            select(ResponsibilityAssignment).where(ResponsibilityAssignment.scenario_id == scenario_id)
+        ).all()
+        teams = {assignment.team_name for assignment in assignments}
+        teams.update(row.owner_team for row in session.exec(select(LogicalComponent)).all() if row.owner_team)
+        return ["Architecture Team"] + sorted(team for team in teams if team != "Architecture Team")
 
 
 @app.get("/api/dashboard")
@@ -822,6 +992,8 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
         row["parent_id"] = row.get("parent_id") or None
         row["module_definition_id"] = row.get("module_definition_id") or None
         row["logical_instance_count"] = int(row["logical_instance_count"])
+        row["owner_team"] = row.get("owner_team") or "Architecture Team"
+        row["visibility_level"] = row.get("visibility_level") or "team"
         row["created_at"] = row.get("created_at") or created
         row["updated_at"] = row.get("updated_at") or created
     for row in all_rows["physical_partitions"]:

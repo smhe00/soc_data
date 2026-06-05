@@ -22,6 +22,7 @@ flowchart LR
   Scenario --> PhysicalPartition
   LogicalComponent --> PhysicalPartition
   Tier --> PhysicalPartition
+  ResponsibilityAssignment --> LogicalComponent
   Metric --> LogicalComponent
   Metric --> PhysicalPartition
   Metric --> Tier
@@ -96,6 +97,10 @@ Key fields:
 - `function_domain`
 - `hierarchy_path`
 - `logical_instance_count`
+- `owner_team`
+- `visibility_level`
+
+`owner_team` is used by the phase-1 API for lightweight team-scoped views. It is not a full authentication or permission system.
 
 ### tier
 
@@ -141,6 +146,24 @@ Key fields:
 - `full`: a whole logical instance/copy is realized by this partition
 - `partial`: one logical module is split across multiple tiers/partitions
 - `residual`: parent-level glue/control/interconnect not represented by child rows
+
+### responsibility_assignment
+
+Lightweight assignment of a team/user to a logical subtree in a scenario.
+
+Key fields:
+
+- `id`
+- `project_id`
+- `scenario_id`
+- `user_id`
+- `team_name`
+- `logical_component_id`
+- `scope_type`
+- `can_read`
+- `can_write`
+
+In phase 1, `scope_type = subtree` means a team can see the assigned logical component and its descendants. API filtering is available through `?team=...` on component, physical partition, metric, and quality endpoints.
 
 ### metric
 
@@ -225,4 +248,3 @@ Representative multi-instance closure:
 - `GPU_SHADER_SLICE`: logical 6, physical 6
 - `NPU_TENSOR_TILE`: logical 8, physical 8
 - `MIPI_PHY`: logical 6, physical 6
-

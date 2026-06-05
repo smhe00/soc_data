@@ -41,6 +41,7 @@ Core tables:
 - `tier`
 - `physical_partition`
 - `metric`
+- `responsibility_assignment`
 
 ### module_definition
 
@@ -71,6 +72,8 @@ Fields:
 - `function_domain`
 - `hierarchy_path`
 - `logical_instance_count`
+- `owner_team`
+- `visibility_level`
 - `description`
 - `created_at`
 - `updated_at`
@@ -123,6 +126,24 @@ Phase-1 logical area metrics use:
 
 Implementation details such as shape, width, height, utilization, and power stay in `metric` rows attached to `physical_partition`, not as fixed columns on `physical_partition`.
 
+### responsibility_assignment
+
+Lightweight team/user responsibility for a logical subtree in a scenario.
+
+Fields:
+
+- `id`
+- `project_id`
+- `scenario_id`
+- `user_id`
+- `team_name`
+- `logical_component_id`
+- `scope_type`
+- `can_read`
+- `can_write`
+
+Use this for phase-1 subsystem-owner filtering. Do not add full login, roles, complex row-level permissions, or enterprise access control in phase 1.
+
 ## Current Demo
 
 The backend seeds a realistic flagship mobile SoC demo named `Orion X1 Mobile SoC`.
@@ -156,6 +177,15 @@ Read/API endpoints:
 - `GET /api/metrics`
 - `GET /api/dashboard`
 - `GET /api/quality/issues`
+- `GET /api/responsibilities/teams`
+
+Team-scoped API views:
+
+- `GET /api/components?team=AI%20Team`
+- `GET /api/components/tree?team=AI%20Team`
+- `GET /api/physical-partitions?team=AI%20Team`
+- `GET /api/metrics?team=AI%20Team`
+- `GET /api/quality/issues?team=AI%20Team`
 
 Import endpoints:
 
@@ -171,4 +201,3 @@ Import endpoints:
 5. Keep SQLite schema clear enough to migrate to PostgreSQL later.
 6. Do not add enterprise concerns before the MVP is stable.
 7. Prefer V7 workbook/schema terminology in new code and docs.
-

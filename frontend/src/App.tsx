@@ -27,6 +27,7 @@ import { getComponents, getComponentTree, getPhysicalPartitions } from "./api/co
 import { importTemplateUrl, uploadImportWorkbook, type ImportResult } from "./api/imports";
 import { getDashboard } from "./api/metrics";
 import { getQualityIssues, type QualityIssue } from "./api/quality";
+import { getResponsibilityTeams } from "./api/responsibilities";
 import { getScenarios } from "./api/scenarios";
 import { getTiers } from "./api/tiers";
 import type { DashboardData } from "./types/metric";
@@ -84,6 +85,8 @@ interface BlockNode {
   resource: string;
   hierarchy_path: string;
   logical_instance_count: number;
+  owner_team: string;
+  visibility_level: string;
   physical_instance_count: number;
   partition_ratio: number;
   signal_count_total: number;
@@ -475,6 +478,12 @@ function Dashboard({ dashboard, loading, error }: Pick<DataPageProps, "dashboard
 
 function HierarchyView({ blocks, tree, loading, error }: Pick<DataPageProps, "blocks" | "tree" | "loading" | "error">): JSX.Element {
   const [selectedId, setSelectedId] = useState<string>("B_NPU");
+  useEffect(() => {
+    if (blocks.length > 0 && !blocks.some((block) => block.id === selectedId)) {
+      setSelectedId(blocks[0].id);
+    }
+  }, [blocks, selectedId]);
+
   if (loading) return <Card title="Loading Block Hierarchy" subtitle="Fetching component tree..." icon={GitBranch}><div className="text-sm text-slate-500">Loading...</div></Card>;
   if (error) return <Card title="API Error" subtitle="FastAPI backend is not reachable yet." icon={AlertTriangle}><div className="text-sm text-red-600">{error}</div></Card>;
   if (blocks.length === 0) return <Card title="No Components" icon={GitBranch}><div className="text-sm text-slate-500">No component data returned.</div></Card>;
@@ -499,7 +508,7 @@ function HierarchyView({ blocks, tree, loading, error }: Pick<DataPageProps, "bl
       <div className="space-y-6">
         <Card
           title={selected.name}
-          subtitle={`${selected.domain} / ${selected.type}`}
+          subtitle={`${selected.domain} / ${selected.type} / ${selected.owner_team}`}
           icon={SelectedIcon}
           right={<Badge tone={confidenceTone(selected.confidence)}>{selected.confidence}</Badge>}
         >
@@ -906,6 +915,8 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [tiers, setTiers] = useState<TierInfo[]>([]);
   const [physicalPartitions, setPhysicalPartitions] = useState<PhysicalPartition[]>([]);
   const [qualityIssues, setQualityIssues] = useState<QualityIssue[]>([]);
+  const [teams, setTeams] = useState<string[]>(["Architecture Team"]);
+  const [selectedTeam, setSelectedTeam] = useState<string>("Architecture Team");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState<boolean>(false);
@@ -913,15 +924,16 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [importError, setImportError] = useState<string | null>(null);
   const activeTab = tabs.find((tab) => tab.id === active) ?? tabs[0];
 
-  async function refreshApiData(): Promise<void> {
-    const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData] = await Promise.all([
+  async function refreshApiData(team = selectedTeam): Promise<void> {
+    const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData, teamData] = await Promise.all([
       getDashboard(),
-      getComponents(),
-      getComponentTree(),
+      getComponents(team),
+      getComponentTree(team),
       getScenarios(),
       getTiers(),
-      getPhysicalPartitions(),
-      getQualityIssues(),
+      getPhysicalPartitions(team),
+      getQualityIssues(team),
+      getResponsibilityTeams(),
     ]);
     setDashboard(dashboardData);
     setBlocks(componentData);
@@ -930,6 +942,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     setTiers(tierData);
     setPhysicalPartitions(physicalPartitionData);
     setQualityIssues(qualityIssueData);
+    setTeams(teamData);
   }
 
   async function handleImportWorkbook(file: File): Promise<void> {
@@ -938,7 +951,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       setImportError(null);
       const result = await uploadImportWorkbook(file);
       setImportResult(result);
-      await refreshApiData();
+      await refreshApiData(selectedTeam);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Unknown import error");
     } finally {
@@ -952,14 +965,15 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     async function loadApiData(): Promise<void> {
       try {
         setLoading(true);
-        const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData] = await Promise.all([
+        const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData, teamData] = await Promise.all([
           getDashboard(),
-          getComponents(),
-          getComponentTree(),
+          getComponents(selectedTeam),
+          getComponentTree(selectedTeam),
           getScenarios(),
           getTiers(),
-          getPhysicalPartitions(),
-          getQualityIssues(),
+          getPhysicalPartitions(selectedTeam),
+          getQualityIssues(selectedTeam),
+          getResponsibilityTeams(),
         ]);
         if (cancelled) return;
         setDashboard(dashboardData);
@@ -969,6 +983,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         setTiers(tierData);
         setPhysicalPartitions(physicalPartitionData);
         setQualityIssues(qualityIssueData);
+        setTeams(teamData);
         setError(null);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown API error");
@@ -981,7 +996,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedTeam]);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -1035,6 +1050,18 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">第一阶段MVP：统一项目、方案、block层次、process/tier、核心指标、数据来源和质量检查，为后续AI解析和工程评估引擎打基础。</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <select
+                  value={selectedTeam}
+                  onChange={(event) => setSelectedTeam(event.target.value)}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none transition hover:bg-white focus:border-slate-400"
+                  aria-label="Team scope"
+                >
+                  {teams.map((team) => (
+                    <option key={team} value={team}>
+                      {team}
+                    </option>
+                  ))}
+                </select>
                 <Badge tone="green">Data-first</Badge>
                 <Badge tone="blue">3DIC Ready</Badge>
                 <Badge tone="amber">AI Hooks Reserved</Badge>

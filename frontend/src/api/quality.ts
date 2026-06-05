@@ -10,6 +10,7 @@ export interface QualityIssue {
   entity_id: string;
 }
 
-export function getQualityIssues(): Promise<QualityIssue[]> {
-  return apiGet<QualityIssue[]>("/api/quality/issues");
+export function getQualityIssues(team?: string): Promise<QualityIssue[]> {
+  const path = team ? `/api/quality/issues?team=${encodeURIComponent(team)}` : "/api/quality/issues";
+  return apiGet<QualityIssue[]>(path);
 }

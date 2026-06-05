@@ -9,6 +9,8 @@ export interface BlockNode {
   resource: string;
   hierarchy_path: string;
   logical_instance_count: number;
+  owner_team: string;
+  visibility_level: string;
   physical_instance_count: number;
   partition_ratio: number;
   signal_count_total: number;

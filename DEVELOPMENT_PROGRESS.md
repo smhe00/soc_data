@@ -80,6 +80,12 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoCè·¨Dieæ•
   - Updated the frontend Quality page to read `/api/quality/issues`.
   - Added `scripts/check_phase1.py` for repeatable API/data smoke checks.
   - Updated `README.md` with current V7 startup, seed, import, quality, and Gitee notes.
+- Added lightweight subsystem-owner scoped views:
+  - Added `owner_team` and `visibility_level` to `logical_component`.
+  - Added `responsibility_assignment` for team/user responsibility over a logical subtree.
+  - Added `GET /api/responsibilities/teams`.
+  - Added `?team=` filtering for components, component tree, physical partitions, metrics, and quality issues.
+  - Added a frontend team scope selector while keeping the current UI style.
 
 ## Verified
 
@@ -134,6 +140,13 @@ physical_partitions: 35
 dashboard: total_area=119.0, total_power=45.3, total_sram_area=72.9, phy_area=19.3
 quality_issues: 0
 ```
+- Team-scoped API checks passed as part of `scripts/check_phase1.py`:
+
+```text
+AI Team components: 4
+AI Team physical_partitions: 5
+AI Team quality_issues: 0
+```
 
 ## Startup Commands
 
@@ -177,5 +190,5 @@ npm install --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=20
 
 - Add simple create/update APIs after the read-only flow is stable.
 - Split the single `App.tsx` prototype into page and component files.
-- Add a lightweight data quality endpoint backed by real rules.
 - Add basic backend API tests for the seven read-only endpoints.
+- Design Excel/export flows around team-owned subsystem workbooks before adding login or role enforcement.

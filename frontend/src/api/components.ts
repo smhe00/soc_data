@@ -1,14 +1,18 @@
 import { apiGet } from "./client";
 import type { BlockNode, PhysicalPartition, TreeBlock } from "../types/component";
 
-export function getComponents(): Promise<BlockNode[]> {
-  return apiGet<BlockNode[]>("/api/components");
+function teamQuery(path: string, team?: string): string {
+  return team ? `${path}?team=${encodeURIComponent(team)}` : path;
 }
 
-export function getComponentTree(): Promise<TreeBlock[]> {
-  return apiGet<TreeBlock[]>("/api/components/tree");
+export function getComponents(team?: string): Promise<BlockNode[]> {
+  return apiGet<BlockNode[]>(teamQuery("/api/components", team));
 }
 
-export function getPhysicalPartitions(): Promise<PhysicalPartition[]> {
-  return apiGet<PhysicalPartition[]>("/api/physical-partitions");
+export function getComponentTree(team?: string): Promise<TreeBlock[]> {
+  return apiGet<TreeBlock[]>(teamQuery("/api/components/tree", team));
+}
+
+export function getPhysicalPartitions(team?: string): Promise<PhysicalPartition[]> {
+  return apiGet<PhysicalPartition[]>(teamQuery("/api/physical-partitions", team));
 }

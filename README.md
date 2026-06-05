@@ -57,6 +57,7 @@ Core tables:
 - `tier`
 - `physical_partition`
 - `metric`
+- `responsibility_assignment`
 
 The model separates:
 
@@ -126,6 +127,21 @@ Phase-1 rules check:
 - numeric metric values
 - metric subject references
 
+## Team Scoped Views
+
+The phase-1 app includes lightweight subsystem-owner scoping. This is data filtering for review workflows, not a full login or permission system.
+
+Examples:
+
+```text
+GET /api/responsibilities/teams
+GET /api/components?team=AI%20Team
+GET /api/components/tree?team=AI%20Team
+GET /api/physical-partitions?team=AI%20Team
+GET /api/metrics?team=AI%20Team
+GET /api/quality/issues?team=AI%20Team
+```
+
 ## Useful API Endpoints
 
 ```text
@@ -139,6 +155,7 @@ GET /api/tiers
 GET /api/metrics
 GET /api/dashboard
 GET /api/quality/issues
+GET /api/responsibilities/teams
 GET /api/import/template
 POST /api/import/excel
 ```
