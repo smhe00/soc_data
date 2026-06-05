@@ -134,6 +134,8 @@ Phase-1 frontend interface semantics:
 
 Physical carrying of a logical component in a scenario.
 
+`physical_partition` is scenario-specific by design. A logical component can map to different tiers, counts, or content shares in different implementation scenarios. The tuple of `scenario_id`, `logical_component_id`, and `tier_id` must therefore be interpreted together.
+
 Use this table for placement/mapping facts:
 
 - Which scenario
@@ -152,6 +154,8 @@ Key fields:
 - `partition_type`
 - `physical_instance_count`
 - `content_share`
+
+The referenced `tier_id` must belong to the same `scenario_id` as the physical partition. API saves validate this directly, and workbook import validation rejects rows where a partition's tier comes from another scenario.
 
 `partition_type` values:
 
@@ -255,6 +259,8 @@ For each logical component that has physical partitions in a scenario:
 - `full` partitions always use `content_share = 1`
 - `partial` partitions use `content_share` to describe how much of each covered logical instance is carried by that physical piece
 - For components with children, physical partitions attached directly to the parent map only the derived residual/self portion.
+
+Frontend maintenance uses the selected scenario as the working context. Switching scenarios changes the available tiers and physical partitions rather than reusing mappings from another scenario.
 
 ## Current Demo Data
 

@@ -1077,13 +1077,13 @@ def get_responsibility_teams(scenario_id: str = "S2") -> list[str]:
 
 
 @app.get("/api/dashboard")
-def get_dashboard() -> dict[str, Any]:
+def get_dashboard(scenario_id: str = "S2") -> dict[str, Any]:
     with Session(engine) as session:
         scenarios = [scenario_ui(session, row) for row in session.exec(select(Scenario)).all()]
         component_rows = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
-        components = [component_ui(session, row, "S2") for row in component_rows]
-        partitions = [partition_ui(session, row) for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == "S2")).all()]
-        target = next((item for item in scenarios if item["id"] == "S2"), scenarios[0])
+        components = [component_ui(session, row, scenario_id) for row in component_rows]
+        partitions = [partition_ui(session, row) for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()]
+        target = next((item for item in scenarios if item["id"] == scenario_id), scenarios[0])
         parent_ids = {row.parent_id for row in component_rows if row.parent_id}
         leaf_ids = {row.id for row in component_rows if row.id not in parent_ids}
         leaf_components = [item for item in components if item["id"] in leaf_ids]
@@ -1227,13 +1227,15 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
             row["id"] = metric_id(row)
 
 
-def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_refs: dict[str, set[str]] | None = None) -> list[str]:
+def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_refs: dict[str, Any] | None = None) -> list[str]:
     errors: list[str] = []
     existing_refs = existing_refs or {}
     project_ids = {row["id"] for row in all_rows["projects"]} | existing_refs.get("projects", set())
     module_definition_ids = {row["id"] for row in all_rows["module_definitions"]} | existing_refs.get("module_definitions", set())
     scenario_ids = {row["id"] for row in all_rows["scenarios"]} | existing_refs.get("scenarios", set())
     tier_ids = {row["id"] for row in all_rows["tiers"]} | existing_refs.get("tiers", set())
+    tier_scenario_ids = {row["id"]: row["scenario_id"] for row in all_rows["tiers"]}
+    tier_scenario_ids.update(existing_refs.get("tier_scenarios", {}))
     component_ids = {row["id"] for row in all_rows["logical_components"]} | existing_refs.get("logical_components", set())
     partition_ids = {row["id"] for row in all_rows["physical_partitions"]} | existing_refs.get("physical_partitions", set())
 
@@ -1259,6 +1261,8 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
             errors.append(f"physical_partition {row['id']} references missing logical_component_id {row['logical_component_id']}")
         if row["tier_id"] not in tier_ids:
             errors.append(f"physical_partition {row['id']} references missing tier_id {row['tier_id']}")
+        elif tier_scenario_ids.get(row["tier_id"]) != row["scenario_id"]:
+            errors.append(f"physical_partition {row['id']} tier_id {row['tier_id']} belongs to scenario {tier_scenario_ids.get(row['tier_id'])}, not {row['scenario_id']}")
         if row["partition_type"] not in ALLOWED_PARTITION_TYPES:
             errors.append(f"physical_partition {row['id']} uses unsupported partition_type {row['partition_type']}")
         if row["physical_instance_count"] < 0:
@@ -1290,12 +1294,14 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
     return errors
 
 
-def existing_reference_ids(session: Session) -> dict[str, set[str]]:
+def existing_reference_ids(session: Session) -> dict[str, Any]:
+    tiers = session.exec(select(Tier)).all()
     return {
         "projects": {row.id for row in session.exec(select(Project)).all()},
         "module_definitions": {row.id for row in session.exec(select(ModuleDefinition)).all()},
         "scenarios": {row.id for row in session.exec(select(Scenario)).all()},
-        "tiers": {row.id for row in session.exec(select(Tier)).all()},
+        "tiers": {row.id for row in tiers},
+        "tier_scenarios": {row.id: row.scenario_id for row in tiers},
         "logical_components": {row.id for row in session.exec(select(LogicalComponent)).all()},
         "physical_partitions": {row.id for row in session.exec(select(PhysicalPartition)).all()},
     }

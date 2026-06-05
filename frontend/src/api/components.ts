@@ -2,20 +2,24 @@ import { apiGet, apiJson } from "./client";
 import type { BlockNode, PhysicalPartition, TreeBlock } from "../types/component";
 import type { QualityIssue } from "./quality";
 
-function teamQuery(path: string, team?: string): string {
-  return team ? `${path}?team=${encodeURIComponent(team)}` : path;
+function scopedQuery(path: string, team?: string, scenarioId?: string): string {
+  const params = new URLSearchParams();
+  if (team) params.set("team", team);
+  if (scenarioId) params.set("scenario_id", scenarioId);
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
-export function getComponents(team?: string): Promise<BlockNode[]> {
-  return apiGet<BlockNode[]>(teamQuery("/api/components", team));
+export function getComponents(team?: string, scenarioId?: string): Promise<BlockNode[]> {
+  return apiGet<BlockNode[]>(scopedQuery("/api/components", team, scenarioId));
 }
 
-export function getComponentTree(team?: string): Promise<TreeBlock[]> {
-  return apiGet<TreeBlock[]>(teamQuery("/api/components/tree", team));
+export function getComponentTree(team?: string, scenarioId?: string): Promise<TreeBlock[]> {
+  return apiGet<TreeBlock[]>(scopedQuery("/api/components/tree", team, scenarioId));
 }
 
-export function getPhysicalPartitions(team?: string): Promise<PhysicalPartition[]> {
-  return apiGet<PhysicalPartition[]>(teamQuery("/api/physical-partitions", team));
+export function getPhysicalPartitions(team?: string, scenarioId?: string): Promise<PhysicalPartition[]> {
+  return apiGet<PhysicalPartition[]>(scopedQuery("/api/physical-partitions", team, scenarioId));
 }
 
 export interface ComponentDetailUpdate {

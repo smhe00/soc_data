@@ -119,7 +119,7 @@ Core tables:
 The model separates:
 
 - logical hierarchy and logical instance count
-- physical partitioning and physical instance count
+- scenario-specific physical partitioning and physical instance count
 - long-table metrics attached to logical components, physical partitions, tiers, or scenarios
 
 Detailed schema notes:
@@ -215,6 +215,8 @@ PUT /api/components/{component_id}/detail
 
 The Hierarchy page now includes a small Component Detail maintenance surface for physical partition mapping.
 
+Physical partition mapping is scenario-scoped. The header `Scenario` selector controls which scenario's tiers and physical partitions are loaded and edited. This prevents a logical block mapping for one implementation form, such as `S2` W2W 3DIC, from being mixed with another implementation form, such as `S1` monolithic.
+
 For the selected logical component, users can edit:
 
 - `logical_instance_count`
@@ -224,7 +226,7 @@ For the selected logical component, users can edit:
 - content share for partial partitions
 - partition name and description
 
-The page computes instance share from physical count and logical instance count. It shows equivalent instance closure before saving. Save calls `PUT /api/components/{component_id}/detail`, then refreshes component data and quality issues.
+The page computes instance share from physical count and logical instance count. It shows equivalent instance closure before saving. Save calls `PUT /api/components/{component_id}/detail` with the selected `scenario_id`, then refreshes component data and quality issues.
 
 ## Scenario Implementation View
 
@@ -247,21 +249,23 @@ The page models die/layer order and inter-layer interfaces:
 
 The view also includes light and dark display themes. The theme toggle is stored in browser `localStorage`.
 
+The cross-section preview now renders Face/Back surface marks from the chained interface orientation. `F` marks the face side and `B` marks the back side, so the tier drawing follows `Face-to-Face`, `Face-to-Back`, `Back-to-Face`, and `Back-to-Back` selections.
+
 ## Useful API Endpoints
 
 ```text
 GET /api/projects
 GET /api/scenarios
 GET /api/module-definitions
-GET /api/components
-GET /api/components/tree
-GET /api/physical-partitions
-GET /api/tiers
-GET /api/metrics
-GET /api/dashboard
-GET /api/quality/issues
-GET /api/responsibilities/teams
+GET /api/components?scenario_id=S2
+GET /api/components/tree?scenario_id=S2
+GET /api/physical-partitions?scenario_id=S2
+GET /api/tiers?scenario_id=S2
+GET /api/metrics?scenario_id=S2
+GET /api/dashboard?scenario_id=S2
+GET /api/quality/issues?scenario_id=S2
+GET /api/responsibilities/teams?scenario_id=S2
 PUT /api/components/{component_id}/detail
-GET /api/import/template
-POST /api/import/excel
+GET /api/import/template?scenario_id=S2
+POST /api/import/excel?scenario_id=S2
 ```

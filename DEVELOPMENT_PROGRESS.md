@@ -123,6 +123,16 @@ cd $env:PROJECT_ROOT
   - Added derived bottom-die package escape: `Tn-BUMP` TSV appears when the bottom die back side faces package bumps.
   - Split HB and TSV pitch fields; split TSV parameters into upper-side and lower-side TSV fields so `Back-to-Back` can model both sides independently.
   - Added a compact live cross-section preview for the selected scenario implementation.
+- Added scenario-scoped physical partition workflow:
+  - Added a global header `Scenario` selector.
+  - Components, component tree, tiers, physical partitions, metrics, quality issues, responsibility teams, import templates, workbook uploads, and dashboard data now accept/use the selected `scenario_id`.
+  - Component detail saves no longer hard-code `S2`; new and updated physical partitions are written for the selected scenario.
+  - Backend dashboard now accepts `?scenario_id=...`.
+  - Backend import validation now rejects a `physical_partition` whose `tier_id` belongs to a different scenario.
+- Improved implementation and partition editing ergonomics:
+  - Added compact field labels, segmented controls, unit-number inputs, and layer count stepper controls.
+  - Added Face/Back-linked cross-section surface markers so tier surface lines reflect chained interface orientation.
+  - Added current-scenario empty states on the `3D Tier` page.
 - Added frontend display themes:
   - Light/dark theme toggle in the header.
   - Theme preference is stored in browser `localStorage`.
@@ -206,6 +216,19 @@ quality_issues: 0
 ```sh
 cd frontend
 npm run build
+```
+
+- Frontend production build passed after adding global scenario scope and scenario-bound physical partition editing:
+
+```sh
+cd frontend
+npm run build
+```
+
+- Backend Python syntax check passed after adding dashboard `scenario_id` and cross-scenario tier/partition import validation:
+
+```sh
+.venv/bin/python -m py_compile backend/main.py
 ```
 
 ## Startup Commands

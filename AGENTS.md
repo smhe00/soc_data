@@ -190,15 +190,17 @@ Read/API endpoints:
 - `GET /api/responsibilities/teams`
 - `PUT /api/components/{component_id}/detail`
 
+Most scenario-owned API views accept `?scenario_id=...`. Use this for component data, component tree, physical partitions, tiers, metrics, dashboard, quality issues, responsibility teams, import templates, and import uploads. Do not assume `S2` unless the caller explicitly wants the demo 3DIC scenario.
+
 Team-scoped API views:
 
 - `GET /api/components?team=AI%20Team`
-- `GET /api/components/tree?team=AI%20Team`
-- `GET /api/physical-partitions?team=AI%20Team`
-- `GET /api/metrics?team=AI%20Team`
-- `GET /api/quality/issues?team=AI%20Team`
-- `GET /api/import/template?team=AI%20Team`
-- `POST /api/import/excel?team=AI%20Team`
+- `GET /api/components/tree?team=AI%20Team&scenario_id=S2`
+- `GET /api/physical-partitions?team=AI%20Team&scenario_id=S2`
+- `GET /api/metrics?team=AI%20Team&scenario_id=S2`
+- `GET /api/quality/issues?team=AI%20Team&scenario_id=S2`
+- `GET /api/import/template?team=AI%20Team&scenario_id=S2`
+- `POST /api/import/excel?team=AI%20Team&scenario_id=S2`
 
 Import endpoints:
 
@@ -207,7 +209,9 @@ Import endpoints:
 
 Team import workbooks are scoped input workbooks, not permission enforcement. Shared sheets are reference context; scoped uploads only merge `logical_components`, `physical_partitions`, and `metrics` after backend scope validation.
 
-Web maintenance currently starts with component detail physical mapping. Keep this object-oriented: users edit logical instance count, physical count, and partial content share, while the API writes `logical_component` and `physical_partition` rows behind the scenes. Do not expose the raw metric long table as the primary daily-edit UI.
+Web maintenance currently starts with component detail physical mapping. Keep this object-oriented: users edit logical instance count, physical count, and partial content share, while the API writes `logical_component` and scenario-scoped `physical_partition` rows behind the scenes. Do not expose the raw metric long table as the primary daily-edit UI.
+
+Physical partition edits must use the selected scenario as the working context. A partition's `tier_id` must belong to the same scenario as the partition's `scenario_id`; backend save and import validation enforce this. Do not create UI flows that mix tiers from one scenario with partitions from another.
 
 The frontend also includes a scenario-level `实现方案` prototype. Treat it as implementation-form definition for `scenario`, not as logical hierarchy or physical partition maintenance. One project can have multiple scenarios, and each scenario can represent a monolithic, 2.5D, or W2W 3DIC implementation form.
 
@@ -219,6 +223,7 @@ Implementation-definition rules to preserve:
 - HB pitch and TSV pitch are decoupled
 - TSV parameters are side-specific; `Back-to-Back` can require independent upper-side and lower-side TSV pitch/keep-out
 - bottom-die package escape is derived from the last die-to-die orientation; if the bottom die back side faces bumps, represent it as a derived `Tn-BUMP` TSV interface
+- cross-section Face/Back surface markers are derived from interface orientation and should remain synchronized with orientation edits
 - do not add these detailed implementation-interface fields to the SQLite schema until the UI terminology and data model are intentionally promoted beyond the prototype
 
 ## Development Principles

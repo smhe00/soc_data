@@ -204,6 +204,48 @@ interface CardProps {
   right?: React.ReactNode;
 }
 
+interface FieldLabelProps {
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}
+
+interface TextInputProps {
+  ariaLabel: string;
+  value: string;
+  onChange: (value: string) => void;
+  id?: string;
+}
+
+interface UnitNumberInputProps {
+  ariaLabel: string;
+  value: number;
+  onChange: (value: number) => void;
+  unit: string;
+  disabled?: boolean;
+  id?: string;
+  min?: number;
+  max?: number;
+  step?: number | string;
+  tone?: "slate" | "amber";
+}
+
+interface SegmentedControlProps<T extends string> {
+  ariaLabel: string;
+  value: T;
+  options: { value: T; label: string; title?: string }[];
+  onChange: (value: T) => void;
+}
+
+interface StepperInputProps {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}
+
 interface MetricCardProps {
   label: string;
   value: string | number;
@@ -228,6 +270,7 @@ interface TreeNodeProps {
 interface PartitionMappingEditorProps {
   component: BlockNode;
   tiers: TierInfo[];
+  selectedScenarioId: string;
   selectedTeam: string;
   onSave: (component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]) => Promise<void>;
 }
@@ -245,6 +288,7 @@ interface DataPageProps {
   importing: boolean;
   importResult: ImportResult | null;
   importError: string | null;
+  selectedScenarioId: string;
   selectedTeam: string;
   onSaveComponentDetail: (component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]) => Promise<void>;
   onImportWorkbook: (file: File) => Promise<void>;
@@ -378,6 +422,14 @@ const defaultPackageEscape: PackageEscapeDefinition = {
 };
 
 const orientationOptions: StackInterfaceDefinition["orientation"][] = ["Face-to-Face", "Face-to-Back", "Back-to-Face", "Back-to-Back"];
+const interconnectOptions: StackInterfaceDefinition["interconnect"][] = ["HB", "TSV", "HB + TSV"];
+const stackTypeOptions: StackImplementationType[] = ["Monolithic", "Wafer-to-Wafer", "2.5D Interposer"];
+const orientationShortLabels: Record<StackInterfaceDefinition["orientation"], string> = {
+  "Face-to-Face": "F-F",
+  "Face-to-Back": "F-B",
+  "Back-to-Face": "B-F",
+  "Back-to-Back": "B-B",
+};
 
 function getUpperInterfaceSide(orientation: StackInterfaceDefinition["orientation"]): DieSide {
   return orientation.startsWith("Face") ? "Face" : "Back";
@@ -453,6 +505,15 @@ function requiresPackageTsv(tiers: StackTierDefinition[], interfaces: StackInter
   return getDerivedBottomBumpSide(tiers, interfaces) === "Back";
 }
 
+function getTierSurfaceSides(tiers: StackTierDefinition[], interfaces: StackInterfaceDefinition[], index: number): { top: DieSide; bottom: DieSide } {
+  const tier = tiers[index];
+  const interfaceAbove = interfaces.find((item) => item.fromTierId === tiers[index - 1]?.id && item.toTierId === tier.id);
+  const interfaceBelow = interfaces.find((item) => item.fromTierId === tier.id && item.toTierId === tiers[index + 1]?.id);
+  const top = interfaceAbove ? getLowerInterfaceSide(interfaceAbove.orientation) : interfaceBelow ? getOppositeSide(getUpperInterfaceSide(interfaceBelow.orientation)) : getOppositeSide(getDerivedBottomBumpSide(tiers, interfaces));
+  const bottom = interfaceBelow ? getUpperInterfaceSide(interfaceBelow.orientation) : getOppositeSide(top);
+  return { top, bottom };
+}
+
 function Badge({ children, tone = "slate" }: BadgeProps): JSX.Element {
   const styles: Record<BadgeTone, string> = {
     slate: "bg-slate-100 text-slate-700 border-slate-200",
@@ -494,6 +555,115 @@ function Card({ title, subtitle, icon: Icon, children, right }: CardProps): JSX.
       </div>
       {children}
     </motion.div>
+  );
+}
+
+function FieldLabel({ label, htmlFor, children }: FieldLabelProps): JSX.Element {
+  return (
+    <label className="grid gap-1" htmlFor={htmlFor}>
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function TextInput({ ariaLabel, id, value, onChange }: TextInputProps): JSX.Element {
+  return (
+    <input
+      aria-label={ariaLabel}
+      className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200"
+      id={id}
+      onChange={(event) => onChange(event.target.value)}
+      value={value}
+    />
+  );
+}
+
+function UnitNumberInput({
+  ariaLabel,
+  disabled = false,
+  id,
+  max,
+  min,
+  onChange,
+  step = "0.1",
+  tone = "slate",
+  unit,
+  value,
+}: UnitNumberInputProps): JSX.Element {
+  const toneClass = tone === "amber" ? "border-amber-200 bg-amber-50/70 focus-within:border-amber-300" : "border-slate-200 bg-slate-50 focus-within:border-slate-400";
+
+  return (
+    <div
+      className={`flex h-8 items-center overflow-hidden rounded-md border transition focus-within:bg-white focus-within:ring-2 ${
+        tone === "amber" ? "focus-within:ring-amber-100" : "focus-within:ring-slate-200"
+      } ${disabled ? "bg-slate-100 text-slate-400" : toneClass}`}
+    >
+      <input
+        aria-label={ariaLabel}
+        className="numeric-input h-full min-w-0 flex-1 border-0 bg-transparent px-1.5 text-right text-sm font-medium outline-none disabled:text-slate-400"
+        disabled={disabled}
+        id={id}
+        max={max}
+        min={min}
+        onChange={(event) => onChange(Number(event.target.value))}
+        step={step}
+        type="number"
+        value={value}
+      />
+      <span className="border-l border-inherit px-1.5 text-[10px] font-semibold uppercase text-slate-400">{unit}</span>
+    </div>
+  );
+}
+
+function SegmentedControl<T extends string>({ ariaLabel, onChange, options, value }: SegmentedControlProps<T>): JSX.Element {
+  return (
+    <div aria-label={ariaLabel} className="inline-grid h-8 w-full grid-flow-col overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-0.5" role="radiogroup">
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            aria-checked={selected}
+            className={`min-w-0 rounded px-2 text-xs font-semibold transition ${
+              selected ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"
+            }`}
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            role="radio"
+            title={option.title ?? option.label}
+            type="button"
+          >
+            <span className="truncate">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StepperInput({ id, label, max, min, onChange, value }: StepperInputProps): JSX.Element {
+  const clamp = (nextValue: number): number => Math.max(min, Math.min(max, nextValue));
+
+  return (
+    <FieldLabel htmlFor={id} label={label}>
+      <div className="grid h-9 grid-cols-[32px_1fr_32px] overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+        <button className="text-slate-500 transition hover:bg-white hover:text-slate-900" onClick={() => onChange(clamp(value - 1))} type="button">
+          -
+        </button>
+        <input
+          className="min-w-0 border-x border-slate-200 bg-transparent px-2 text-center text-sm font-semibold text-slate-800 outline-none"
+          id={id}
+          max={max}
+          min={min}
+          onChange={(event) => onChange(clamp(Number(event.target.value)))}
+          type="number"
+          value={value}
+        />
+        <button className="text-slate-500 transition hover:bg-white hover:text-slate-900" onClick={() => onChange(clamp(value + 1))} type="button">
+          +
+        </button>
+      </div>
+    </FieldLabel>
   );
 }
 
@@ -647,7 +817,7 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
   );
 }
 
-function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
+function PartitionMappingEditor({ component, tiers, selectedScenarioId, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
   const [logicalCount, setLogicalCount] = useState<number>(component.logical_instance_count);
   const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
   const [saving, setSaving] = useState<boolean>(false);
@@ -687,7 +857,7 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
       ...rows,
       {
         id: `PP_${component.id.replace(/^B_?/, "")}_${tierId}_${suffix}`,
-        scenario_id: "S2",
+        scenario_id: selectedScenarioId,
         logical_component_id: component.id,
         logical_component_name: component.name,
         tier_id: tierId,
@@ -916,11 +1086,12 @@ function HierarchyView({
   blocks,
   tree,
   tiers,
+  selectedScenarioId,
   selectedTeam,
   loading,
   error,
   onSaveComponentDetail,
-}: Pick<DataPageProps, "blocks" | "tree" | "tiers" | "selectedTeam" | "loading" | "error" | "onSaveComponentDetail">): JSX.Element {
+}: Pick<DataPageProps, "blocks" | "tree" | "tiers" | "selectedScenarioId" | "selectedTeam" | "loading" | "error" | "onSaveComponentDetail">): JSX.Element {
   const [selectedId, setSelectedId] = useState<string>("B_NPU");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -1092,7 +1263,7 @@ function HierarchyView({
           </div>
         </Card>
 
-        <PartitionMappingEditor component={selected} tiers={tiers} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
+        <PartitionMappingEditor component={selected} tiers={tiers} selectedScenarioId={selectedScenarioId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
 
         <Card title="建模原则" subtitle="第一阶段需要先统一数据口径" icon={Settings2}>
           <div className="grid gap-4 md:grid-cols-3">
@@ -1115,13 +1286,13 @@ function HierarchyView({
   );
 }
 
-function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageProps, "tiers" | "physicalPartitions" | "loading" | "error">): JSX.Element {
+function TiersView({ tiers, physicalPartitions, selectedScenarioId, loading, error }: Pick<DataPageProps, "tiers" | "physicalPartitions" | "selectedScenarioId" | "loading" | "error">): JSX.Element {
   if (loading) return <Card title="Loading 3D Stack" subtitle="Fetching tier data..." icon={Layers3}><div className="text-sm text-slate-500">Loading...</div></Card>;
   if (error) return <Card title="API Error" subtitle="FastAPI backend is not reachable yet." icon={AlertTriangle}><div className="text-sm text-red-600">{error}</div></Card>;
 
   return (
     <div className="space-y-6">
-      <Card title="3D Stack Definition" subtitle="Scenario S2: N5 + N7 + N7, Wafer-to-Wafer, Face-to-Face + TSV" icon={Layers3}>
+      <Card title="3D Stack Definition" subtitle={`Scenario ${selectedScenarioId}: tier definitions bound to this implementation scenario`} icon={Layers3}>
         <div className="grid gap-4 xl:grid-cols-3">
           {tiers.map((tier, index) => (
             <div key={tier.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -1148,6 +1319,7 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
               </div>
             </div>
           ))}
+          {tiers.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No tier definitions for scenario {selectedScenarioId}.</div>}
         </div>
       </Card>
 
@@ -1179,6 +1351,13 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
                   </td>
                 </tr>
               ))}
+              {physicalPartitions.length === 0 && (
+                <tr>
+                  <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
+                    No physical partitions for scenario {selectedScenarioId}.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1216,6 +1395,7 @@ function StackCrossSection({
       <div className="space-y-1.5">
         {tiers.map((tier, index) => {
           const interfaceBelow = interfaces.find((item) => item.fromTierId === tier.id && item.toTierId === tiers[index + 1]?.id);
+          const surfaceSides = getTierSurfaceSides(tiers, interfaces, index);
           const tierHeight = Math.max(40, Math.min(68, tier.thicknessUm * 0.8));
 
           return (
@@ -1229,8 +1409,14 @@ function StackCrossSection({
                   <span>{tier.process}</span>
                   <span>{tier.thicknessUm} um</span>
                 </div>
-                <div className="absolute inset-x-0 top-1.5 h-px bg-white/70" />
-                <div className="absolute inset-x-0 bottom-1.5 h-px bg-slate-900/10" />
+                <div className="pointer-events-none absolute inset-x-2 top-1.5 flex items-center gap-1">
+                  <span className="rounded bg-white/40 px-1 text-[9px] font-bold leading-3 text-slate-900/70">{surfaceSides.top === "Face" ? "F" : "B"}</span>
+                  <span className={`h-px flex-1 ${surfaceSides.top === "Face" ? "bg-white/80" : "border-t border-dashed border-slate-900/30"}`} />
+                </div>
+                <div className="pointer-events-none absolute inset-x-2 bottom-1.5 flex items-center gap-1">
+                  <span className={`h-px flex-1 ${surfaceSides.bottom === "Face" ? "bg-white/80" : "border-t border-dashed border-slate-900/30"}`} />
+                  <span className="rounded bg-white/40 px-1 text-[9px] font-bold leading-3 text-slate-900/70">{surfaceSides.bottom === "Face" ? "F" : "B"}</span>
+                </div>
               </div>
 
               {interfaceBelow && (
@@ -1391,11 +1577,10 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
     <div className="space-y-4">
       <Card title="Scenario Implementation" subtitle="Implementation form for one project scenario" icon={Package}>
         <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_170px_110px_1fr]">
-          <label className="grid gap-1" htmlFor="implementation-scenario">
-            <span className="text-xs font-medium text-slate-500">Scenario</span>
+          <FieldLabel htmlFor="implementation-scenario" label="Scenario">
             <select
               id="implementation-scenario"
-              className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none"
+              className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200"
               onChange={(event) => applyScenarioDefaults(event.target.value)}
               value={selectedScenario?.id ?? selectedScenarioId}
             >
@@ -1405,24 +1590,20 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
                 </option>
               ))}
             </select>
-          </label>
-          <label className="grid gap-1" htmlFor="stack-type">
-            <span className="text-xs font-medium text-slate-500">Stack Type</span>
+          </FieldLabel>
+          <FieldLabel htmlFor="stack-type" label="Stack Type">
             <select
               id="stack-type"
-              className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none"
+              className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200"
               onChange={(event) => updateStackType(event.target.value as StackImplementationType)}
               value={stackType}
             >
-              <option>Monolithic</option>
-              <option>Wafer-to-Wafer</option>
-              <option>2.5D Interposer</option>
+              {stackTypeOptions.map((type) => (
+                <option key={type}>{type}</option>
+              ))}
             </select>
-          </label>
-          <label className="grid gap-1" htmlFor="tier-count">
-            <span className="text-xs font-medium text-slate-500">Layer Count</span>
-            <input id="tier-count" className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none" max={5} min={1} onChange={(event) => setTierCount(Number(event.target.value))} type="number" value={tiers.length} />
-          </label>
+          </FieldLabel>
+          <StepperInput id="tier-count" label="Layer Count" max={5} min={1} onChange={setTierCount} value={tiers.length} />
           <div className="grid content-end">
             <div className="flex flex-wrap gap-2">
               <Badge tone="blue">{tiers.length} layer{tiers.length > 1 ? "s" : ""}</Badge>
@@ -1456,16 +1637,16 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
                       <div className="text-[11px] text-slate-500">L{index + 1}</div>
                     </td>
                     <td className="px-3 py-2">
-                      <input aria-label={`${tier.id} name`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "name", event.target.value)} value={tier.name} />
+                      <TextInput ariaLabel={`${tier.id} name`} onChange={(value) => updateTier(tier.id, "name", value)} value={tier.name} />
                     </td>
                     <td className="px-3 py-2">
-                      <input aria-label={`${tier.id} process`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "process", event.target.value)} value={tier.process} />
+                      <TextInput ariaLabel={`${tier.id} process`} onChange={(value) => updateTier(tier.id, "process", value)} value={tier.process} />
                     </td>
                     <td className="px-3 py-2">
-                      <input aria-label={`${tier.id} role`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "role", event.target.value)} value={tier.role} />
+                      <TextInput ariaLabel={`${tier.id} role`} onChange={(value) => updateTier(tier.id, "role", value)} value={tier.role} />
                     </td>
                     <td className="px-3 py-2">
-                      <input aria-label={`${tier.id} thickness`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateTier(tier.id, "thicknessUm", Number(event.target.value))} type="number" value={tier.thicknessUm} />
+                      <UnitNumberInput ariaLabel={`${tier.id} thickness`} onChange={(value) => updateTier(tier.id, "thicknessUm", value)} step="1" unit="um" value={tier.thicknessUm} />
                     </td>
                   </tr>
                 ))}
@@ -1483,11 +1664,11 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
         <div className={`mb-3 rounded-xl border px-3 py-2 text-sm ${bottomRequiresPackageTsv ? "border-amber-100 bg-amber-50 text-amber-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
           Bottom bump side is derived from the last die-to-die orientation. {bottomRequiresPackageTsv ? `${bottomTierId}-to-BUMP TSV is required because the bottom die back side faces bumps.` : `Bottom die face side faces bumps, so direct bump escape is allowed.`}
         </div>
-        <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
           {interfaces.length === 0 ? (
             <div className="bg-white px-4 py-5 text-sm text-slate-500">Single-layer implementation: no inter-layer interface is required for this scenario.</div>
           ) : (
-            <table className="w-full table-fixed text-left text-sm">
+            <table className="w-[1120px] table-fixed text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="w-24 px-3 py-2">Interface</th>
@@ -1508,115 +1689,115 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
                       {item.fromTierId}-{item.toTierId}
                     </td>
                     <td className="px-3 py-2">
-                      <select aria-label={`${item.fromTierId} to ${item.toTierId} direction`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateInterface(item.id, "orientation", event.target.value as StackInterfaceDefinition["orientation"])} value={item.orientation}>
-                        {getAllowedOrientationOptions(index, interfaces).map((orientation) => (
-                          <option key={orientation}>{orientation}</option>
-                        ))}
-                      </select>
+                      <SegmentedControl
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} direction`}
+                        onChange={(value) => updateInterface(item.id, "orientation", value)}
+                        options={getAllowedOrientationOptions(index, interfaces).map((orientation) => ({
+                          label: orientationShortLabels[orientation],
+                          title: orientation,
+                          value: orientation,
+                        }))}
+                        value={item.orientation}
+                      />
                       {index > 0 && <div className="mt-1 text-[10px] text-slate-400">upper side: {getUpperInterfaceSide(item.orientation)}</div>}
                     </td>
                     <td className="px-3 py-2">
-                      <select aria-label={`${item.fromTierId} to ${item.toTierId} interconnect`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateInterface(item.id, "interconnect", event.target.value as StackInterfaceDefinition["interconnect"])} value={item.interconnect}>
-                        <option>HB</option>
-                        <option>TSV</option>
-                        <option>HB + TSV</option>
-                      </select>
+                      <SegmentedControl
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} interconnect`}
+                        onChange={(value) => updateInterface(item.id, "interconnect", value)}
+                        options={interconnectOptions.map((interconnect) => ({ label: interconnect.replace(" + ", "+"), value: interconnect }))}
+                        value={item.interconnect}
+                      />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${item.fromTierId} to ${item.toTierId} HB pitch`}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                      <UnitNumberInput
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} HB pitch`}
                         disabled={!item.interconnect.includes("HB")}
-                        onChange={(event) => updateInterface(item.id, "hbPitchUm", Number(event.target.value))}
+                        onChange={(value) => updateInterface(item.id, "hbPitchUm", value)}
                         step="0.1"
-                        type="number"
+                        unit="um"
                         value={item.hbPitchUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${item.fromTierId} to ${item.toTierId} upper TSV pitch`}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                      <UnitNumberInput
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} upper TSV pitch`}
                         disabled={!usesUpperTsv(item)}
-                        onChange={(event) => updateInterface(item.id, "upperTsvPitchUm", Number(event.target.value))}
+                        onChange={(value) => updateInterface(item.id, "upperTsvPitchUm", value)}
                         step="0.1"
-                        type="number"
+                        unit="um"
                         value={item.upperTsvPitchUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${item.fromTierId} to ${item.toTierId} upper TSV keep-out`}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                      <UnitNumberInput
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} upper TSV keep-out`}
                         disabled={!usesUpperTsv(item)}
-                        onChange={(event) => updateInterface(item.id, "upperTsvKeepOutUm", Number(event.target.value))}
+                        onChange={(value) => updateInterface(item.id, "upperTsvKeepOutUm", value)}
                         step="0.5"
-                        type="number"
+                        unit="um"
                         value={item.upperTsvKeepOutUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${item.fromTierId} to ${item.toTierId} lower TSV pitch`}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                      <UnitNumberInput
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} lower TSV pitch`}
                         disabled={!usesLowerTsv(item)}
-                        onChange={(event) => updateInterface(item.id, "lowerTsvPitchUm", Number(event.target.value))}
+                        onChange={(value) => updateInterface(item.id, "lowerTsvPitchUm", value)}
                         step="0.1"
-                        type="number"
+                        unit="um"
                         value={item.lowerTsvPitchUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${item.fromTierId} to ${item.toTierId} lower TSV keep-out`}
-                        className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                      <UnitNumberInput
+                        ariaLabel={`${item.fromTierId} to ${item.toTierId} lower TSV keep-out`}
                         disabled={!usesLowerTsv(item)}
-                        onChange={(event) => updateInterface(item.id, "lowerTsvKeepOutUm", Number(event.target.value))}
+                        onChange={(value) => updateInterface(item.id, "lowerTsvKeepOutUm", value)}
                         step="0.5"
-                        type="number"
+                        unit="um"
                         value={item.lowerTsvKeepOutUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input aria-label={`${item.fromTierId} to ${item.toTierId} note`} className="h-8 w-full rounded-md border border-slate-200 bg-slate-50 px-2 text-sm outline-none" onChange={(event) => updateInterface(item.id, "description", event.target.value)} value={item.description} />
+                      <TextInput ariaLabel={`${item.fromTierId} to ${item.toTierId} note`} onChange={(value) => updateInterface(item.id, "description", value)} value={item.description} />
                     </td>
                   </tr>
                 ))}
                 {bottomRequiresPackageTsv && (
-                  <tr className="bg-amber-50/60">
+                  <tr className="bg-amber-50">
                     <td className="px-3 py-2 font-semibold text-slate-900">{bottomTierId}-BUMP</td>
                     <td className="px-3 py-2 text-sm text-slate-600">Back-to-Bump</td>
-	                    <td className="px-3 py-2">
-	                      <Badge tone="amber">TSV</Badge>
-	                    </td>
-		                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
-		                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
-		                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
-		                    <td className="px-3 py-2">
-	                      <input
-	                        aria-label={`${bottomTierId} to bump TSV pitch`}
-                        className="h-8 w-full rounded-md border border-amber-200 bg-white px-2 text-sm outline-none"
-                        onChange={(event) => updatePackageEscape("pitchUm", Number(event.target.value))}
+                    <td className="px-3 py-2">
+                      <Badge tone="amber">TSV</Badge>
+                    </td>
+                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
+                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
+                    <td className="px-3 py-2 text-sm text-slate-400">-</td>
+                    <td className="px-3 py-2">
+                      <UnitNumberInput
+                        ariaLabel={`${bottomTierId} to bump TSV pitch`}
+                        onChange={(value) => updatePackageEscape("pitchUm", value)}
                         step="0.1"
-                        type="number"
+                        tone="amber"
+                        unit="um"
                         value={packageEscape.pitchUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${bottomTierId} to bump keep-out`}
-                        className="h-8 w-full rounded-md border border-amber-200 bg-white px-2 text-sm outline-none"
-                        onChange={(event) => updatePackageEscape("keepOutUm", Number(event.target.value))}
+                      <UnitNumberInput
+                        ariaLabel={`${bottomTierId} to bump keep-out`}
+                        onChange={(value) => updatePackageEscape("keepOutUm", value)}
                         step="0.5"
-                        type="number"
+                        tone="amber"
+                        unit="um"
                         value={packageEscape.keepOutUm}
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        aria-label={`${bottomTierId} to bump note`}
-                        className="h-8 w-full rounded-md border border-amber-200 bg-white px-2 text-sm outline-none"
-                        onChange={(event) => updatePackageEscape("description", event.target.value)}
+                      <TextInput
+                        ariaLabel={`${bottomTierId} to bump note`}
+                        onChange={(value) => updatePackageEscape("description", value)}
                         value={packageEscape.description}
                       />
                     </td>
@@ -1701,10 +1882,11 @@ function ImportsView({
   importing,
   importResult,
   importError,
+  selectedScenarioId,
   selectedTeam,
   onImportWorkbook,
-}: Pick<DataPageProps, "importing" | "importResult" | "importError" | "selectedTeam" | "onImportWorkbook">): JSX.Element {
-  const scopedTemplateUrl = importTemplateUrl(selectedTeam);
+}: Pick<DataPageProps, "importing" | "importResult" | "importError" | "selectedScenarioId" | "selectedTeam" | "onImportWorkbook">): JSX.Element {
+  const scopedTemplateUrl = importTemplateUrl(selectedTeam, selectedScenarioId);
   return (
     <div className="space-y-6">
       <Card title="Excel Import Workbench" subtitle="Phase-1 imports use a controlled workbook template mapped to the SQLite schema." icon={Upload}>
@@ -1712,11 +1894,11 @@ function ImportsView({
           <Upload className="mx-auto text-slate-400" size={34} />
           <div className="mt-4 text-base font-semibold text-slate-900">Upload SoC Import Workbook</div>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-            Download the workbook for {selectedTeam}, edit logical_components / physical_partitions / metrics, then upload the .xlsx file. The backend validates references and team scope before upserting into SQLite.
+            Download the {selectedScenarioId} workbook for {selectedTeam}, edit logical_components / physical_partitions / metrics, then upload the .xlsx file. The backend validates references and team scope before upserting into SQLite.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <a className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={scopedTemplateUrl}>
-              Download {selectedTeam} Template
+              Download {selectedTeam} / {selectedScenarioId} Template
             </a>
             <label className={`cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 ${importing ? "opacity-60" : ""}`}>
               {importing ? "Importing..." : "Select .xlsx"}
@@ -1900,6 +2082,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [physicalPartitions, setPhysicalPartitions] = useState<PhysicalPartition[]>([]);
   const [qualityIssues, setQualityIssues] = useState<QualityIssue[]>([]);
   const [teams, setTeams] = useState<string[]>(["Architecture Team"]);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>("S2");
   const [selectedTeam, setSelectedTeam] = useState<string>("Architecture Team");
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -1907,21 +2090,28 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const activeTab = tabs.find((tab) => tab.id === active) ?? tabs[0];
+  const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId);
 
   useEffect(() => {
     window.localStorage.setItem("soc-theme", theme);
   }, [theme]);
 
-  async function refreshApiData(team = selectedTeam): Promise<void> {
+  useEffect(() => {
+    if (scenarios.length > 0 && !scenarios.some((scenario) => scenario.id === selectedScenarioId)) {
+      setSelectedScenarioId(scenarios[0].id);
+    }
+  }, [scenarios, selectedScenarioId]);
+
+  async function refreshApiData(team = selectedTeam, scenarioId = selectedScenarioId): Promise<void> {
     const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData, teamData] = await Promise.all([
-      getDashboard(),
-      getComponents(team),
-      getComponentTree(team),
+      getDashboard(scenarioId),
+      getComponents(team, scenarioId),
+      getComponentTree(team, scenarioId),
       getScenarios(),
-      getTiers(),
-      getPhysicalPartitions(team),
-      getQualityIssues(team),
-      getResponsibilityTeams(),
+      getTiers(scenarioId),
+      getPhysicalPartitions(team, scenarioId),
+      getQualityIssues(team, scenarioId),
+      getResponsibilityTeams(scenarioId),
     ]);
     setDashboard(dashboardData);
     setBlocks(componentData);
@@ -1937,9 +2127,9 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     try {
       setImporting(true);
       setImportError(null);
-      const result = await uploadImportWorkbook(file, selectedTeam);
+      const result = await uploadImportWorkbook(file, selectedTeam, selectedScenarioId);
       setImportResult(result);
-      await refreshApiData(selectedTeam);
+      await refreshApiData(selectedTeam, selectedScenarioId);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Unknown import error");
     } finally {
@@ -1949,7 +2139,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
 
   async function handleSaveComponentDetail(component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]): Promise<void> {
     await updateComponentDetail(component.id, {
-      scenario_id: "S2",
+      scenario_id: selectedScenarioId,
       team: selectedTeam,
       logical_instance_count: logicalInstanceCount,
       partitions: partitions.map((partition) => ({
@@ -1962,7 +2152,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         description: partition.description,
       })),
     });
-    await refreshApiData(selectedTeam);
+    await refreshApiData(selectedTeam, selectedScenarioId);
   }
 
   useEffect(() => {
@@ -1972,14 +2162,14 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       try {
         setLoading(true);
         const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData, teamData] = await Promise.all([
-          getDashboard(),
-          getComponents(selectedTeam),
-          getComponentTree(selectedTeam),
+          getDashboard(selectedScenarioId),
+          getComponents(selectedTeam, selectedScenarioId),
+          getComponentTree(selectedTeam, selectedScenarioId),
           getScenarios(),
-          getTiers(),
-          getPhysicalPartitions(selectedTeam),
-          getQualityIssues(selectedTeam),
-          getResponsibilityTeams(),
+          getTiers(selectedScenarioId),
+          getPhysicalPartitions(selectedTeam, selectedScenarioId),
+          getQualityIssues(selectedTeam, selectedScenarioId),
+          getResponsibilityTeams(selectedScenarioId),
         ]);
         if (cancelled) return;
         setDashboard(dashboardData);
@@ -2002,7 +2192,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [selectedTeam]);
+  }, [selectedTeam, selectedScenarioId]);
 
   return (
     <div className={`min-h-screen bg-slate-100 text-slate-900 theme-${theme}`}>
@@ -2077,6 +2267,23 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                     </option>
                   ))}
                 </select>
+                <select
+                  aria-label="Scenario scope"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none transition hover:bg-white focus:border-slate-400"
+                  onChange={(event) => {
+                    setSelectedScenarioId(event.target.value);
+                    setImportResult(null);
+                    setImportError(null);
+                  }}
+                  title={selectedScenario?.name ?? selectedScenarioId}
+                  value={selectedScenarioId}
+                >
+                  {scenarios.map((scenario) => (
+                    <option key={scenario.id} value={scenario.id}>
+                      {scenario.id} - {scenario.name}
+                    </option>
+                  ))}
+                </select>
                 <Badge tone="green">Data-first</Badge>
                 <Badge tone="blue">3DIC Ready</Badge>
                 <Badge tone="amber">AI Hooks Reserved</Badge>
@@ -2107,13 +2314,14 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               blocks={blocks}
               tree={tree}
               tiers={tiers}
+              selectedScenarioId={selectedScenarioId}
               selectedTeam={selectedTeam}
               loading={loading}
               error={error}
               onSaveComponentDetail={handleSaveComponentDetail}
             />
           )}
-          {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} loading={loading} error={error} />}
+          {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} selectedScenarioId={selectedScenarioId} loading={loading} error={error} />}
           {active === "implementation" && <ImplementationView scenarios={scenarios} />}
           {active === "compare" && <CompareView scenarios={scenarios} loading={loading} error={error} />}
           {active === "imports" && (
@@ -2121,6 +2329,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               importing={importing}
               importResult={importResult}
               importError={importError}
+              selectedScenarioId={selectedScenarioId}
               selectedTeam={selectedTeam}
               onImportWorkbook={handleImportWorkbook}
             />

@@ -6,6 +6,16 @@ body {
   margin: 0;
 }
 
+.numeric-input {
+  appearance: textfield;
+}
+
+.numeric-input::-webkit-outer-spin-button,
+.numeric-input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
 .theme-dark {
   background: #020617;
   color: #e5e7eb;

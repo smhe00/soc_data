@@ -6,17 +6,23 @@ export interface ImportResult {
   errors: string[];
 }
 
-export function importTemplateUrl(team?: string): string {
-  const query = team ? `?team=${encodeURIComponent(team)}` : "";
-  return `${API_BASE_URL}/api/import/template${query}`;
+function scopedQuery(team?: string, scenarioId?: string): string {
+  const params = new URLSearchParams();
+  if (team) params.set("team", team);
+  if (scenarioId) params.set("scenario_id", scenarioId);
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
-export async function uploadImportWorkbook(file: File, team?: string): Promise<ImportResult> {
+export function importTemplateUrl(team?: string, scenarioId?: string): string {
+  return `${API_BASE_URL}/api/import/template${scopedQuery(team, scenarioId)}`;
+}
+
+export async function uploadImportWorkbook(file: File, team?: string, scenarioId?: string): Promise<ImportResult> {
   const formData = new FormData();
   formData.append("file", file);
-  const query = team ? `?team=${encodeURIComponent(team)}` : "";
 
-  const response = await fetch(`${API_BASE_URL}/api/import/excel${query}`, {
+  const response = await fetch(`${API_BASE_URL}/api/import/excel${scopedQuery(team, scenarioId)}`, {
     method: "POST",
     body: formData,
   });
