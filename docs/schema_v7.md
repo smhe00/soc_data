@@ -63,6 +63,8 @@ Key fields:
 - `process_combo`
 - `status`
 
+Scenario is also the natural owner for implementation-form definition. In phase 1, the frontend `实现方案` page treats each scenario as one implementation option under a project, such as monolithic, 2.5D, or wafer-to-wafer 3DIC. The current SQLite schema stores scenario summary fields and tier rows; detailed implementation-interface fields are still a frontend prototype and should be promoted to schema only after the terminology stabilizes.
+
 ### module_definition
 
 Reusable IP/module master definition.
@@ -117,6 +119,16 @@ Key fields:
 - `orientation`
 - `thickness_um`
 - `area_limit_mm2`
+
+For implementation-definition workflows, tiers are ordered top to bottom within a scenario. A single-layer monolithic scenario can have one tier/die, while a stacked W2W scenario can have multiple ordered tiers.
+
+Phase-1 frontend interface semantics:
+
+- die-to-die orientation uses `Face-to-Face`, `Face-to-Back`, `Back-to-Face`, or `Back-to-Back`
+- orientation choices are chained; if one interface uses a die's face/back side, the next interface for the same die must use the opposite side
+- HB pitch and TSV pitch are independent quantities
+- TSV parameters are side-specific: upper-side TSV and lower-side TSV are separate; `Back-to-Back` can require both
+- bottom-die package escape is derived from the final die-to-die orientation; if the bottom die back side faces bumps, a derived `Tn-BUMP` TSV escape must be parameterized separately
 
 ### physical_partition
 

@@ -209,6 +209,18 @@ Team import workbooks are scoped input workbooks, not permission enforcement. Sh
 
 Web maintenance currently starts with component detail physical mapping. Keep this object-oriented: users edit logical instance count, physical count, and partial content share, while the API writes `logical_component` and `physical_partition` rows behind the scenes. Do not expose the raw metric long table as the primary daily-edit UI.
 
+The frontend also includes a scenario-level `实现方案` prototype. Treat it as implementation-form definition for `scenario`, not as logical hierarchy or physical partition maintenance. One project can have multiple scenarios, and each scenario can represent a monolithic, 2.5D, or W2W 3DIC implementation form.
+
+Implementation-definition rules to preserve:
+
+- single-layer monolithic scenarios are valid and do not have inter-layer interfaces
+- die/layer order is top to bottom
+- Face/Back choices are chained; a die side used by the upper interface cannot be reused by the lower interface
+- HB pitch and TSV pitch are decoupled
+- TSV parameters are side-specific; `Back-to-Back` can require independent upper-side and lower-side TSV pitch/keep-out
+- bottom-die package escape is derived from the last die-to-die orientation; if the bottom die back side faces bumps, represent it as a derived `Tn-BUMP` TSV interface
+- do not add these detailed implementation-interface fields to the SQLite schema until the UI terminology and data model are intentionally promoted beyond the prototype
+
 ## Development Principles
 
 1. Keep phase 1 local and easy to run.

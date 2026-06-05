@@ -114,6 +114,19 @@ cd $env:PROJECT_ROOT
   - Parent total area metrics include direct child module area.
   - Residual/self area is computed as parent total area minus direct child area, not stored as component rows.
   - Physical partition `partition_type` is limited to `full` or `partial`.
+- Added frontend scenario implementation definition prototype:
+  - Added an `实现方案` navigation page for scenario-level implementation forms.
+  - Supports monolithic single-layer, wafer-to-wafer 3DIC, and 2.5D interposer-style scenario options.
+  - Keeps implementation definition tied to `scenario`, so one project can compare multiple implementation forms.
+  - Added editable layer/die definitions with top-to-bottom order, process, role, and thickness.
+  - Added inter-layer orientation controls with chained Face/Back constraints.
+  - Added derived bottom-die package escape: `Tn-BUMP` TSV appears when the bottom die back side faces package bumps.
+  - Split HB and TSV pitch fields; split TSV parameters into upper-side and lower-side TSV fields so `Back-to-Back` can model both sides independently.
+  - Added a compact live cross-section preview for the selected scenario implementation.
+- Added frontend display themes:
+  - Light/dark theme toggle in the header.
+  - Theme preference is stored in browser `localStorage`.
+  - Dark theme covers page background, sidebar, cards, tables, forms, badges, and implementation cross-section preview.
 
 ## Verified
 
@@ -187,6 +200,12 @@ AI Team imported metrics: 45
 ```text
 PUT /api/components/B_NPU_TENSOR/detail -> B_NPU_TENSOR
 quality_issues: 0
+```
+- Frontend production build passed after adding the scenario implementation page, constrained Face/Back interface rules, split HB/TSV parameters, and light/dark theme:
+
+```sh
+cd frontend
+npm run build
 ```
 
 ## Startup Commands

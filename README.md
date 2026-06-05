@@ -226,6 +226,27 @@ For the selected logical component, users can edit:
 
 The page computes instance share from physical count and logical instance count. It shows equivalent instance closure before saving. Save calls `PUT /api/components/{component_id}/detail`, then refreshes component data and quality issues.
 
+## Scenario Implementation View
+
+The frontend includes an `实现方案` page for scenario-level implementation definition. This page is currently a UI prototype for the `scenario` concept: one project can have multiple implementation forms, such as monolithic, 2.5D interposer, or wafer-to-wafer 3DIC.
+
+Current supported implementation forms:
+
+- `Monolithic`: single-layer/single-die implementation with no inter-layer interface
+- `Wafer-to-Wafer`: stacked implementation with ordered top-to-bottom layers
+- `2.5D Interposer`: cost-optimized multi-die/interposer-style placeholder
+
+The page models die/layer order and inter-layer interfaces:
+
+- layer/die name, process, role, and thickness
+- die-to-die orientation options such as `Face-to-Face`, `Face-to-Back`, `Back-to-Face`, and `Back-to-Back`
+- chained Face/Back constraints so a die side already used by the upper interface cannot be reused by the lower interface
+- independent HB pitch and TSV pitch/keep-out fields
+- independent upper-side TSV and lower-side TSV fields for `Back-to-Back`
+- derived bottom die to bump escape: if the bottom die back side faces package bumps, the page adds a derived `Tn-BUMP` TSV row
+
+The view also includes light and dark display themes. The theme toggle is stored in browser `localStorage`.
+
 ## Useful API Endpoints
 
 ```text
