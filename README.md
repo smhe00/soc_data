@@ -1,8 +1,18 @@
 # SoC Cross-Die Database
 
-Phase-1 SQLite MVP for the SoC cross-die architecture database and 3DIC evaluation prototype.
+Phase-1 SQLite MVP for a SoC cross-die architecture database and 3DIC evaluation prototype.
 
-## Backend with uv
+The current demo is a realistic flagship mobile SoC dataset named `Orion X1 Mobile SoC`.
+
+## Repository
+
+Gitee:
+
+```text
+https://gitee.com/smhe/soc_database.git
+```
+
+## Backend
 
 ```powershell
 cd C:\Users\smhe00\Documents\soc-cross-die-database
@@ -10,44 +20,15 @@ uv sync
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The backend creates `backend/soc_3dic.db` and inserts demo seed data on startup.
+The backend creates `backend/soc_3dic.db` on startup.
 
-## Excel Import
+Demo seed is enabled by default. It refreshes the built-in `P001 / S1-S3` demo data.
 
-Demo import workbook:
-
-```text
-templates\soc_import_demo.xlsx
-```
-
-The workbook contains these import sheets:
-
-- `projects`
-- `scenarios`
-- `process_nodes`
-- `components`
-- `tiers`
-- `component_metrics`
-- `metric_dictionary`
-
-`component_metrics` stays in database-friendly long-table form, but the template is optimized for manual editing:
-
-- Fill `scenario_id`, `instance_id`, `metric_name`, `metric_value`, `corner`, `confidence`, and `created_at`.
-- `id`, `metric_unit`, `metric_category`, and `workload` are formula-assisted in Excel.
-- The backend also fills formula-assisted fields when Excel formula cache values are missing.
-- Add new metric names to `metric_dictionary` before using them in `component_metrics`.
-
-Download it from the running backend:
-
-```text
-http://localhost:8000/api/import/template
-```
-
-Or import it through the API:
+Disable demo seed when you want to preserve manually imported data:
 
 ```powershell
-cd C:\Users\smhe00\Documents\soc-cross-die-database
-uv run python scripts\verify_import.py
+$env:SEED_DEMO="false"
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ## Frontend
@@ -58,4 +39,106 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173/`.
+Open:
+
+```text
+http://localhost:5173/
+```
+
+## V7 Data Model
+
+Core tables:
+
+- `project`
+- `scenario`
+- `module_definition`
+- `logical_component`
+- `process_node`
+- `tier`
+- `physical_partition`
+- `metric`
+
+The model separates:
+
+- logical hierarchy and logical instance count
+- physical partitioning and physical instance count
+- long-table metrics attached to logical components, physical partitions, tiers, or scenarios
+
+Detailed schema notes:
+
+```text
+docs/schema_v7.md
+```
+
+## Demo Data
+
+Seeded dataset:
+
+- Project: `Orion X1 Mobile SoC`
+- Scenarios:
+  - `S1`: Monolithic N3E Baseline
+  - `S2`: 3DIC Performance Option
+  - `S3`: Cost-Optimized 2.5D Option
+- Logical components: 36
+- Physical partitions: 35
+- Main domains: CPU, GPU, NPU, ISP, media, display, 5G modem, memory, NoC, IO/PHY, security, PMU
+
+## Excel Import
+
+Current V7 workbook:
+
+```text
+templates\soc_mapping_metrics_review_v7.xlsx
+```
+
+Download from the running backend:
+
+```text
+http://localhost:8000/api/import/template
+```
+
+Verify import:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database
+uv run python scripts\verify_import.py
+```
+
+Run the phase-1 API/data smoke check:
+
+```powershell
+uv run python scripts\check_phase1.py
+```
+
+## Quality Checks
+
+Quality issues API:
+
+```text
+GET http://localhost:8000/api/quality/issues
+```
+
+Phase-1 rules check:
+
+- `partition_ratio` closure
+- `physical_instance_count` closure for full partitions
+- required logical metrics
+- numeric metric values
+- metric subject references
+
+## Useful API Endpoints
+
+```text
+GET /api/projects
+GET /api/scenarios
+GET /api/module-definitions
+GET /api/components
+GET /api/components/tree
+GET /api/physical-partitions
+GET /api/tiers
+GET /api/metrics
+GET /api/dashboard
+GET /api/quality/issues
+GET /api/import/template
+POST /api/import/excel
+```

@@ -1,18 +1,17 @@
-# SoC Cross-Die Database / 3DIC Platform Development Context
+# SoC Cross-Die Database / 3DIC Platform Context
 
-## 项目目标
+## Project Goal
 
-本项目是一个 SoC 跨代架构数据库与 3DIC 方案评估平台原型。
+This project is a phase-1 MVP for a SoC architecture database and 3DIC evaluation prototype.
 
-第一阶段目标不是做完整企业级系统，而是先跑通最小工程闭环：
+The first phase is intentionally small: run a real local engineering loop from React TypeScript frontend to FastAPI backend to SQLite database to UI pages backed by API data.
 
-React TypeScript 前端 → FastAPI 后端 → SQLite 数据库 → 页面展示真实数据。
+Do not introduce Docker, PostgreSQL, Alembic, complex permissions, AI features, automatic partition optimization, or thermal surrogate models in phase 1.
 
-当前优先使用 SQLite，而不是 PostgreSQL / Docker，降低本地部署复杂度。
-
-## 技术栈
+## Current Stack
 
 Frontend:
+
 - React
 - TypeScript
 - Vite
@@ -21,192 +20,155 @@ Frontend:
 - framer-motion
 
 Backend:
+
 - Python
 - FastAPI
-- SQLModel 或 SQLAlchemy
+- SQLModel
 - SQLite
+- uv for Python environment management
 
-暂时不要使用:
-- Docker
-- PostgreSQL
-- Alembic
-- 复杂权限系统
-- AI Copilot
-- 自动 partition 优化
-- thermal surrogate model
+## V7 Data Model
 
-## 第一阶段 MVP 范围
+The current model separates reusable definitions, logical hierarchy, physical partitioning, and metrics.
 
-需要实现以下模块：
+Core tables:
 
-1. Project 管理
-2. Scenario 管理
-3. Component / Block 层次结构
-4. Process Node 管理
-5. Tier / 3D Stack 管理
-6. Component Metric 管理
-7. 基础 Dashboard
-8. Block Tree 页面
-9. Tier 页面
-10. Scenario 对比页面
-11. 简单数据质量检查
+- `project`
+- `scenario`
+- `module_definition`
+- `logical_component`
+- `process_node`
+- `tier`
+- `physical_partition`
+- `metric`
 
-## 第一阶段建议数据库表
+### module_definition
 
-先实现这些 SQLite 表：
+Reusable RTL/IP/block master data.
 
-### project
-- id
-- name
-- product_family
-- generation
-- owner
-- phase
-- description
-- created_at
-- updated_at
+Fields:
 
-### scenario
-- id
-- project_id
-- name
-- scenario_type
-- process_combo
-- description
-- status
-- created_at
-- updated_at
+- `id`
+- `name`
+- `module_type`
+- `ip_owner`
+- `reuse_class`
+- `description`
 
-### component_instance
-- id
-- project_id
-- parent_id
-- name
-- instance_type
-- resource_type
-- function_domain
-- hierarchy_path
-- description
-- created_at
-- updated_at
+### logical_component
 
-### process_node
-- id
-- foundry
-- node_name
-- logic_density_mtr_per_mm2
-- sram_density_mb_per_mm2
-- voltage_nominal
-- cost_factor
-- maturity_level
-- description
+Architecture-level hierarchy. Do not expand repeated logical instances into `_0/_1/_2` rows.
 
-### tier
-- id
-- scenario_id
-- tier_index
-- name
-- process_id
-- role
-- orientation
-- thickness_um
-- area_limit_mm2
-- description
+Fields:
 
-### component_metric
-- id
-- scenario_id
-- instance_id
-- metric_name
-- metric_value
-- metric_unit
-- metric_category
-- corner
-- workload
-- confidence
-- created_at
+- `id`
+- `project_id`
+- `parent_id`
+- `module_definition_id`
+- `name`
+- `instance_type`
+- `resource_type`
+- `function_domain`
+- `hierarchy_path`
+- `logical_instance_count`
+- `description`
+- `created_at`
+- `updated_at`
 
-后续再加：
-- component_allocation
-- source_artifact
-- import_job
-- data_quality_issue
+### physical_partition
 
-## 第一阶段 API
+Scenario-specific physical carrying/mapping of a logical component to a tier.
 
-优先实现只读 API：
+Fields:
 
-- GET /api/projects
-- GET /api/scenarios
-- GET /api/components
-- GET /api/components/tree
-- GET /api/tiers
-- GET /api/metrics
-- GET /api/dashboard
+- `id`
+- `scenario_id`
+- `logical_component_id`
+- `tier_id`
+- `partition_name`
+- `partition_type`: `full`, `partial`, or `residual`
+- `physical_instance_count`
+- `partition_ratio`
+- `description`
 
-然后再实现写入 API。
+Use `physical_instance_count` for how many physical copies are realized on that tier. Use `partition_ratio` for how much of the logical content is carried by that partition.
 
-## 前端要求
+### metric
 
-当前已有一个单文件 App.tsx 原型，需要逐步拆分为：
+Unified long table for quantitative and descriptive metrics.
 
-frontend/src/
-- api/
-  - client.ts
-  - projects.ts
-  - scenarios.ts
-  - components.ts
-  - tiers.ts
-  - metrics.ts
-- types/
-  - project.ts
-  - scenario.ts
-  - component.ts
-  - tier.ts
-  - metric.ts
-- components/
-  - Badge.tsx
-  - Card.tsx
-  - MetricCard.tsx
-  - TreeNode.tsx
-- pages/
-  - DashboardPage.tsx
-  - HierarchyPage.tsx
-  - TiersPage.tsx
-  - ComparePage.tsx
-  - ImportsPage.tsx
-  - QualityPage.tsx
-  - SchemaPage.tsx
+Fields:
 
-目标是把 mock data 从 App.tsx 移到后端 SQLite，并通过 API 获取。
+- `id`
+- `scenario_id`
+- `subject_type`: `logical_component`, `physical_partition`, `tier`, or `scenario`
+- `subject_id`
+- `metric_name`
+- `metric_value`
+- `metric_unit`
+- `metric_category`
+- `value_type`
+- `corner`
+- `workload`
+- `confidence`
+- `source_note`
+- `created_at`
 
-## 开发原则
+Phase-1 logical area metrics use:
 
-1. 优先跑通闭环，不要过度设计。
-2. 先只读，再写入。
-3. 先标准化数据结构，再考虑 AI。
-4. 页面先可用，不追求完美后台管理。
-5. 数据库结构要清晰，方便未来迁移 PostgreSQL。
-6. 不要在前端写死业务数据。
-7. 后端启动时可以自动创建 SQLite 表并插入 demo seed 数据。
-8. 所有 API 返回字段命名保持前后端一致。
-9. 保留未来 source traceability 和 data quality check 的扩展空间。
+- `signal_count_total`
+- `logic_area`
+- `sram_area`
+- `block_area`
 
-## 当前最优先任务
+Implementation details such as shape, width, height, utilization, and power stay in `metric` rows attached to `physical_partition`, not as fixed columns on `physical_partition`.
 
-请先完成以下任务：
+## Current Demo
 
-1. 创建 backend 目录
-2. 实现 FastAPI + SQLite 后端
-3. 定义 Project、Scenario、ComponentInstance、ProcessNode、Tier、ComponentMetric 模型
-4. 启动时自动创建数据库
-5. 插入与现有前端 mock data 等价的 seed 数据
-6. 提供以下 API：
-   - GET /api/projects
-   - GET /api/scenarios
-   - GET /api/components
-   - GET /api/components/tree
-   - GET /api/tiers
-   - GET /api/metrics
-   - GET /api/dashboard
-7. 修改前端 App.tsx，让 Dashboard、Block层次、Tier、Scenario 对比页面从 API 读取数据。
+The backend seeds a realistic flagship mobile SoC demo named `Orion X1 Mobile SoC`.
+
+It includes:
+
+- 3 scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
+- 36 logical components across CPU, GPU, NPU, ISP, media, display, 5G modem, memory, NoC, IO/PHY, secure island, and always-on PMU
+- 35 physical partitions across compute, SRAM/cache, and IO/always-on tiers
+- Metrics for signal count, logic/SRAM/block area, power, tier utilization, and shape descriptors
+
+Demo seeding is controlled by:
+
+```powershell
+$env:SEED_DEMO="true"
+```
+
+Set `SEED_DEMO=false` before backend startup when you want to preserve manually imported database contents.
+
+## Phase-1 APIs
+
+Read/API endpoints:
+
+- `GET /api/projects`
+- `GET /api/scenarios`
+- `GET /api/module-definitions`
+- `GET /api/components`
+- `GET /api/components/tree`
+- `GET /api/physical-partitions`
+- `GET /api/tiers`
+- `GET /api/metrics`
+- `GET /api/dashboard`
+- `GET /api/quality/issues`
+
+Import endpoints:
+
+- `GET /api/import/template`
+- `POST /api/import/excel`
+
+## Development Principles
+
+1. Keep phase 1 local and easy to run.
+2. Prefer simple, explicit data structures over premature abstraction.
+3. Keep the frontend backed by API data, not hard-coded business data.
+4. Preserve future paths for source traceability and data quality checks.
+5. Keep SQLite schema clear enough to migrate to PostgreSQL later.
+6. Do not add enterprise concerns before the MVP is stable.
+7. Prefer V7 workbook/schema terminology in new code and docs.
+

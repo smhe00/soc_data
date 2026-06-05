@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from typing import Any
@@ -381,7 +382,8 @@ def metric(
 @app.on_event("startup")
 def on_startup() -> None:
     create_db_and_tables()
-    seed_data()
+    if os.getenv("SEED_DEMO", "true").lower() in {"1", "true", "yes", "on"}:
+        seed_data()
 
 
 def metrics_for(session: Session, scenario_id: str, subject_type: str, subject_id: str) -> dict[str, Metric]:
@@ -490,6 +492,124 @@ def scenario_ui(session: Session, scenario: Scenario) -> dict[str, Any]:
     }
 
 
+def make_quality_issue(
+    severity: str,
+    title: str,
+    detail: str,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+) -> dict[str, str]:
+    return {
+        "id": f"{entity_type}:{entity_id}:{title}".replace(" ", "_").lower(),
+        "severity": severity,
+        "title": title,
+        "detail": detail,
+        "action": action,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+    }
+
+
+def quality_issues_for(session: Session, scenario_id: str = "S2") -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+    components = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
+    partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+    metrics = session.exec(select(Metric).where(Metric.scenario_id == scenario_id)).all()
+    partitions_by_component: dict[str, list[PhysicalPartition]] = {}
+    metrics_by_subject: dict[tuple[str, str], dict[str, Metric]] = {}
+
+    for partition in partitions:
+        partitions_by_component.setdefault(partition.logical_component_id, []).append(partition)
+    for row in metrics:
+        metrics_by_subject.setdefault((row.subject_type, row.subject_id), {})[row.metric_name] = row
+
+    for component in components:
+        component_partitions = partitions_by_component.get(component.id, [])
+        if not component_partitions:
+            continue
+
+        ratio_total = sum(partition.partition_ratio for partition in component_partitions)
+        if abs(ratio_total - 1.0) > 0.001:
+            issues.append(
+                make_quality_issue(
+                    "High",
+                    "Partition ratio not closed",
+                    f"{component.name} partition_ratio sums to {ratio_total:.3f}, expected 1.000.",
+                    "Adjust physical_partitions so the logical content share closes to 100%.",
+                    "logical_component",
+                    component.id,
+                )
+            )
+
+        if all(partition.partition_type == "full" for partition in component_partitions):
+            physical_count = sum(partition.physical_instance_count for partition in component_partitions)
+            if physical_count != component.logical_instance_count:
+                issues.append(
+                    make_quality_issue(
+                        "High",
+                        "Physical count not closed",
+                        f"{component.name} logical_instance_count={component.logical_instance_count}, but full physical partitions sum to {physical_count}.",
+                        "Update physical_instance_count or split the mapping with partial partitions.",
+                        "logical_component",
+                        component.id,
+                    )
+                )
+
+    required_logical_metrics = {"signal_count_total", "logic_area", "sram_area", "block_area"}
+    parent_ids = {row.parent_id for row in components if row.parent_id}
+    leaf_components = [row for row in components if row.id not in parent_ids]
+    for component in leaf_components:
+        available = metrics_by_subject.get(("logical_component", component.id), {})
+        missing = sorted(required_logical_metrics - set(available))
+        if missing:
+            issues.append(
+                make_quality_issue(
+                    "Medium",
+                    "Logical metrics missing",
+                    f"{component.name} is missing logical metrics: {', '.join(missing)}.",
+                    "Add the missing metric rows with subject_type=logical_component.",
+                    "logical_component",
+                    component.id,
+                )
+            )
+
+    valid_subject_ids = {
+        "logical_component": {row.id for row in components},
+        "physical_partition": {row.id for row in partitions},
+        "tier": {row.id for row in session.exec(select(Tier).where(Tier.scenario_id == scenario_id)).all()},
+        "scenario": {scenario_id},
+    }
+    for row in metrics:
+        if row.subject_id not in valid_subject_ids.get(row.subject_type, set()):
+            issues.append(
+                make_quality_issue(
+                    "High",
+                    "Metric subject missing",
+                    f"{row.id} references missing {row.subject_type} subject_id={row.subject_id}.",
+                    "Fix subject_type / subject_id or import the referenced entity first.",
+                    "metric",
+                    row.id,
+                )
+            )
+        if row.value_type == "number":
+            try:
+                float(row.metric_value)
+            except ValueError:
+                issues.append(
+                    make_quality_issue(
+                        "High",
+                        "Metric value is not numeric",
+                        f"{row.id} declares value_type=number but metric_value={row.metric_value!r}.",
+                        "Replace metric_value with a numeric value or change value_type.",
+                        "metric",
+                        row.id,
+                    )
+                )
+
+    return issues
+
+
 @app.get("/api/projects")
 def get_projects() -> list[Project]:
     with Session(engine) as session:
@@ -563,6 +683,12 @@ def get_metrics(scenario_id: str | None = None) -> list[Metric]:
         if scenario_id:
             statement = statement.where(Metric.scenario_id == scenario_id)
         return list(session.exec(statement).all())
+
+
+@app.get("/api/quality/issues")
+def get_quality_issues(scenario_id: str = "S2") -> list[dict[str, str]]:
+    with Session(engine) as session:
+        return quality_issues_for(session, scenario_id)
 
 
 @app.get("/api/dashboard")

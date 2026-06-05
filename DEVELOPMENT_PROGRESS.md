@@ -72,6 +72,14 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoCè·¨Dieæ•
   - 36 logical components covering CPU, GPU, NPU, ISP, media, display, 5G modem, memory subsystem, NoC, IO/PHY, secure island, and always-on PMU
   - 35 physical partitions across compute, SRAM/cache, and IO/always-on tiers
   - Logical and physical metrics for signal count, logic/SRAM/block area, power, utilization, and shape descriptors
+- Phase-1 close-out updates:
+  - Updated `AGENTS.md` to reflect the current V7 model instead of the original `ComponentInstance` / `ComponentMetric` draft.
+  - Added `docs/schema_v7.md` as the canonical schema note for logical hierarchy, physical partitions, metrics, and closure rules.
+  - Added `SEED_DEMO` backend startup switch. Demo seed is enabled by default and can be disabled with `SEED_DEMO=false`.
+  - Added `GET /api/quality/issues` with real V7 rules for partition ratio closure, physical count closure, required logical metrics, numeric metrics, and subject references.
+  - Updated the frontend Quality page to read `/api/quality/issues`.
+  - Added `scripts/check_phase1.py` for repeatable API/data smoke checks.
+  - Updated `README.md` with current V7 startup, seed, import, quality, and Gitee notes.
 
 ## Verified
 
@@ -124,6 +132,7 @@ npm run build
 components: 36
 physical_partitions: 35
 dashboard: total_area=119.0, total_power=45.3, total_sram_area=72.9, phy_area=19.3
+quality_issues: 0
 ```
 
 ## Startup Commands

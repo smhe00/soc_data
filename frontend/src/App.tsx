@@ -26,6 +26,7 @@ import {
 import { getComponents, getComponentTree, getPhysicalPartitions } from "./api/components";
 import { importTemplateUrl, uploadImportWorkbook, type ImportResult } from "./api/imports";
 import { getDashboard } from "./api/metrics";
+import { getQualityIssues, type QualityIssue } from "./api/quality";
 import { getScenarios } from "./api/scenarios";
 import { getTiers } from "./api/tiers";
 import type { DashboardData } from "./types/metric";
@@ -128,13 +129,6 @@ interface ImportArtifact {
   owner: string;
 }
 
-interface DataIssue {
-  severity: SeverityLevel;
-  title: string;
-  detail: string;
-  action: string;
-}
-
 interface SchemaTable {
   table: string;
   purpose: string;
@@ -186,6 +180,7 @@ interface DataPageProps {
   scenarios: Scenario[];
   tiers: TierInfo[];
   physicalPartitions: PhysicalPartition[];
+  qualityIssues: QualityIssue[];
   loading: boolean;
   error: string | null;
   importing: boolean;
@@ -218,33 +213,6 @@ const imports: ImportArtifact[] = [
     extracted: "Tier/process/HB/TSV parameters",
     issues: 2,
     owner: "Packaging Team",
-  },
-];
-
-const dataIssues: DataIssue[] = [
-  {
-    severity: "High",
-    title: "Partition coverage needs review",
-    detail: "Repeated logical modules should close physical_instance_count and partition_ratio before roll-up.",
-    action: "Review physical_partitions and coverage_checks before area roll-up.",
-  },
-  {
-    severity: "Medium",
-    title: "GPU_TOP power density needs validation",
-    detail: "GPU_TOP estimated power density is higher than historical Gen-A baseline.",
-    action: "Compare with latest PnR power report or add scenario-specific activity factor.",
-  },
-  {
-    severity: "Medium",
-    title: "PHY block should remain fixed",
-    detail: "DDR_PHY is correctly placed on bottom tier, but no keepout/edge constraint is recorded.",
-    action: "Add PHY physical constraint before 3D floorplan exploration.",
-  },
-  {
-    severity: "Low",
-    title: "Alias mapping candidate",
-    detail: "AI Engine, AIE, and NPU_TOP appear to refer to the same subsystem in uploaded documents.",
-    action: "Approve canonical alias mapping.",
   },
 ];
 
@@ -826,22 +794,34 @@ function ImportsView({
   );
 }
 
-function QualityView(): JSX.Element {
+function QualityView({ qualityIssues, loading, error }: Pick<DataPageProps, "qualityIssues" | "loading" | "error">): JSX.Element {
+  const highCount = qualityIssues.filter((issue) => issue.severity === "High").length;
+  const mediumCount = qualityIssues.filter((issue) => issue.severity === "Medium").length;
+  const lowCount = qualityIssues.filter((issue) => issue.severity === "Low").length;
+
+  if (loading) return <Card title="Loading Quality Checks" subtitle="Evaluating V7 data rules..." icon={AlertTriangle}><div className="text-sm text-slate-500">Loading...</div></Card>;
+  if (error) return <Card title="API Error" subtitle="FastAPI backend is not reachable yet." icon={AlertTriangle}><div className="text-sm text-red-600">{error}</div></Card>;
+
   return (
     <div className="space-y-6">
       <Card title="Data Quality Gate" subtitle="正式数据库只接受已确认数据；AI和自动解析结果先进入待审核区" icon={AlertTriangle}>
         <div className="grid gap-4 md:grid-cols-4">
-          <MetricCard label="Approved Metrics" value="126" unit="" icon={CheckCircle2} hint="Official" />
-          <MetricCard label="Need Review" value="34" unit="" icon={History} hint="Queue" />
-          <MetricCard label="Open Issues" value="10" unit="" icon={AlertTriangle} hint="Action" />
-          <MetricCard label="Source Files" value="18" unit="" icon={FileText} hint="Traceable" />
+          <MetricCard label="Open Issues" value={qualityIssues.length} unit="" icon={AlertTriangle} hint="Rules" />
+          <MetricCard label="High Severity" value={highCount} unit="" icon={Flame} hint="Blockers" />
+          <MetricCard label="Medium Severity" value={mediumCount} unit="" icon={History} hint="Review" />
+          <MetricCard label="Low Severity" value={lowCount} unit="" icon={CheckCircle2} hint="Info" />
         </div>
       </Card>
 
       <Card title="Quality Issues" subtitle="规则检查 + 人工确认；后续P1可加入AI anomaly detection" icon={AlertTriangle}>
         <div className="space-y-3">
-          {dataIssues.map((issue) => (
-            <div key={issue.title} className="rounded-2xl border border-slate-200 bg-white p-4">
+          {qualityIssues.length === 0 && (
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
+              No open quality issues for the selected demo scenario. Partition ratios, full-instance counts, and numeric metrics are closed.
+            </div>
+          )}
+          {qualityIssues.map((issue) => (
+            <div key={issue.id} className="rounded-2xl border border-slate-200 bg-white p-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -850,6 +830,7 @@ function QualityView(): JSX.Element {
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{issue.detail}</p>
                   <p className="mt-1 text-sm leading-6 text-slate-500">Recommended action: {issue.action}</p>
+                  <div className="mt-2 font-mono text-xs text-slate-400">{issue.entity_type}:{issue.entity_id}</div>
                 </div>
                 <button className="shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" type="button">
                   Review
@@ -924,6 +905,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [tiers, setTiers] = useState<TierInfo[]>([]);
   const [physicalPartitions, setPhysicalPartitions] = useState<PhysicalPartition[]>([]);
+  const [qualityIssues, setQualityIssues] = useState<QualityIssue[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState<boolean>(false);
@@ -932,13 +914,14 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const activeTab = tabs.find((tab) => tab.id === active) ?? tabs[0];
 
   async function refreshApiData(): Promise<void> {
-    const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData] = await Promise.all([
+    const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData] = await Promise.all([
       getDashboard(),
       getComponents(),
       getComponentTree(),
       getScenarios(),
       getTiers(),
       getPhysicalPartitions(),
+      getQualityIssues(),
     ]);
     setDashboard(dashboardData);
     setBlocks(componentData);
@@ -946,6 +929,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     setScenarios(scenarioData);
     setTiers(tierData);
     setPhysicalPartitions(physicalPartitionData);
+    setQualityIssues(qualityIssueData);
   }
 
   async function handleImportWorkbook(file: File): Promise<void> {
@@ -968,13 +952,14 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     async function loadApiData(): Promise<void> {
       try {
         setLoading(true);
-        const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData] = await Promise.all([
+        const [dashboardData, componentData, treeData, scenarioData, tierData, physicalPartitionData, qualityIssueData] = await Promise.all([
           getDashboard(),
           getComponents(),
           getComponentTree(),
           getScenarios(),
           getTiers(),
           getPhysicalPartitions(),
+          getQualityIssues(),
         ]);
         if (cancelled) return;
         setDashboard(dashboardData);
@@ -983,6 +968,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         setScenarios(scenarioData);
         setTiers(tierData);
         setPhysicalPartitions(physicalPartitionData);
+        setQualityIssues(qualityIssueData);
         setError(null);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown API error");
@@ -1085,7 +1071,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               onImportWorkbook={handleImportWorkbook}
             />
           )}
-          {active === "quality" && <QualityView />}
+          {active === "quality" && <QualityView qualityIssues={qualityIssues} loading={loading} error={error} />}
           {active === "schema" && <SchemaView />}
         </main>
       </div>
