@@ -22,6 +22,15 @@ uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 
 The backend creates `backend/soc_3dic.db` on startup.
 
+Stop the backend from the same PowerShell window with `Ctrl + C`.
+
+If Windows leaves an orphaned `uvicorn --reload` child process on port 8000, run:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database
+powershell -ExecutionPolicy Bypass -File scripts\stop_backend.ps1
+```
+
 Demo seed is enabled by default. It refreshes the built-in `P001 / S1-S3` demo data.
 
 Disable demo seed when you want to preserve manually imported data:
