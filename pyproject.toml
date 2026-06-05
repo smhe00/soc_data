@@ -1,0 +1,14 @@
+[project]
+name = "soc-cross-die-database"
+version = "0.1.0"
+description = "Phase-1 SQLite MVP for a SoC cross-die architecture database and 3DIC evaluation prototype."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.111.0",
+  "openpyxl==3.1.5",
+  "sqlmodel==0.0.21",
+  "uvicorn[standard]==0.30.1",
+]
+
+[tool.uv]
+package = false

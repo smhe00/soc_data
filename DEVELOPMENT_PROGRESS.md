@@ -1,0 +1,172 @@
+# Development Progress
+
+## Current Workspace
+
+Project path:
+
+```powershell
+C:\Users\smhe00\Documents\soc-cross-die-database
+```
+
+The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoC跨Die数据库`, but current development should use the English path above.
+
+## Completed
+
+- Created the FastAPI backend in `backend/main.py`.
+- Added SQLModel + SQLite models:
+  - `Project`
+  - `Scenario`
+  - `ComponentInstance`
+  - `ProcessNode`
+  - `Tier`
+  - `ComponentMetric`
+- Added automatic SQLite table creation and demo seed data on backend startup.
+- Implemented read-only MVP APIs:
+  - `GET /api/projects`
+  - `GET /api/scenarios`
+  - `GET /api/components`
+  - `GET /api/components/tree`
+  - `GET /api/tiers`
+  - `GET /api/metrics`
+  - `GET /api/dashboard`
+- Added uv-based backend project configuration in `pyproject.toml`.
+- Added frontend Vite/React TypeScript project files.
+- Added frontend API modules under `frontend/src/api`.
+- Added frontend data types under `frontend/src/types`.
+- Updated `frontend/src/App.tsx` so Dashboard, Block Hierarchy, Tier, and Scenario Compare pages read from the API instead of hard-coded business mock data.
+- Renamed visible project branding to English:
+  - Browser title: `SoC Cross-Die Database`
+  - Sidebar brand: `SoC Cross-Die DB`
+  - Package name: `soc-cross-die-database`
+- Added `frontend/src/vite-env.d.ts` so `import.meta.env` is typed correctly.
+- Added demo Excel import workbook at `templates/soc_import_demo.xlsx`.
+- Added Excel import endpoints:
+  - `GET /api/import/template`
+  - `POST /api/import/excel`
+- Updated the frontend Imports page to download the template and upload `.xlsx` files.
+- Improved `component_metrics` as a human-maintainable long table:
+  - formula-assisted `id`, `metric_unit`, `metric_category`, and `workload`
+  - dropdown validation for key fields
+  - `metric_dictionary` helper sheet
+  - backend fallback generation when formula cache values are absent
+  - natural-key metric upsert to avoid duplicate imports
+- Added `templates/soc_physical_mapping_review.xlsx` to review the proposed relationship between reusable module definitions, compact logical components, and scenario-specific physical implementations across tiers/dies, including full-instance and partial-partition mappings.
+- Added `templates/soc_mapping_metrics_review_v2.xlsx` as a cleaner review model where `physical_implementations` only stores mapping skeleton fields and all measurable/evolving details move into a unified `metrics` sheet with `subject_type`.
+- Added `templates/soc_mapping_metrics_review_v3.xlsx` to keep logical static attributes such as port counts and nominal transistor counts directly on `logical_components`, while preserving the slim mapping-only `physical_implementations` table.
+- Added `templates/soc_mapping_metrics_review_v4.xlsx` after simplifying `logical_components` back to hierarchy + `logical_instance_count`. Logical attributes now live in `metrics`, with phase-1 core metrics limited to `signal_count_total`, `logic_area`, `sram_area`, and `block_area`.
+- Added `templates/soc_mapping_metrics_review_v5.xlsx` after simplifying `physical_implementations` to 11 mapping-only columns. Redundant fields such as `module_definition_id`, indexes, and partition labels were removed.
+- Added `templates/soc_mapping_metrics_review_v6.xlsx` after renaming the mapping table to `physical_partitions`, replacing instance counts with simple `partition_ratio`, and moving all detailed implementation quantities into `metrics` with `subject_type=physical_partition`.
+- Added `templates/soc_mapping_metrics_review_v7.xlsx` after restoring explicit physical partition quantity as `physical_instance_count` while keeping `partition_ratio` for logical content share. V7 also adds a `coverage_checks` sheet so repeated logical modules can be reviewed against physical counts and ratio closure.
+- Updated the FastAPI/SQLite platform code to use the V7 structure:
+  - `ModuleDefinition`
+  - `LogicalComponent`
+  - `PhysicalPartition`
+  - unified `Metric` with `subject_type` / `subject_id`
+- Added `GET /api/module-definitions` and `GET /api/physical-partitions`.
+- Updated existing dashboard, components, tree, tiers, metrics, and import APIs to read/write V7 data while preserving the frontend page flow.
+- Updated the frontend hierarchy and tier pages so logical hierarchy, physical instance count, partition ratio, and metric details come from API data.
+- Updated Excel import to accept `soc_mapping_metrics_review_v7.xlsx` and validate the V7 sheets.
+- Replaced the small V7 seed with a realistic flagship mobile SoC demo:
+  - Project: `Orion X1 Mobile SoC`
+  - Scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
+  - 36 logical components covering CPU, GPU, NPU, ISP, media, display, 5G modem, memory subsystem, NoC, IO/PHY, secure island, and always-on PMU
+  - 35 physical partitions across compute, SRAM/cache, and IO/always-on tiers
+  - Logical and physical metrics for signal count, logic/SRAM/block area, power, utilization, and shape descriptors
+
+## Verified
+
+- `uv sync` completed successfully.
+- Backend Python syntax check passed:
+
+```powershell
+uv run python -m py_compile backend\main.py
+```
+
+- Backend imports passed:
+
+```powershell
+uv run python -c "import fastapi, sqlmodel, uvicorn; import backend.main; print('backend imports ok')"
+```
+
+- Frontend dependencies installed successfully after retrying npm with stronger fetch retry options.
+- Frontend production build passed:
+
+```powershell
+npm run build
+```
+
+- Demo Excel import passed:
+
+```powershell
+uv run python scripts\verify_import.py
+```
+
+Expected V7 imported counts:
+
+```text
+module_definitions: 4
+projects: 1
+scenarios: 1
+tiers: 3
+logical_components: 6
+physical_partitions: 8
+metrics: 17
+```
+- Frontend production build passed after the V7 UI/data update:
+
+```powershell
+cd frontend
+npm run build
+```
+- Realistic mobile SoC demo API smoke test passed:
+
+```text
+components: 36
+physical_partitions: 35
+dashboard: total_area=119.0, total_power=45.3, total_sram_area=72.9, phy_area=19.3
+```
+
+## Startup Commands
+
+Start backend:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database
+uv sync
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Start frontend in another PowerShell:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:5173/
+```
+
+## npm Install Note
+
+If `npm install` fails with `ECONNRESET`, retry with:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+npm install --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
+```
+
+## Known Notes
+
+- npm reported 2 moderate vulnerabilities after install. Do not run `npm audit fix --force` blindly because it may introduce breaking dependency upgrades.
+- The old Chinese directory may remain locked while an existing Codex workspace or terminal is attached to it. Close old sessions before deleting it.
+- This MVP intentionally does not include Docker, PostgreSQL, Alembic, complex auth, AI features, auto partition optimization, or thermal surrogate modeling.
+
+## Suggested Next Steps
+
+- Add simple create/update APIs after the read-only flow is stable.
+- Split the single `App.tsx` prototype into page and component files.
+- Add a lightweight data quality endpoint backed by real rules.
+- Add basic backend API tests for the seven read-only endpoints.
