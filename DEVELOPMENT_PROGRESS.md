@@ -99,9 +99,13 @@ The old Chinese-path copy still exists at `C:\Users\smhe00\Documents\SoCè·¨Dieæ•
 - Clarified physical partition coverage semantics:
   - `physical_instance_count` remains the manually maintained quantity.
   - `content_share` replaces the user-facing `partition_ratio` concept.
-  - `content_share` is fixed to `1` for `full` partitions and only editable for `partial` / `residual`.
+  - `content_share` is fixed to `1` for `full` partitions and only editable for `partial`.
   - `instance_share` is computed from `physical_instance_count / logical_instance_count` and is not manually entered.
   - Quality closure now checks `sum(physical_instance_count * content_share) == logical_instance_count`.
+- Moved residual/self/glue semantics into derived data:
+  - Parent total area metrics include direct child module area.
+  - Residual/self area is computed as parent total area minus direct child area, not stored as component rows.
+  - Physical partition `partition_type` is limited to `full` or `partial`.
 
 ## Verified
 

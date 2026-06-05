@@ -75,6 +75,8 @@ def main() -> None:
 
         assert len(components) == 36, f"expected 36 components, got {len(components)}"
         assert len(partitions) == 35, f"expected 35 physical partitions, got {len(partitions)}"
+        assert not [row for row in components if row["type"] == "parent_residual"], "logical residual should be computed, not stored as component rows"
+        assert not [row for row in partitions if row["partition_type"] == "residual"], "physical partition type residual should not be used"
         assert dashboard["metrics"]["partition_count"] == 35
         assert quality_issues == [], f"expected no quality issues, got {quality_issues}"
         assert "AI Team" in teams, f"expected AI Team in responsibility teams, got {teams}"

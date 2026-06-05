@@ -198,6 +198,26 @@ def ensure_sqlite_schema_compatibility() -> None:
                     "SET content_share = CASE WHEN partition_type = 'full' THEN 1 ELSE partition_ratio END"
                 )
             )
+        connection.execute(text("UPDATE physicalpartition SET partition_type = 'partial' WHERE partition_type = 'residual'"))
+        connection.execute(
+            text(
+                "UPDATE physicalpartition "
+                "SET logical_component_id = ("
+                "SELECT parent_id FROM logicalcomponent WHERE logicalcomponent.id = physicalpartition.logical_component_id"
+                ") "
+                "WHERE logical_component_id IN ("
+                "SELECT id FROM logicalcomponent WHERE instance_type = 'parent_residual' AND parent_id IS NOT NULL"
+                ")"
+            )
+        )
+        connection.execute(
+            text(
+                "DELETE FROM metric "
+                "WHERE subject_type = 'logical_component' "
+                "AND subject_id IN (SELECT id FROM logicalcomponent WHERE instance_type = 'parent_residual')"
+            )
+        )
+        connection.execute(text("DELETE FROM logicalcomponent WHERE instance_type = 'parent_residual'"))
 
 
 def number_or_zero(value: Any) -> float:
@@ -375,8 +395,8 @@ def seed_data() -> None:
             ("PP_GPU_SHADER_T0_A", "B_GPU_SHADER", "T0", "GPU_SHADER_TOP_A", "full", 4, 0.667),
             ("PP_GPU_SHADER_T0_B", "B_GPU_SHADER", "T0", "GPU_SHADER_TOP_B", "full", 2, 0.333),
             ("PP_GPU_L2_T1", "B_GPU_L2", "T1", "GPU_L2_CACHE_MID", "full", 2, 1.00),
-            ("PP_GPU_RES_T0", "B_GPU", "T0", "GPU_FRONTEND_RESIDUAL_TOP", "residual", 1, 0.70),
-            ("PP_GPU_RES_T1", "B_GPU", "T1", "GPU_MEMORY_RESIDUAL_MID", "residual", 1, 0.30),
+            ("PP_GPU_RES_T0", "B_GPU", "T0", "GPU_FRONTEND_RESIDUAL_TOP", "partial", 1, 0.70),
+            ("PP_GPU_RES_T1", "B_GPU", "T1", "GPU_MEMORY_RESIDUAL_MID", "partial", 1, 0.30),
             ("PP_NPU_TENSOR_T0", "B_NPU_TENSOR", "T0", "NPU_TENSOR_TOP", "full", 4, 0.50),
             ("PP_NPU_TENSOR_T1", "B_NPU_TENSOR", "T1", "NPU_TENSOR_MID", "full", 4, 0.50),
             ("PP_NPU_SRAM_T1", "B_NPU_SRAM", "T1", "NPU_LOCAL_SRAM_MID", "full", 8, 1.00),
@@ -401,7 +421,7 @@ def seed_data() -> None:
             ("PP_USB_PCIE_PHY_T2", "B_USB_PCIE_PHY", "T2", "USB_PCIE_PHY_BOTTOM", "full", 1, 1.00),
             ("PP_MIPI_PHY_T2", "B_MIPI_PHY", "T2", "MIPI_PHY_BOTTOM", "full", 6, 1.00),
             ("PP_CRYPTO_T2", "B_CRYPTO", "T2", "CRYPTO_SECURE_BOTTOM", "full", 1, 1.00),
-            ("PP_SEC_RES_T2", "B_SEC", "T2", "SECURE_ISLAND_RESIDUAL_BOTTOM", "residual", 1, 1.00),
+            ("PP_SEC_RES_T2", "B_SEC", "T2", "SECURE_ISLAND_RESIDUAL_BOTTOM", "full", 1, 1.00),
             ("PP_PMU_T2", "B_PMU", "T2", "AON_PMU_SENSOR_BOTTOM", "full", 1, 1.00),
         ]
         partitions = [
@@ -410,7 +430,7 @@ def seed_data() -> None:
         ]
 
         logical_metric_values = {
-            "B0": (2200, 0.0, 0.0, 156.0, 0.0), "B_CPU": (620, 6.0, 14.8, 26.0, 9.8), "B_CPU_P": (320, 0.0, 18.4, 20.2, 7.8), "B_CPU_E": (220, 0.0, 5.8, 6.5, 2.2), "B_CPU_L3": (180, 9.6, 2.1, 12.8, 1.6),
+            "B0": (2200, 84.0, 168.0, 285.0, 0.0), "B_CPU": (620, 10.0, 28.0, 42.0, 9.8), "B_CPU_P": (320, 0.0, 18.4, 20.2, 7.8), "B_CPU_E": (220, 0.0, 5.8, 6.5, 2.2), "B_CPU_L3": (180, 9.6, 2.1, 12.8, 1.6),
             "B_GPU": (740, 10.5, 30.8, 44.0, 9.4), "B_GPU_SHADER": (520, 0.0, 27.6, 30.2, 8.6), "B_GPU_L2": (96, 8.6, 0.8, 9.9, 0.8), "B_NPU": (680, 14.2, 24.7, 43.5, 7.2), "B_NPU_TENSOR": (360, 0.0, 20.8, 22.4, 6.4), "B_NPU_SRAM": (128, 12.8, 0.9, 14.2, 0.7), "B_NPU_DMA": (104, 0.8, 2.5, 3.6, 0.6),
             "B_ISP": (420, 4.0, 13.3, 19.0, 3.6), "B_ISP_PIPE": (240, 1.8, 9.6, 12.0, 2.8), "B_CV_DSP": (150, 1.2, 3.7, 5.2, 0.9), "B_MEDIA": (240, 1.2, 7.8, 10.0, 2.1), "B_VDEC": (120, 0.5, 3.6, 4.6, 0.9), "B_VENC": (130, 0.6, 4.2, 5.3, 1.1), "B_DISPLAY": (150, 0.8, 4.2, 5.6, 1.0), "B_DPU": (120, 0.6, 3.6, 4.8, 0.9),
             "B_MODEM": (520, 7.8, 19.6, 31.0, 5.4), "B_MODEM_DSP": (260, 1.6, 10.2, 12.6, 3.2), "B_MODEM_SRAM": (90, 5.4, 0.7, 6.4, 0.5), "B_MODEM_RF": (110, 0.8, 3.8, 5.1, 0.9), "B_MEM": (260, 32.0, 6.0, 42.0, 2.5), "B_SYS_CACHE": (80, 25.6, 0.9, 28.2, 1.1), "B_LPDDR_CTRL": (180, 1.2, 4.8, 6.1, 1.4), "B_NOC": (300, 0.8, 8.5, 10.5, 2.2),
@@ -602,6 +622,31 @@ def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, An
     }
 
 
+def logical_area_summary(session: Session, component: LogicalComponent, scenario_id: str) -> dict[str, Any]:
+    metrics = metrics_for(session, scenario_id, "logical_component", component.id)
+    total = {
+        "logic_area": metric_number(metrics, "logic_area"),
+        "sram_area": metric_number(metrics, "sram_area"),
+        "block_area": metric_number(metrics, "block_area"),
+    }
+    child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component.id)).all()
+    child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
+    for child in child_rows:
+        child_metrics = metrics_for(session, scenario_id, "logical_component", child.id)
+        for metric_name in child_sum:
+            child_sum[metric_name] += metric_number(child_metrics, metric_name)
+    residual = {metric_name: round(total[metric_name] - child_sum[metric_name], 4) for metric_name in total}
+    return {
+        "has_children": bool(child_rows),
+        "child_logic_area": round(child_sum["logic_area"], 4),
+        "child_sram_area": round(child_sum["sram_area"], 4),
+        "child_block_area": round(child_sum["block_area"], 4),
+        "residual_logic_area": residual["logic_area"],
+        "residual_sram_area": residual["sram_area"],
+        "residual_block_area": residual["block_area"],
+    }
+
+
 def component_ui(session: Session, component: LogicalComponent, scenario_id: str = "S2") -> dict[str, Any]:
     metrics = metrics_for(session, scenario_id, "logical_component", component.id)
     partitions = session.exec(
@@ -619,6 +664,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
     block_area = metric_number(metrics, "block_area")
     if not block_area:
         block_area = sum(row["logic_area"] + row["sram_area"] + row["block_area"] for row in partition_rows)
+    area_summary = logical_area_summary(session, component, scenario_id)
     return {
         "id": component.id,
         "parent": component.parent_id,
@@ -643,6 +689,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "confidence": confidence,
         "partitions": partition_rows,
         "description": component.description,
+        **area_summary,
     }
 
 
@@ -749,6 +796,44 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
     required_logical_metrics = {"signal_count_total", "logic_area", "sram_area", "block_area"}
     parent_ids = {row.parent_id for row in components if row.parent_id}
     leaf_components = [row for row in components if row.id not in parent_ids]
+    children_by_parent: dict[str, list[LogicalComponent]] = {}
+    for component in components:
+        if component.parent_id:
+            children_by_parent.setdefault(component.parent_id, []).append(component)
+
+    for component in components:
+        child_rows = children_by_parent.get(component.id, [])
+        if not child_rows:
+            continue
+        available = metrics_by_subject.get(("logical_component", component.id), {})
+        missing_area = sorted({"logic_area", "sram_area", "block_area"} - set(available))
+        if missing_area:
+            issues.append(
+                make_quality_issue(
+                    "Medium",
+                    "Parent total area metrics missing",
+                    f"{component.name} needs total area metrics to compute residual area: {', '.join(missing_area)}.",
+                    "Fill parent total logic_area, sram_area, and block_area; residual area is derived automatically.",
+                    "logical_component",
+                    component.id,
+                )
+            )
+            continue
+        for metric_name in ["logic_area", "sram_area", "block_area"]:
+            parent_value = metric_number(available, metric_name)
+            child_value = sum(metric_number(metrics_by_subject.get(("logical_component", child.id), {}), metric_name) for child in child_rows)
+            if parent_value + 0.001 < child_value:
+                issues.append(
+                    make_quality_issue(
+                        "High",
+                        "Parent area smaller than child sum",
+                        f"{component.name} {metric_name}={parent_value:.3f}, but direct children sum to {child_value:.3f}.",
+                        "Parent total area should include child modules; residual area is computed as parent total minus direct child total.",
+                        "logical_component",
+                        component.id,
+                    )
+                )
+
     for component in leaf_components:
         available = metrics_by_subject.get(("logical_component", component.id), {})
         missing = sorted(required_logical_metrics - set(available))
@@ -1072,7 +1157,7 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
 ALLOWED_SUBJECT_TYPES = {"logical_component", "physical_partition", "tier", "scenario"}
 ALLOWED_VALUE_TYPES = {"number", "text", "boolean"}
 ALLOWED_CONFIDENCE = {"approved", "review", "draft"}
-ALLOWED_PARTITION_TYPES = {"full", "partial", "residual"}
+ALLOWED_PARTITION_TYPES = {"full", "partial"}
 
 
 def normalize_cell(value: Any) -> Any:
@@ -1156,6 +1241,8 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
         if row["project_id"] not in project_ids:
             errors.append(f"scenario {row['id']} references missing project_id {row['project_id']}")
     for row in all_rows["logical_components"]:
+        if row["instance_type"] == "parent_residual":
+            errors.append(f"logical_component {row['id']} uses parent_residual; residual/self area is computed from parent total metrics minus child metrics")
         if row["project_id"] not in project_ids:
             errors.append(f"logical_component {row['id']} references missing project_id {row['project_id']}")
         if row.get("parent_id") and row["parent_id"] not in component_ids:
@@ -1297,6 +1384,18 @@ def write_import_sheet(workbook: Workbook, sheet_name: str, columns: list[str], 
             "corner": ["typical", "best", "worst"],
             "workload": ["nominal", "peak", "idle"],
             "confidence": sorted(ALLOWED_CONFIDENCE),
+        }
+        for column_name, values in validations.items():
+            if column_name not in columns:
+                continue
+            column_letter = get_column_letter(columns.index(column_name) + 1)
+            validation = DataValidation(type="list", formula1=f'"{",".join(values)}"', allow_blank=False)
+            sheet.add_data_validation(validation)
+            validation.add(f"{column_letter}2:{column_letter}500")
+
+    if sheet_name == "physical_partitions":
+        validations = {
+            "partition_type": sorted(ALLOWED_PARTITION_TYPES),
         }
         for column_name, values in validations.items():
             if column_name not in columns:

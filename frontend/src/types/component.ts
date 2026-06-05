@@ -18,6 +18,13 @@ export interface BlockNode {
   logic_area: number;
   sram_area: number;
   block_area: number;
+  has_children: boolean;
+  child_logic_area: number;
+  child_sram_area: number;
+  child_block_area: number;
+  residual_logic_area: number;
+  residual_sram_area: number;
+  residual_block_area: number;
   area: number;
   power: number;
   tier: string;

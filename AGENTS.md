@@ -89,12 +89,14 @@ Fields:
 - `logical_component_id`
 - `tier_id`
 - `partition_name`
-- `partition_type`: `full`, `partial`, or `residual`
+- `partition_type`: `full` or `partial`
 - `physical_instance_count`
 - `content_share`
 - `description`
 
-Use `physical_instance_count` for how many physical copies are realized on that tier. Use `content_share` only for partial or residual content split; full partitions always have `content_share = 1`. Do not ask users to fill `instance_share`; compute it from `physical_instance_count / logical_instance_count`.
+Use `physical_instance_count` for how many physical copies are realized on that tier. Use `content_share` only for partial content split; full partitions always have `content_share = 1`. Do not ask users to fill `instance_share`; compute it from `physical_instance_count / logical_instance_count`.
+
+Parent-level self/glue logic is residual data derived from parent total metrics minus direct child metrics. Do not store residual as a logical component row.
 
 ### metric
 
@@ -197,7 +199,7 @@ Import endpoints:
 
 Team import workbooks are scoped input workbooks, not permission enforcement. Shared sheets are reference context; scoped uploads only merge `logical_components`, `physical_partitions`, and `metrics` after backend scope validation.
 
-Web maintenance currently starts with component detail physical mapping. Keep this object-oriented: users edit logical instance count, physical count, and partial/residual content share, while the API writes `logical_component` and `physical_partition` rows behind the scenes. Do not expose the raw metric long table as the primary daily-edit UI.
+Web maintenance currently starts with component detail physical mapping. Keep this object-oriented: users edit logical instance count, physical count, and partial content share, while the API writes `logical_component` and `physical_partition` rows behind the scenes. Do not expose the raw metric long table as the primary daily-edit UI.
 
 ## Development Principles
 

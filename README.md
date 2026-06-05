@@ -90,6 +90,7 @@ Seeded dataset:
   - `S2`: 3DIC Performance Option
   - `S3`: Cost-Optimized 2.5D Option
 - Logical components: 36
+- Residual/self area: parent-level self/glue area is computed from parent total metrics minus direct child metrics, not stored as extra logical component rows
 - Physical partitions: 35
 - Main domains: CPU, GPU, NPU, ISP, media, display, 5G modem, memory, NoC, IO/PHY, security, PMU
 
@@ -172,7 +173,7 @@ For the selected logical component, users can edit:
 - partition `tier_id`
 - partition type
 - physical instance count
-- content share for partial/residual partitions
+- content share for partial partitions
 - partition name and description
 
 The page computes instance share from physical count and logical instance count. It shows equivalent instance closure before saving. Save calls `PUT /api/components/{component_id}/detail`, then refreshes component data and quality issues.

@@ -94,6 +94,13 @@ interface BlockNode {
   logic_area: number;
   sram_area: number;
   block_area: number;
+  has_children: boolean;
+  child_logic_area: number;
+  child_sram_area: number;
+  child_block_area: number;
+  residual_logic_area: number;
+  residual_sram_area: number;
+  residual_block_area: number;
   area: number;
   power: number;
   tier: string;
@@ -353,6 +360,27 @@ function MetricCard({ label, value, unit, icon: Icon, hint }: MetricCardProps): 
   );
 }
 
+function AreaTriplet({ logic, sram, block, compact = false }: { logic: number; sram: number; block: number; compact?: boolean }): JSX.Element {
+  const numberClass = compact ? "text-base font-semibold text-slate-950" : "text-2xl font-semibold text-slate-950";
+  const labelClass = compact ? "text-[11px] text-slate-500" : "text-xs text-slate-500";
+  return (
+    <div className={compact ? "mt-2 grid grid-cols-3 gap-2" : "mt-3 flex items-end gap-6"}>
+      <div>
+        <div className={numberClass}>{logic}</div>
+        <div className={labelClass}>logic mm²</div>
+      </div>
+      <div>
+        <div className={numberClass}>{sram}</div>
+        <div className={labelClass}>SRAM mm²</div>
+      </div>
+      <div>
+        <div className={numberClass}>{block}</div>
+        <div className={labelClass}>block mm²</div>
+      </div>
+    </div>
+  );
+}
+
 function ResourceIcon({ resource }: ResourceIconProps): JSX.Element {
   if (resource.includes("memory")) return <MemoryStick size={16} />;
   if (resource.includes("phy")) return <RadioTower size={16} />;
@@ -479,8 +507,12 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
     }
   }
 
+  const mappingSubtitle = component.has_children
+    ? `Daily edit surface for ${selectedTeam}; parent mappings cover derived residual/self area only.`
+    : `Daily edit surface for ${selectedTeam}; metrics stay behind friendly fields.`;
+
   return (
-    <Card title="Physical Partition Mapping" subtitle={`Daily edit surface for ${selectedTeam}; metrics stay behind friendly fields.`} icon={SplitSquareVertical}>
+    <Card title="Physical Partition Mapping" subtitle={mappingSubtitle} icon={SplitSquareVertical}>
       <div className="mb-4 grid gap-3 md:grid-cols-4">
         <label className="rounded-2xl bg-slate-50 p-4">
           <div className="text-xs text-slate-500">Logical Instances</div>
@@ -542,7 +574,7 @@ function PartitionMappingEditor({ component, tiers, selectedTeam, onSave }: Part
                 </td>
                 <td className="px-3 py-2">
                   <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_type} onChange={(event) => updatePartition(index, { partition_type: event.target.value, content_share: event.target.value === "full" ? 1 : partition.content_share })}>
-                    {["full", "partial", "residual"].map((type) => <option key={type} value={type}>{type}</option>)}
+                    {["full", "partial"].map((type) => <option key={type} value={type}>{type}</option>)}
                   </select>
                 </td>
                 <td className="px-3 py-2">
@@ -733,7 +765,7 @@ function HierarchyView({
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-sm font-medium text-slate-900">Logic / SRAM / Block Area</div>
+              <div className="text-sm font-medium text-slate-900">Total Logic / SRAM / Block Area</div>
               <div className="mt-3 flex items-end gap-6">
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{selected.logic_area}</div>
@@ -748,6 +780,18 @@ function HierarchyView({
                   <div className="text-xs text-slate-500">block mm²</div>
                 </div>
               </div>
+              {selected.has_children && (
+                <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2">
+                  <div>
+                    <div className="text-xs font-medium text-slate-500">Children Sum</div>
+                    <AreaTriplet compact logic={selected.child_logic_area} sram={selected.child_sram_area} block={selected.child_block_area} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-slate-500">Residual / Self</div>
+                    <AreaTriplet compact logic={selected.residual_logic_area} sram={selected.residual_sram_area} block={selected.residual_block_area} />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="text-sm font-medium text-slate-900">Physical Coverage</div>
@@ -821,7 +865,7 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
         </div>
       </Card>
 
-      <Card title="Physical Partitions" subtitle="physical_instance_count is quantity; content_share is only meaningful for partial/residual content split." icon={SplitSquareVertical}>
+      <Card title="Physical Partitions" subtitle="physical_instance_count is quantity; content_share is only meaningful for partial content split." icon={SplitSquareVertical}>
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -843,7 +887,7 @@ function TiersView({ tiers, physicalPartitions, loading, error }: Pick<DataPageP
                   <td className="px-4 py-3 text-slate-600">{partition.physical_instance_count}</td>
                   <td className="px-4 py-3 text-slate-600">{(partition.content_share * 100).toFixed(0)}%</td>
                   <td className="px-4 py-3">
-                    <Badge tone={partition.partition_type === "partial" ? "amber" : partition.partition_type === "residual" ? "slate" : "green"}>
+                    <Badge tone={partition.partition_type === "partial" ? "amber" : "green"}>
                       {partition.partition_type}
                     </Badge>
                   </td>

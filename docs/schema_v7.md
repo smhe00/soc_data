@@ -128,7 +128,7 @@ Use this table for placement/mapping facts:
 - Which logical component
 - Which tier
 - How many physical copies
-- What content share is carried by a partial or residual partition
+- What content share is carried by a partial partition
 
 Key fields:
 
@@ -145,11 +145,12 @@ Key fields:
 
 - `full`: a whole logical instance/copy is realized by this partition
 - `partial`: one logical module is split across multiple tiers/partitions
-- `residual`: parent-level glue/control/interconnect not represented by child rows
 
 `instance_share` is not stored and should not be manually entered. It is computed as `physical_instance_count / logical_instance_count`.
 
-`content_share` is manually meaningful only for `partial` and `residual` rows. For `full` rows, `content_share` is always `1`.
+`content_share` is manually meaningful only for `partial` rows. For `full` rows, `content_share` is always `1`.
+
+Residual parent self/glue logic is not stored as a logical component row. Store parent total metrics on the parent component, store child total metrics on each direct child, and derive residual/self area as `parent total - direct child sum`.
 
 ### responsibility_assignment
 
@@ -241,6 +242,7 @@ For each logical component that has physical partitions in a scenario:
 - `sum(physical_instance_count * content_share)` should equal `logical_instance_count`
 - `full` partitions always use `content_share = 1`
 - `partial` partitions use `content_share` to describe how much of each covered logical instance is carried by that physical piece
+- For components with children, physical partitions attached directly to the parent map only the derived residual/self portion.
 
 ## Current Demo Data
 

@@ -72,7 +72,7 @@ SHEETS: dict[str, list[list[object]]] = {
         ["PP_NPU_SRAM_T1", "S2", "B8", "T1", "NPU_SRAM_BANK_MID", "full", 2, 1.00, "Both logical SRAM bank copies are carried by this middle-tier partition."],
         ["PP_GPU_LOGIC_T0", "S2", "B2", "T0", "GPU_SHADER_LOGIC_TOP", "partial", 1, 0.65, "GPU logic-side partition on top tier. Logic/SRAM/block area details live in metrics."],
         ["PP_GPU_CACHE_T1", "S2", "B2", "T1", "GPU_CACHE_SRAM_MID", "partial", 1, 0.35, "GPU cache/SRAM-side partition on middle tier. Logic/SRAM/block area details live in metrics."],
-        ["PP_NPU_TOP_RESIDUAL_T0", "S2", "B3", "T0", "NPU_TOP_RESIDUAL", "residual", 1, 1.00, "Residual NPU_TOP glue/control/interconnect not represented by child logical components."],
+        ["PP_NPU_TOP_GLUE_T0", "S2", "B3", "T0", "NPU_TOP_GLUE", "partial", 1, 1.00, "Parent glue/control/interconnect should be modeled as a logical residual child in the current schema."],
         ["PP_DDR_PHY_T2", "S2", "B5", "T2", "DDR_PHY_BOTTOM", "full", 1, 1.00, "Fixed PHY partition on bottom tier."],
     ],
     "metrics": [
@@ -133,7 +133,7 @@ SHEETS: dict[str, list[list[object]]] = {
 
 
 VALIDATION_LISTS = {
-    "partition_type": ["full", "partial", "residual"],
+    "partition_type": ["full", "partial"],
     "subject_type": ["logical_component", "physical_partition", "tier", "scenario"],
     "value_type": ["number", "text", "boolean"],
     "confidence": ["approved", "review", "draft"],
