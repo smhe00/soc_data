@@ -47,7 +47,7 @@ cd $env:PROJECT_ROOT
   - Sidebar brand: `SoC Cross-Die DB`
   - Package name: `soc-cross-die-database`
 - Added `frontend/src/vite-env.d.ts` so `import.meta.env` is typed correctly.
-- Added demo Excel import workbook at `templates/soc_import_demo.xlsx`.
+- Added an early demo Excel import workbook, later superseded by the V7 resource-category template.
 - Added Excel import endpoints:
   - `GET /api/import/template`
   - `POST /api/import/excel`
@@ -58,14 +58,8 @@ cd $env:PROJECT_ROOT
   - `metric_dictionary` helper sheet
   - backend fallback generation when formula cache values are absent
   - natural-key metric upsert to avoid duplicate imports
-- Added `templates/soc_physical_mapping_review.xlsx` to review the proposed relationship between reusable module definitions, compact logical components, and scenario-specific physical implementations across tiers/dies, including full-instance and partial-partition mappings.
-- Added `templates/soc_mapping_metrics_review_v2.xlsx` as a cleaner review model where `physical_implementations` only stores mapping skeleton fields and all measurable/evolving details move into a unified `metrics` sheet with `subject_type`.
-- Added `templates/soc_mapping_metrics_review_v3.xlsx` to keep logical static attributes such as port counts and nominal transistor counts directly on `logical_components`, while preserving the slim mapping-only `physical_implementations` table.
-- Added `templates/soc_mapping_metrics_review_v4.xlsx` after simplifying `logical_components` back to hierarchy + `logical_instance_count`. Logical attributes now live in `metrics`, with phase-1 core metrics limited to `signal_count_total`, `logic_area`, `sram_area`, and `block_area`.
-- Added `templates/soc_mapping_metrics_review_v5.xlsx` after simplifying `physical_implementations` to 11 mapping-only columns. Redundant fields such as `module_definition_id`, indexes, and partition labels were removed.
-- Added `templates/soc_mapping_metrics_review_v6.xlsx` after renaming the mapping table to `physical_partitions`, replacing instance counts with simple `partition_ratio`, and moving all detailed implementation quantities into `metrics` with `subject_type=physical_partition`.
-- Added `templates/soc_mapping_metrics_review_v7.xlsx` after restoring explicit physical partition quantity as `physical_instance_count` while keeping `partition_ratio` for logical content share. V7 also adds a `coverage_checks` sheet so repeated logical modules can be reviewed against physical counts and ratio closure.
-- Added `templates/soc_mapping_metrics_review_v7_resource_category.xlsx` as the current import template after resource-category mapping split physical partitions into `logic`, `sram`, and `block` rows.
+- Iterated through several review workbook versions while converging the schema from physical implementation sketches to the current V7 `logical_components` / `physical_partitions` / `metrics` model.
+- Added `templates/soc_mapping_metrics_review_v7_resource_category.xlsx` as the only retained import template after resource-category mapping split physical partitions into `logic`, `sram`, and `block` rows.
 - Updated the FastAPI/SQLite platform code to use the V7 structure:
   - `ModuleDefinition`
   - `LogicalComponent`
