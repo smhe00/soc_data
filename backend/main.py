@@ -87,6 +87,9 @@ class ProcessNode(SQLModel, table=True):
     node_name: str
     logic_density_mtr_per_mm2: float
     sram_density_mb_per_mm2: float
+    logic_area_scale: float = 1
+    sram_area_scale: float = 1
+    block_area_scale: float = 1
     voltage_nominal: float
     cost_factor: float
     maturity_level: str
@@ -283,6 +286,14 @@ def ensure_sqlite_schema_compatibility() -> None:
             )
         if "resource_category" not in partition_columns:
             connection.execute(text("ALTER TABLE physicalpartition ADD COLUMN resource_category VARCHAR DEFAULT 'block'"))
+        process_rows = connection.execute(text("PRAGMA table_info(processnode)")).fetchall()
+        process_columns = {row[1] for row in process_rows}
+        if "logic_area_scale" not in process_columns:
+            connection.execute(text("ALTER TABLE processnode ADD COLUMN logic_area_scale FLOAT DEFAULT 1"))
+        if "sram_area_scale" not in process_columns:
+            connection.execute(text("ALTER TABLE processnode ADD COLUMN sram_area_scale FLOAT DEFAULT 1"))
+        if "block_area_scale" not in process_columns:
+            connection.execute(text("ALTER TABLE processnode ADD COLUMN block_area_scale FLOAT DEFAULT 1"))
         connection.execute(text("UPDATE physicalpartition SET partition_type = 'partial' WHERE partition_type = 'residual'"))
         connection.execute(
             text(
@@ -351,10 +362,10 @@ def seed_data() -> None:
             Scenario(id="S3", project_id="P001", name="Cost-Optimized 2.5D Option", scenario_type="2 dies on interposer", process_combo="N4P application die + N6 IO/cache die", description="Lower-risk split with a main application die and a companion cache/IO die.", status="Medium", created_at=created, updated_at=created),
         ]
         process_nodes = [
-            ProcessNode(id="PN3E", foundry="TSMC", node_name="N3E", logic_density_mtr_per_mm2=235.0, sram_density_mb_per_mm2=1.85, voltage_nominal=0.70, cost_factor=1.9, maturity_level="Ramp", description="Advanced high-performance mobile logic process."),
-            ProcessNode(id="PN4P", foundry="TSMC", node_name="N4P", logic_density_mtr_per_mm2=185.0, sram_density_mb_per_mm2=1.45, voltage_nominal=0.74, cost_factor=1.45, maturity_level="Mature", description="Cost-optimized advanced mobile logic process."),
-            ProcessNode(id="PN5", foundry="TSMC", node_name="N5", logic_density_mtr_per_mm2=171.3, sram_density_mb_per_mm2=1.35, voltage_nominal=0.75, cost_factor=1.25, maturity_level="Production", description="Memory/cache-friendly advanced process."),
-            ProcessNode(id="PN6", foundry="TSMC", node_name="N6", logic_density_mtr_per_mm2=118.0, sram_density_mb_per_mm2=1.05, voltage_nominal=0.80, cost_factor=0.85, maturity_level="Mature", description="Mature companion die process for IO, PHY, always-on, and analog-friendly logic."),
+            ProcessNode(id="PN3E", foundry="TSMC", node_name="N3E", logic_density_mtr_per_mm2=235.0, sram_density_mb_per_mm2=1.85, logic_area_scale=1.00, sram_area_scale=1.00, block_area_scale=1.00, voltage_nominal=0.70, cost_factor=1.9, maturity_level="Ramp", description="Advanced high-performance mobile logic process; base area reference for demo logical metrics."),
+            ProcessNode(id="PN4P", foundry="TSMC", node_name="N4P", logic_density_mtr_per_mm2=185.0, sram_density_mb_per_mm2=1.45, logic_area_scale=1.27, sram_area_scale=1.28, block_area_scale=1.18, voltage_nominal=0.74, cost_factor=1.45, maturity_level="Mature", description="Cost-optimized advanced mobile logic process."),
+            ProcessNode(id="PN5", foundry="TSMC", node_name="N5", logic_density_mtr_per_mm2=171.3, sram_density_mb_per_mm2=1.35, logic_area_scale=1.37, sram_area_scale=1.37, block_area_scale=1.25, voltage_nominal=0.75, cost_factor=1.25, maturity_level="Production", description="Memory/cache-friendly advanced process."),
+            ProcessNode(id="PN6", foundry="TSMC", node_name="N6", logic_density_mtr_per_mm2=118.0, sram_density_mb_per_mm2=1.05, logic_area_scale=1.99, sram_area_scale=1.76, block_area_scale=1.45, voltage_nominal=0.80, cost_factor=0.85, maturity_level="Mature", description="Mature companion die process for IO, PHY, always-on, and analog-friendly logic."),
         ]
         module_definitions = [
             ModuleDefinition(id="MD_CPU_P_CORE", name="ARMV9_BIG_CORE", module_type="cpu_core", ip_owner="CPU Team", reuse_class="replicated", description="High-performance Armv9-class CPU core."),
@@ -504,26 +515,35 @@ def seed_data() -> None:
             return categories or ["block"]
 
         mapping_specs = [
+            ("B0", [("T0", 1, 0.45), ("T1", 1, 0.35), ("T2", 1, 0.20)]),
+            ("B_CPU", [("T0", 1, 1.00)]),
             ("B_CPU_P", [("T0", 4, 1.00)]),
             ("B_CPU_E", [("T0", 4, 1.00)]),
             ("B_CPU_L3", [("T0", 1, 0.25), ("T1", 1, 0.75)]),
             ("B_GPU_SHADER", [("T0", 6, 1.00)]),
             ("B_GPU_L2", [("T1", 2, 1.00)]),
             ("B_GPU", [("T0", 1, 0.70), ("T1", 1, 0.30)]),
+            ("B_NPU", [("T0", 1, 0.60), ("T1", 1, 0.40)]),
             ("B_NPU_TENSOR", [("T0", 4, 1.00), ("T1", 4, 1.00)]),
             ("B_NPU_SRAM", [("T1", 8, 1.00)]),
             ("B_NPU_DMA", [("T0", 1, 0.60), ("T1", 1, 0.40)]),
+            ("B_ISP", [("T0", 1, 1.00)]),
             ("B_ISP_PIPE", [("T0", 2, 1.00), ("T1", 1, 1.00)]),
             ("B_CV_DSP", [("T0", 1, 1.00)]),
+            ("B_MEDIA", [("T0", 1, 1.00)]),
             ("B_VDEC", [("T0", 1, 1.00)]),
             ("B_VENC", [("T0", 1, 1.00)]),
+            ("B_DISPLAY", [("T0", 1, 1.00)]),
             ("B_DPU", [("T0", 2, 1.00)]),
+            ("B_MODEM", [("T2", 1, 1.00)]),
             ("B_MODEM_DSP", [("T0", 2, 1.00)]),
             ("B_MODEM_SRAM", [("T1", 4, 1.00)]),
             ("B_MODEM_RF", [("T2", 1, 1.00)]),
+            ("B_MEM", [("T1", 1, 0.60), ("T2", 1, 0.40)]),
             ("B_SYS_CACHE", [("T1", 1, 1.00)]),
             ("B_LPDDR_CTRL", [("T2", 4, 1.00)]),
             ("B_NOC", [("T0", 1, 0.55), ("T1", 1, 0.30), ("T2", 1, 0.15)]),
+            ("B_IO", [("T2", 1, 1.00)]),
             ("B_DDR_PHY", [("T2", 4, 1.00)]),
             ("B_UFS_PHY", [("T2", 1, 1.00)]),
             ("B_USB_PCIE_PHY", [("T2", 1, 1.00)]),
@@ -688,7 +708,7 @@ def component_required_resource_categories(session: Session, component: LogicalC
         value = area_summary[metric_name] if area_summary["has_children"] else metric_number(metrics, metric_name)
         if value > 0:
             categories.add(category)
-    return categories or {"block"}
+    return categories
 
 
 def is_global_team(team: str | None) -> bool:
@@ -799,6 +819,104 @@ def logical_area_summary(session: Session, component: LogicalComponent, scenario
     }
 
 
+def descendant_component_ids(session: Session, component_id: str) -> set[str]:
+    rows = session.exec(select(LogicalComponent)).all()
+    children_by_parent: dict[str, list[str]] = {}
+    for row in rows:
+        if row.parent_id:
+            children_by_parent.setdefault(row.parent_id, []).append(row.id)
+    ids = {component_id}
+    stack = [component_id]
+    while stack:
+        parent_id = stack.pop()
+        child_ids = children_by_parent.get(parent_id, [])
+        ids.update(child_ids)
+        stack.extend(child_ids)
+    return ids
+
+
+def process_scale_for_category(process: ProcessNode | None, category: str) -> float:
+    if not process:
+        return 1
+    if category == "logic":
+        return process.logic_area_scale
+    if category == "sram":
+        return process.sram_area_scale
+    return process.block_area_scale
+
+
+def partition_base_area_for_category(partition_row: dict[str, Any]) -> float:
+    category = partition_row["resource_category"]
+    if category == "logic":
+        return partition_row["logic_area"]
+    if category == "sram":
+        return partition_row["sram_area"]
+    if category == "block":
+        return partition_row["block_area"]
+    return partition_row["logic_area"] + partition_row["sram_area"] + partition_row["block_area"]
+
+
+def component_tier_area_distribution(session: Session, component: LogicalComponent, scenario_id: str) -> list[dict[str, Any]]:
+    component_ids = descendant_component_ids(session, component.id)
+    partitions = session.exec(
+        select(PhysicalPartition).where(
+            PhysicalPartition.scenario_id == scenario_id,
+            PhysicalPartition.logical_component_id.in_(component_ids),
+        )
+    ).all()
+    tiers = {tier.id: tier for tier in session.exec(select(Tier).where(Tier.scenario_id == scenario_id)).all()}
+    processes = {process.id: process for process in session.exec(select(ProcessNode)).all()}
+    rows_by_tier: dict[str, dict[str, Any]] = {}
+
+    for partition in partitions:
+        partition_row = partition_ui(session, partition)
+        tier = tiers.get(partition.tier_id)
+        process = processes.get(tier.process_id) if tier else None
+        category = partition_row["resource_category"]
+        scale = process_scale_for_category(process, category)
+        base_area = partition_base_area_for_category(partition_row)
+        scaled_area = base_area * scale
+        row = rows_by_tier.setdefault(
+            partition.tier_id,
+            {
+                "tier_id": partition.tier_id,
+                "tier_name": tier.name if tier else partition.tier_id,
+                "process_id": tier.process_id if tier else "",
+                "process": f"{process.foundry} {process.node_name}" if process else "",
+                "base_logic_area": 0.0,
+                "base_sram_area": 0.0,
+                "base_block_area": 0.0,
+                "base_total_area": 0.0,
+                "logic_area": 0.0,
+                "sram_area": 0.0,
+                "block_area": 0.0,
+                "total_area": 0.0,
+                "partition_count": 0,
+            },
+        )
+        row[f"base_{category}_area"] += base_area
+        row["base_total_area"] += base_area
+        row[f"{category}_area"] += scaled_area
+        row["total_area"] += scaled_area
+        row["partition_count"] += 1
+
+    tier_order = {tier.id: tier.tier_index for tier in tiers.values()}
+    return [
+        {
+            **row,
+            "base_logic_area": round(row["base_logic_area"], 4),
+            "base_sram_area": round(row["base_sram_area"], 4),
+            "base_block_area": round(row["base_block_area"], 4),
+            "base_total_area": round(row["base_total_area"], 4),
+            "logic_area": round(row["logic_area"], 4),
+            "sram_area": round(row["sram_area"], 4),
+            "block_area": round(row["block_area"], 4),
+            "total_area": round(row["total_area"], 4),
+        }
+        for row in sorted(rows_by_tier.values(), key=lambda item: tier_order.get(item["tier_id"], 999))
+    ]
+
+
 def component_ui(session: Session, component: LogicalComponent, scenario_id: str = "S2") -> dict[str, Any]:
     metrics = metrics_for(session, scenario_id, "logical_component", component.id)
     partitions = session.exec(
@@ -845,6 +963,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "tier": "/".join(tier_ids) if tier_ids else "-",
         "confidence": confidence,
         "partitions": partition_rows,
+        "tier_area_distribution": component_tier_area_distribution(session, component, scenario_id),
         "description": component.description,
         **area_summary,
     }
@@ -1001,32 +1120,95 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
         ]
     partitions_by_component: dict[str, list[PhysicalPartition]] = {}
     metrics_by_subject: dict[tuple[str, str], dict[str, Metric]] = {}
+    children_by_parent: dict[str, list[LogicalComponent]] = {}
 
     for partition in partitions:
         partitions_by_component.setdefault(partition.logical_component_id, []).append(partition)
     for row in metrics:
         metrics_by_subject.setdefault((row.subject_type, row.subject_id), {})[row.metric_name] = row
+    for component in components:
+        if component.parent_id:
+            children_by_parent.setdefault(component.parent_id, []).append(component)
+
+    def self_area_by_category(component: LogicalComponent) -> dict[str, float]:
+        available = metrics_by_subject.get(("logical_component", component.id), {})
+        child_rows = children_by_parent.get(component.id, [])
+        return {
+            "logic": max(
+                0.0,
+                metric_number(available, "logic_area")
+                - sum(metric_number(metrics_by_subject.get(("logical_component", child.id), {}), "logic_area") for child in child_rows),
+            ),
+            "sram": max(
+                0.0,
+                metric_number(available, "sram_area")
+                - sum(metric_number(metrics_by_subject.get(("logical_component", child.id), {}), "sram_area") for child in child_rows),
+            ),
+            "block": max(
+                0.0,
+                metric_number(available, "block_area")
+                - sum(metric_number(metrics_by_subject.get(("logical_component", child.id), {}), "block_area") for child in child_rows),
+            ),
+        }
+
+    def partition_area_by_category(partition: PhysicalPartition, category: str) -> float:
+        partition_metrics = metrics_by_subject.get(("physical_partition", partition.id), {})
+        return metric_number(partition_metrics, f"{category}_area")
+
+    own_mapping_closed: dict[str, bool] = {}
+    area_epsilon = 0.01
 
     for component in components:
         component_partitions = partitions_by_component.get(component.id, [])
-        if not component_partitions:
-            continue
+        self_area = self_area_by_category(component)
+        component_closed = True
 
-        categories = sorted(component_required_resource_categories(session, component, scenario_id) | {normalized_resource_category(partition.resource_category) for partition in component_partitions})
-        for category in categories:
+        for category in sorted(ALLOWED_PARTITION_RESOURCE_CATEGORIES):
             category_partitions = [partition for partition in component_partitions if normalized_resource_category(partition.resource_category) == category]
+            expected_area = self_area[category]
             equivalent_instances = sum(partition_equivalent_instances(partition) for partition in category_partitions)
+            mapped_area = sum(partition_area_by_category(partition, category) for partition in category_partitions)
+            if expected_area <= area_epsilon:
+                if category_partitions:
+                    component_closed = False
+                    issues.append(
+                        make_quality_issue(
+                            "High",
+                            f"{category.upper()} zero-area resource should not be mapped",
+                            f"{component.name} has {expected_area:.3f} mm2 self/residual {category} area but has {len(category_partitions)} {category} partition rows.",
+                            "Remove this resource category from the component's physical partitions, or add a non-zero logical metric if it is real content.",
+                            "logical_component",
+                            component.id,
+                        )
+                    )
+                continue
+
             if abs(equivalent_instances - component.logical_instance_count) > 0.001:
+                component_closed = False
                 issues.append(
                     make_quality_issue(
                         "High",
                         f"{category.upper()} implementation coverage not closed",
-                        f"{component.name} {category} maps to {equivalent_instances:.3f} equivalent instances, expected {component.logical_instance_count}.",
+                        f"{component.name} self/residual {category} maps to {equivalent_instances:.3f} equivalent instances, expected {component.logical_instance_count}.",
                         "Adjust physical_instance_count and content_share for this resource category so count * content_share closes to the logical instance count.",
                         "logical_component",
                         component.id,
                     )
                 )
+            if abs(mapped_area - expected_area) > area_epsilon:
+                component_closed = False
+                issues.append(
+                    make_quality_issue(
+                        "High",
+                        f"{category.upper()} area mapping not closed",
+                        f"{component.name} self/residual {category} area maps to {mapped_area:.3f} mm2, expected {expected_area:.3f} mm2.",
+                        "Adjust physical partition metrics for this resource category so direct partition base area equals the component self/residual area.",
+                        "logical_component",
+                        component.id,
+                    )
+                )
+
+        own_mapping_closed[component.id] = component_closed
 
         for partition in component_partitions:
             if partition.resource_category not in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
@@ -1052,13 +1234,36 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
                     )
                 )
 
+    subtree_mapping_closed: dict[str, bool] = {}
+
+    def is_subtree_mapping_closed(component: LogicalComponent) -> bool:
+        if component.id in subtree_mapping_closed:
+            return subtree_mapping_closed[component.id]
+        child_rows = children_by_parent.get(component.id, [])
+        child_status = all(is_subtree_mapping_closed(child) for child in child_rows)
+        subtree_mapping_closed[component.id] = own_mapping_closed.get(component.id, False) and child_status
+        return subtree_mapping_closed[component.id]
+
+    for component in components:
+        child_rows = children_by_parent.get(component.id, [])
+        if not child_rows:
+            continue
+        open_children = [child.name for child in child_rows if not is_subtree_mapping_closed(child)]
+        if open_children:
+            issues.append(
+                make_quality_issue(
+                    "High",
+                    "Subtree implementation mapping not closed",
+                    f"{component.name} is not fully mapped because child subtree(s) are open: {', '.join(open_children)}.",
+                    "Close every child subtree and this component's own residual/self mapping for each non-zero resource category.",
+                    "logical_component",
+                    component.id,
+                )
+            )
+
     required_logical_metrics = {"signal_count_total", "logic_area", "sram_area", "block_area"}
     parent_ids = {row.parent_id for row in components if row.parent_id}
     leaf_components = [row for row in components if row.id not in parent_ids]
-    children_by_parent: dict[str, list[LogicalComponent]] = {}
-    for component in components:
-        if component.parent_id:
-            children_by_parent.setdefault(component.parent_id, []).append(component)
 
     for component in components:
         child_rows = children_by_parent.get(component.id, [])

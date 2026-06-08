@@ -47,6 +47,8 @@ Core tables:
 - `metric`
 - `responsibility_assignment`
 
+Area metrics on logical components and physical partitions use the base-process convention. `process_node` stores `logic_area_scale`, `sram_area_scale`, and `block_area_scale`; component detail responses compute `tier_area_distribution` by applying the mapped tier's process scale to each resource category.
+
 ### module_definition
 
 Reusable RTL/IP/block master data.
@@ -107,6 +109,8 @@ Mapping rows should be shown in fixed category order: `logic`, `sram`, then `blo
 
 Parent-level self/glue logic is residual data derived from parent total metrics minus direct child metrics. Do not store residual as a logical component row.
 
+Direct physical partition rows describe only the selected logical component's own self/residual content, not its child modules. If that self/residual area is zero for `logic`, `sram`, or `block`, that category must not appear in the direct map. A logical component is fully mapped only when every non-zero self/residual category closes and every child subtree is also fully mapped recursively.
+
 ### metric
 
 Unified long table for quantitative and descriptive metrics.
@@ -163,7 +167,7 @@ It includes:
 
 - 3 scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
 - 36 logical components across CPU, GPU, NPU, ISP, media, display, 5G modem, memory, NoC, IO/PHY, secure island, and always-on PMU
-- 93 physical partitions across logic, SRAM, and block resource-category mappings
+- 129 physical partitions across logic, SRAM, block, and parent residual/self resource-category mappings
 - Metrics for signal count, logic/SRAM/block area, power, tier utilization, and shape descriptors
 
 Demo seeding is controlled by:

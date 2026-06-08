@@ -125,6 +125,7 @@ The model separates:
 - logical hierarchy and logical instance count
 - scenario-specific physical partitioning and physical instance count
 - long-table metrics attached to logical components, physical partitions, tiers, or scenarios
+- base-process logical area metrics from tier/process scaled physical area roll-ups
 
 Detailed schema notes:
 
@@ -143,7 +144,7 @@ Seeded dataset:
   - `S3`: Cost-Optimized 2.5D Option
 - Logical components: 36
 - Residual/self area: parent-level self/glue area is computed from parent total metrics minus direct child metrics, not stored as extra logical component rows
-- Physical partitions: 93
+- Physical partitions: 129
 - Main domains: CPU, GPU, NPU, ISP, media, display, 5G modem, memory, NoC, IO/PHY, security, PMU
 
 ## Excel Import
@@ -167,6 +168,8 @@ http://localhost:8000/api/import/template?team=AI%20Team
 ```
 
 Team workbooks keep shared sheets such as `projects`, `scenarios`, `tiers`, and `module_definitions` as context. Team uploads only upsert scoped `logical_components`, `physical_partitions`, and `metrics`; the backend rejects rows outside the team's assigned logical subtree.
+
+Logical `logic_area` / `sram_area` / `block_area` metrics are stored in the base-process area convention. `process_node` keeps separate `logic_area_scale`, `sram_area_scale`, and `block_area_scale` factors so the backend can report tier area distribution after a scenario maps partitions onto tiers with different process nodes.
 
 Verify import:
 
@@ -230,6 +233,8 @@ Physical partition rows also carry a resource category:
 This lets one logical component map logic, SRAM, and hard/block content independently. Each category can use `full` or `partial` rows and closes its own equivalent instance coverage. Existing coarse mappings are treated as `block` category rows until they are refined.
 
 Mapping rows are displayed in a fixed category order: Logic first, SRAM second, Block last. Partition ID/name are generated rather than manually entered. The generated base is `logicalName_resourceCategory_tier`; `full` rows use the base name directly, while `partial` rows add a per-category/tier suffix such as `_P1`, `_P2`, etc. Multiple partial rows on the same tier are allowed.
+
+Direct map rows cover only the selected component's self/residual content. A zero-area self/residual category must not have direct map rows. Full mapping is recursive: a component is closed only after its own non-zero categories and all child subtrees are closed.
 
 For the selected logical component, users can edit:
 

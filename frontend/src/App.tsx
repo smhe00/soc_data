@@ -111,6 +111,7 @@ interface BlockNode {
   tier: string;
   confidence: ConfidenceLevel;
   partitions: PhysicalPartition[];
+  tier_area_distribution: TierAreaDistribution[];
   description: string;
 }
 
@@ -137,6 +138,22 @@ interface PhysicalPartition {
   power: number;
   shape_type: string;
   description: string;
+}
+
+interface TierAreaDistribution {
+  tier_id: string;
+  tier_name: string;
+  process_id: string;
+  process: string;
+  base_logic_area: number;
+  base_sram_area: number;
+  base_block_area: number;
+  base_total_area: number;
+  logic_area: number;
+  sram_area: number;
+  block_area: number;
+  total_area: number;
+  partition_count: number;
 }
 
 interface ImportArtifact {
@@ -347,7 +364,7 @@ const schemaTables: SchemaTable[] = [
   {
     table: "process_node",
     purpose: "工艺能力、密度、成本、成熟度",
-    fields: "process_id, foundry, node, logic_density, sram_density, cost_factor",
+    fields: "process_id, foundry, node, logic_density, sram_density, logic/sram/block_area_scale",
   },
   {
     table: "tier",
@@ -1303,6 +1320,10 @@ function HierarchyView({
   const selected = blocks.find((block) => block.id === selectedId) ?? blocks[0];
   const children = blocks.filter((block) => block.parent === selected.id);
   const SelectedIcon = selected.resource.includes("phy") ? RadioTower : selected.resource.includes("memory") ? MemoryStick : Cpu;
+  const logicalBaseAreaTotal = selected.logic_area + selected.sram_area + selected.block_area;
+  const tierBaseAreaTotal = selected.tier_area_distribution.reduce((total, row) => total + row.base_total_area, 0);
+  const tierScaledAreaTotal = selected.tier_area_distribution.reduce((total, row) => total + row.total_area, 0);
+  const unmappedBaseArea = logicalBaseAreaTotal - tierBaseAreaTotal;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
@@ -1412,15 +1433,58 @@ function HierarchyView({
                   </div>
                 </div>
               )}
+              <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-slate-500">Logical base</div>
+                  <div className="mt-1 font-semibold text-slate-900">{logicalBaseAreaTotal.toFixed(2)} mm2</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-slate-500">Mapped base</div>
+                  <div className="mt-1 font-semibold text-slate-900">{tierBaseAreaTotal.toFixed(2)} mm2</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-slate-500">Unmapped base</div>
+                  <div className={`mt-1 font-semibold ${Math.abs(unmappedBaseArea) < 0.01 ? "text-emerald-700" : "text-amber-700"}`}>
+                    {unmappedBaseArea.toFixed(2)} mm2
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="text-sm font-medium text-slate-900">Physical Coverage</div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Badge tone="blue">physical {selected.physical_instance_count}x</Badge>
+                <Badge tone="blue">direct physical {selected.physical_instance_count}x</Badge>
                 <Badge tone={Math.abs(selected.instance_share - 1) < 0.001 ? "green" : "amber"}>
-                  mapped {(selected.instance_share * 100).toFixed(0)}%
+                  direct mapped {(selected.instance_share * 100).toFixed(0)}%
                 </Badge>
                 {children.length > 0 && <Badge>{children.length} child rows</Badge>}
+              </div>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <div className="flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
+                  <span>Subtree area by tier</span>
+                  <span>{tierScaledAreaTotal.toFixed(2)} mm2 scaled</span>
+                </div>
+                {selected.tier_area_distribution.length === 0 ? (
+                  <div className="mt-3 text-sm text-slate-500">No physical partitions mapped for this logical subtree.</div>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {selected.tier_area_distribution.map((row) => (
+                      <div key={row.tier_id} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Badge tone="slate">{row.tier_id}</Badge>
+                            <span className="truncate text-sm font-medium text-slate-900">{row.tier_name}</span>
+                            <span className="text-xs text-slate-500">{row.process}</span>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-slate-950">{row.total_area.toFixed(2)} mm2</div>
+                          </div>
+                        </div>
+                        <AreaTriplet compact logic={row.logic_area} sram={row.sram_area} block={row.block_area} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

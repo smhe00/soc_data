@@ -1,0 +1,155 @@
+# AI Handoff
+
+This repository is the Phase-1 MVP for a SoC cross-die / 3DIC architecture database.
+
+## Current State
+
+- Backend: FastAPI + SQLModel + SQLite in `backend/main.py`.
+- Frontend: React + TypeScript + Vite in `frontend/`.
+- Import template: `templates/soc_import_template.xlsx`.
+- Canonical schema notes: `docs/schema_v7.md`.
+- Main progress log: `DEVELOPMENT_PROGRESS.md`.
+- Agent-facing project rules: `AGENTS.md`.
+
+The latest demo seed models a realistic flagship mobile SoC:
+
+- 36 logical components.
+- 129 physical partitions.
+- 3 scenarios:
+  - `S1`: monolithic N3E baseline.
+  - `S2`: 3-tier W2W 3DIC performance option.
+  - `S3`: cost-optimized 2.5D option.
+- `S2` is the primary working demo scenario.
+- Quality issues should be `0` after seed.
+
+## Critical Data Semantics
+
+The current schema is V7. Do not revert to the original `ComponentInstance` / `ComponentMetric` draft.
+
+Logical hierarchy:
+
+- `logical_component` stores the logical tree and `logical_instance_count`.
+- Repeated modules stay one logical row with a count.
+- Parent residual/self/glue area is not stored as a logical component row.
+- Residual/self area is derived as parent total area minus direct child total area.
+
+Physical mapping:
+
+- `physical_partition` maps a logical component's own self/residual content to a scenario tier.
+- It does not stand in for child modules.
+- Resource categories are independent: `logic`, `sram`, `block`.
+- If a component's own self/residual area is zero for a category, that category must not appear in direct map rows.
+- Full mapping is recursive: a component is closed only when its own non-zero categories close and all child subtrees close.
+- `content_share` is manually meaningful only for `partial`; `full` always means `content_share = 1`.
+- `instance_share` is computed, not manually entered.
+
+Area semantics:
+
+- Logical `logic_area`, `sram_area`, and `block_area` are base-process areas.
+- `process_node` stores `logic_area_scale`, `sram_area_scale`, and `block_area_scale`.
+- `tier_area_distribution` reports process-scaled physical area per tier for the selected logical subtree.
+- The UI shows base-area closure in `Total Logic / SRAM / Block Area`.
+- The UI shows process-scaled tier allocation in `Physical Coverage`.
+
+## Important Files
+
+- `backend/main.py`
+  - SQLModel models.
+  - SQLite compatibility migration.
+  - demo seed.
+  - import/export endpoints.
+  - quality rules.
+  - component/tier/dashboard APIs.
+- `frontend/src/App.tsx`
+  - Main prototype UI.
+  - Hierarchy view.
+  - component detail mapping editor.
+  - scenario implementation editor.
+- `frontend/src/types/component.ts`
+  - Shared component/partition response types.
+- `scripts/check_phase1.py`
+  - Main regression smoke test.
+  - Re-seeds demo data through TestClient startup.
+- `scripts/verify_import.py`
+  - Static workbook import check.
+
+## Commands
+
+Run backend:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Run frontend:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+npm run dev
+```
+
+Verify backend and data:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database
+uv run python scripts\check_phase1.py
+```
+
+Verify import template:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database
+uv run python scripts\verify_import.py
+```
+
+Build frontend:
+
+```powershell
+cd C:\Users\smhe00\Documents\soc-cross-die-database\frontend
+npm run build
+```
+
+Run `verify_import.py` and `check_phase1.py` sequentially, not in parallel. They both touch SQLite state. Run `check_phase1.py` last if you want the local database restored to the full demo seed.
+
+## Expected Verification Snapshot
+
+`uv run python scripts\check_phase1.py` should report:
+
+```text
+components: 36
+physical_partitions: 129
+quality_issues: 0
+AI Team components: 4
+AI Team physical_partitions: 19
+AI Team imported metrics: 115
+```
+
+`uv run python scripts\verify_import.py` should report:
+
+```text
+soc_import_template.xlsx
+physical_partitions: 8
+metrics: 17
+errors: []
+```
+
+## Current Boundaries
+
+Do not add these in Phase 1 unless explicitly requested:
+
+- Docker.
+- PostgreSQL.
+- Alembic migrations.
+- Full authentication / complex permissions.
+- AI parsing or optimization features.
+- Thermal surrogate model.
+
+## Suggested Next Work
+
+- Split `backend/main.py` into smaller modules once behavior stabilizes.
+- Add focused pytest tests for quality rules and import validation.
+- Add a Web form for editing logical metrics by friendly fields instead of raw long-table rows.
+- Add quality warnings for scenario/tier area limits after process scaling.
+- Improve the Component Detail UI so self/residual and subtree closure status are visually distinct.
+- Add a schema/version banner to exported workbooks.

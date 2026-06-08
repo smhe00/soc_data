@@ -73,7 +73,7 @@ cd $env:PROJECT_ROOT
   - Project: `Orion X1 Mobile SoC`
   - Scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
   - 36 logical components covering CPU, GPU, NPU, ISP, media, display, 5G modem, memory subsystem, NoC, IO/PHY, secure island, and always-on PMU
-  - 93 physical partitions across logic, SRAM, and block resource-category mappings
+  - 129 physical partitions across logic, SRAM, block, and parent residual/self resource-category mappings
   - Logical and physical metrics for signal count, logic/SRAM/block area, power, utilization, and shape descriptors
 - Phase-1 close-out updates:
   - Updated `AGENTS.md` to reflect the current V7 model instead of the original `ComponentInstance` / `ComponentMetric` draft.
@@ -147,6 +147,12 @@ cd $env:PROJECT_ROOT
   - Light/dark theme toggle in the header.
   - Theme preference is stored in browser `localStorage`.
   - Dark theme covers page background, sidebar, cards, tables, forms, badges, and implementation cross-section preview.
+- Added process-scaled physical area coverage:
+  - `process_node` stores separate logic/SRAM/block area scaling factors.
+  - Component detail responses expose `tier_area_distribution`.
+  - Demo seed now maps parent residual/self area so SoC top base area closes before process scaling.
+  - The UI shows base-area mapping closure in the Total Area card and process-scaled tier area in Physical Coverage.
+  - Quality checks now reject zero-area category maps and verify recursive logic/SRAM/block mapping closure.
 
 ## Verified
 
@@ -197,7 +203,7 @@ npm run build
 
 ```text
 components: 36
-physical_partitions: 93
+physical_partitions: 129
 dashboard: total_area=119.0, total_power=45.3, total_sram_area=72.9, phy_area=19.3
 quality_issues: 0
 ```
@@ -205,15 +211,15 @@ quality_issues: 0
 
 ```text
 AI Team components: 4
-AI Team physical_partitions: 13
+AI Team physical_partitions: 19
 AI Team quality_issues: 0
 ```
 - Team workbook round-trip passed in `scripts/check_phase1.py`:
 
 ```text
 AI Team imported logical_components: 4
-AI Team imported physical_partitions: 13
-AI Team imported metrics: 85
+AI Team imported physical_partitions: 19
+AI Team imported metrics: 115
 ```
 - Component detail save smoke check passed:
 
@@ -267,10 +273,11 @@ browser Save on 实现方案 page -> saved implementation v2
 
 ```text
 components: 36
-physical_partitions: 93
+physical_partitions: 129
 quality_issues: 0
-AI Team physical_partitions: 13
-AI Team imported metrics: 85
+SoC top base area closure: 537.0 mapped / 537.0 logical
+AI Team physical_partitions: 19
+AI Team imported metrics: 115
 ```
 
 - Current static import template passed:

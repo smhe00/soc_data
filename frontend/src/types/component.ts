@@ -30,6 +30,7 @@ export interface BlockNode {
   tier: string;
   confidence: ConfidenceLevel;
   partitions: PhysicalPartition[];
+  tier_area_distribution: TierAreaDistribution[];
   description: string;
 }
 
@@ -56,4 +57,20 @@ export interface PhysicalPartition {
   power: number;
   shape_type: string;
   description: string;
+}
+
+export interface TierAreaDistribution {
+  tier_id: string;
+  tier_name: string;
+  process_id: string;
+  process: string;
+  base_logic_area: number;
+  base_sram_area: number;
+  base_block_area: number;
+  base_total_area: number;
+  logic_area: number;
+  sram_area: number;
+  block_area: number;
+  total_area: number;
+  partition_count: number;
 }
