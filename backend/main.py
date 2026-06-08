@@ -21,7 +21,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_URL = f"sqlite:///{BASE_DIR / 'soc_3dic.db'}"
-TEMPLATE_PATH = BASE_DIR.parent / "templates" / "soc_mapping_metrics_review_v7.xlsx"
+TEMPLATE_PATH = BASE_DIR.parent / "templates" / "soc_mapping_metrics_review_v7_resource_category.xlsx"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
@@ -472,48 +472,6 @@ def seed_data() -> None:
             Tier(id="T2", scenario_id="S2", tier_index=2, name="IO + Always-On Tier", process_id="PN6", role="LPDDR/PHY/IO/security/AON/analog-friendly logic", orientation="Backside PDN", thickness_um=60, area_limit_mm2=44.0, description="Mature-node companion tier for IO PHYs, PMU, RF digital, and low-power islands."),
         ]
 
-        partition_rows = [
-            ("PP_CPU_P_T0", "B_CPU_P", "T0", "P_CORE_CLUSTER_TOP", "full", 4, 1.00),
-            ("PP_CPU_E_T0", "B_CPU_E", "T0", "E_CORE_CLUSTER_TOP", "full", 4, 1.00),
-            ("PP_CPU_L3_LOGIC_T0", "B_CPU_L3", "T0", "CPU_DSU_LOGIC_TOP", "partial", 1, 0.25),
-            ("PP_CPU_L3_SRAM_T1", "B_CPU_L3", "T1", "CPU_L3_SRAM_MID", "partial", 1, 0.75),
-            ("PP_GPU_SHADER_T0_A", "B_GPU_SHADER", "T0", "GPU_SHADER_TOP_A", "full", 4, 0.667),
-            ("PP_GPU_SHADER_T0_B", "B_GPU_SHADER", "T0", "GPU_SHADER_TOP_B", "full", 2, 0.333),
-            ("PP_GPU_L2_T1", "B_GPU_L2", "T1", "GPU_L2_CACHE_MID", "full", 2, 1.00),
-            ("PP_GPU_RES_T0", "B_GPU", "T0", "GPU_FRONTEND_RESIDUAL_TOP", "partial", 1, 0.70),
-            ("PP_GPU_RES_T1", "B_GPU", "T1", "GPU_MEMORY_RESIDUAL_MID", "partial", 1, 0.30),
-            ("PP_NPU_TENSOR_T0", "B_NPU_TENSOR", "T0", "NPU_TENSOR_TOP", "full", 4, 0.50),
-            ("PP_NPU_TENSOR_T1", "B_NPU_TENSOR", "T1", "NPU_TENSOR_MID", "full", 4, 0.50),
-            ("PP_NPU_SRAM_T1", "B_NPU_SRAM", "T1", "NPU_LOCAL_SRAM_MID", "full", 8, 1.00),
-            ("PP_NPU_DMA_T0", "B_NPU_DMA", "T0", "NPU_DMA_TOP", "partial", 1, 0.60),
-            ("PP_NPU_DMA_T1", "B_NPU_DMA", "T1", "NPU_DMA_MID", "partial", 1, 0.40),
-            ("PP_ISP_PIPE_T0", "B_ISP_PIPE", "T0", "ISP_PIPE_TOP", "full", 2, 0.667),
-            ("PP_ISP_PIPE_T1", "B_ISP_PIPE", "T1", "ISP_PIPE_MID", "full", 1, 0.333),
-            ("PP_CV_DSP_T0", "B_CV_DSP", "T0", "CV_DSP_TOP", "full", 1, 1.00),
-            ("PP_VDEC_T0", "B_VDEC", "T0", "VIDEO_DECODER_TOP", "full", 1, 1.00),
-            ("PP_VENC_T0", "B_VENC", "T0", "VIDEO_ENCODER_TOP", "full", 1, 1.00),
-            ("PP_DPU_T0", "B_DPU", "T0", "DISPLAY_PIPE_TOP", "full", 2, 1.00),
-            ("PP_MODEM_DSP_T0", "B_MODEM_DSP", "T0", "BASEBAND_DSP_TOP", "full", 2, 1.00),
-            ("PP_MODEM_SRAM_T1", "B_MODEM_SRAM", "T1", "BASEBAND_SRAM_MID", "full", 4, 1.00),
-            ("PP_MODEM_RF_T2", "B_MODEM_RF", "T2", "RF_DIGITAL_BOTTOM", "full", 1, 1.00),
-            ("PP_SYS_CACHE_T1", "B_SYS_CACHE", "T1", "SLC_CACHE_MID", "full", 1, 1.00),
-            ("PP_LPDDR_CTRL_T2", "B_LPDDR_CTRL", "T2", "LPDDR_CTRL_BOTTOM", "full", 4, 1.00),
-            ("PP_NOC_T0", "B_NOC", "T0", "NOC_COMPUTE_TOP", "partial", 1, 0.55),
-            ("PP_NOC_T1", "B_NOC", "T1", "NOC_CACHE_MID", "partial", 1, 0.30),
-            ("PP_NOC_T2", "B_NOC", "T2", "NOC_IO_BOTTOM", "partial", 1, 0.15),
-            ("PP_DDR_PHY_T2", "B_DDR_PHY", "T2", "LPDDR5X_PHY_BOTTOM", "full", 4, 1.00),
-            ("PP_UFS_PHY_T2", "B_UFS_PHY", "T2", "UFS_PHY_BOTTOM", "full", 1, 1.00),
-            ("PP_USB_PCIE_PHY_T2", "B_USB_PCIE_PHY", "T2", "USB_PCIE_PHY_BOTTOM", "full", 1, 1.00),
-            ("PP_MIPI_PHY_T2", "B_MIPI_PHY", "T2", "MIPI_PHY_BOTTOM", "full", 6, 1.00),
-            ("PP_CRYPTO_T2", "B_CRYPTO", "T2", "CRYPTO_SECURE_BOTTOM", "full", 1, 1.00),
-            ("PP_SEC_RES_T2", "B_SEC", "T2", "SECURE_ISLAND_RESIDUAL_BOTTOM", "full", 1, 1.00),
-            ("PP_PMU_T2", "B_PMU", "T2", "AON_PMU_SENSOR_BOTTOM", "full", 1, 1.00),
-        ]
-        partitions = [
-            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, resource_category="block", physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {logical_id} to {tier_id}.")
-            for id, logical_id, tier_id, name, ptype, count, ratio in partition_rows
-        ]
-
         logical_metric_values = {
             "B0": (2200, 84.0, 168.0, 285.0, 0.0), "B_CPU": (620, 10.0, 28.0, 42.0, 9.8), "B_CPU_P": (320, 0.0, 18.4, 20.2, 7.8), "B_CPU_E": (220, 0.0, 5.8, 6.5, 2.2), "B_CPU_L3": (180, 9.6, 2.1, 12.8, 1.6),
             "B_GPU": (740, 10.5, 30.8, 44.0, 9.4), "B_GPU_SHADER": (520, 0.0, 27.6, 30.2, 8.6), "B_GPU_L2": (96, 8.6, 0.8, 9.9, 0.8), "B_NPU": (680, 14.2, 24.7, 43.5, 7.2), "B_NPU_TENSOR": (360, 0.0, 20.8, 22.4, 6.4), "B_NPU_SRAM": (128, 12.8, 0.9, 14.2, 0.7), "B_NPU_DMA": (104, 0.8, 2.5, 3.6, 0.6),
@@ -521,17 +479,100 @@ def seed_data() -> None:
             "B_MODEM": (520, 7.8, 19.6, 31.0, 5.4), "B_MODEM_DSP": (260, 1.6, 10.2, 12.6, 3.2), "B_MODEM_SRAM": (90, 5.4, 0.7, 6.4, 0.5), "B_MODEM_RF": (110, 0.8, 3.8, 5.1, 0.9), "B_MEM": (260, 32.0, 6.0, 42.0, 2.5), "B_SYS_CACHE": (80, 25.6, 0.9, 28.2, 1.1), "B_LPDDR_CTRL": (180, 1.2, 4.8, 6.1, 1.4), "B_NOC": (300, 0.8, 8.5, 10.5, 2.2),
             "B_IO": (210, 0.5, 18.0, 24.0, 2.0), "B_DDR_PHY": (70, 0.0, 8.8, 9.6, 1.1), "B_UFS_PHY": (24, 0.0, 1.5, 1.8, 0.2), "B_USB_PCIE_PHY": (42, 0.0, 2.8, 3.4, 0.4), "B_MIPI_PHY": (52, 0.0, 3.6, 4.5, 0.3), "B_SEC": (95, 1.2, 2.2, 4.0, 0.6), "B_CRYPTO": (50, 0.2, 1.2, 1.7, 0.4), "B_PMU": (86, 0.8, 2.8, 4.2, 0.3),
         }
-        partition_metric_values = {
-            id: (logic_area, sram_area, block_area, power, shape)
-            for id, logic_area, sram_area, block_area, power, shape in [
-                ("PP_CPU_P_T0", 18.6, 0.0, 0.0, 7.8, "quad_core_cluster"), ("PP_CPU_E_T0", 5.8, 0.0, 0.0, 2.2, "compact_core_cluster"), ("PP_CPU_L3_LOGIC_T0", 2.1, 0.0, 0.0, 0.5, "narrow_logic"), ("PP_CPU_L3_SRAM_T1", 0.2, 9.8, 0.0, 1.1, "sram_array"),
-                ("PP_GPU_SHADER_T0_A", 18.8, 0.0, 0.0, 5.8, "shader_bank_a"), ("PP_GPU_SHADER_T0_B", 9.5, 0.0, 0.0, 2.9, "shader_bank_b"), ("PP_GPU_L2_T1", 0.7, 8.7, 0.0, 0.8, "sram_array"), ("PP_GPU_RES_T0", 3.6, 0.2, 0.0, 1.0, "frontend_logic"), ("PP_GPU_RES_T1", 0.4, 1.1, 0.0, 0.2, "memory_glue"),
-                ("PP_NPU_TENSOR_T0", 11.0, 0.0, 0.0, 3.3, "tensor_array_top"), ("PP_NPU_TENSOR_T1", 10.6, 0.0, 0.0, 3.1, "tensor_array_mid"), ("PP_NPU_SRAM_T1", 0.9, 13.0, 0.0, 0.7, "sram_array"), ("PP_NPU_DMA_T0", 1.6, 0.1, 0.0, 0.3, "dma_logic"), ("PP_NPU_DMA_T1", 1.0, 0.7, 0.0, 0.3, "memory_qos"),
-                ("PP_ISP_PIPE_T0", 6.6, 0.7, 0.0, 1.8, "pipeline_pair"), ("PP_ISP_PIPE_T1", 3.4, 1.2, 0.0, 1.0, "pipeline_single"), ("PP_CV_DSP_T0", 3.7, 1.2, 0.0, 0.9, "dsp_block"), ("PP_VDEC_T0", 3.7, 0.5, 0.0, 0.9, "codec_block"), ("PP_VENC_T0", 4.2, 0.6, 0.0, 1.1, "codec_block"), ("PP_DPU_T0", 3.8, 0.6, 0.0, 0.9, "display_pipe_pair"),
-                ("PP_MODEM_DSP_T0", 10.4, 1.5, 0.0, 3.2, "dsp_pair"), ("PP_MODEM_SRAM_T1", 0.6, 5.5, 0.0, 0.5, "sram_array"), ("PP_MODEM_RF_T2", 3.9, 0.9, 0.0, 0.9, "rf_digital"), ("PP_SYS_CACHE_T1", 0.9, 26.0, 0.0, 1.1, "large_slc"), ("PP_LPDDR_CTRL_T2", 4.9, 1.2, 0.0, 1.4, "controller_cluster"),
-                ("PP_NOC_T0", 4.7, 0.2, 0.0, 1.2, "compute_fabric"), ("PP_NOC_T1", 2.6, 0.4, 0.0, 0.7, "cache_fabric"), ("PP_NOC_T2", 1.4, 0.2, 0.0, 0.3, "io_fabric"), ("PP_DDR_PHY_T2", 1.0, 0.0, 8.8, 1.1, "phy_edge"), ("PP_UFS_PHY_T2", 0.2, 0.0, 1.6, 0.2, "phy_edge"), ("PP_USB_PCIE_PHY_T2", 0.4, 0.0, 3.0, 0.4, "phy_edge"), ("PP_MIPI_PHY_T2", 0.6, 0.0, 3.9, 0.3, "phy_edge_array"), ("PP_CRYPTO_T2", 1.3, 0.2, 0.0, 0.4, "secure_logic"), ("PP_SEC_RES_T2", 1.0, 1.0, 0.0, 0.2, "secure_island"), ("PP_PMU_T2", 2.9, 0.8, 0.5, 0.3, "aon_mixed"),
-            ]
-        }
+        logical_by_id = {component.id: component for component in logical_components}
+        children_by_parent: dict[str, list[LogicalComponent]] = {}
+        for component in logical_components:
+            if component.parent_id:
+                children_by_parent.setdefault(component.parent_id, []).append(component)
+
+        def required_categories_for_seed(component_id: str) -> list[str]:
+            values = logical_metric_values[component_id]
+            child_values = [logical_metric_values[child.id] for child in children_by_parent.get(component_id, []) if child.id in logical_metric_values]
+            if child_values:
+                sram_area = values[1] - sum(row[1] for row in child_values)
+                logic_area = values[2] - sum(row[2] for row in child_values)
+                block_area = values[3] - sum(row[3] for row in child_values)
+            else:
+                sram_area, logic_area, block_area = values[1], values[2], values[3]
+            categories = []
+            if logic_area > 0.001:
+                categories.append("logic")
+            if sram_area > 0.001:
+                categories.append("sram")
+            if block_area > 0.001:
+                categories.append("block")
+            return categories or ["block"]
+
+        mapping_specs = [
+            ("B_CPU_P", [("T0", 4, 1.00)]),
+            ("B_CPU_E", [("T0", 4, 1.00)]),
+            ("B_CPU_L3", [("T0", 1, 0.25), ("T1", 1, 0.75)]),
+            ("B_GPU_SHADER", [("T0", 6, 1.00)]),
+            ("B_GPU_L2", [("T1", 2, 1.00)]),
+            ("B_GPU", [("T0", 1, 0.70), ("T1", 1, 0.30)]),
+            ("B_NPU_TENSOR", [("T0", 4, 1.00), ("T1", 4, 1.00)]),
+            ("B_NPU_SRAM", [("T1", 8, 1.00)]),
+            ("B_NPU_DMA", [("T0", 1, 0.60), ("T1", 1, 0.40)]),
+            ("B_ISP_PIPE", [("T0", 2, 1.00), ("T1", 1, 1.00)]),
+            ("B_CV_DSP", [("T0", 1, 1.00)]),
+            ("B_VDEC", [("T0", 1, 1.00)]),
+            ("B_VENC", [("T0", 1, 1.00)]),
+            ("B_DPU", [("T0", 2, 1.00)]),
+            ("B_MODEM_DSP", [("T0", 2, 1.00)]),
+            ("B_MODEM_SRAM", [("T1", 4, 1.00)]),
+            ("B_MODEM_RF", [("T2", 1, 1.00)]),
+            ("B_SYS_CACHE", [("T1", 1, 1.00)]),
+            ("B_LPDDR_CTRL", [("T2", 4, 1.00)]),
+            ("B_NOC", [("T0", 1, 0.55), ("T1", 1, 0.30), ("T2", 1, 0.15)]),
+            ("B_DDR_PHY", [("T2", 4, 1.00)]),
+            ("B_UFS_PHY", [("T2", 1, 1.00)]),
+            ("B_USB_PCIE_PHY", [("T2", 1, 1.00)]),
+            ("B_MIPI_PHY", [("T2", 6, 1.00)]),
+            ("B_CRYPTO", [("T2", 1, 1.00)]),
+            ("B_SEC", [("T2", 1, 1.00)]),
+            ("B_PMU", [("T2", 1, 1.00)]),
+        ]
+        partition_rows: list[tuple[str, str, str, str, str, str, int, float]] = []
+        for component_id, placements in mapping_specs:
+            component_name = logical_by_id[component_id].name
+            for category in required_categories_for_seed(component_id):
+                partial_index = 0
+                full_copy_count = sum(count for _, count, share in placements if abs(share - 1.0) < 0.001)
+                is_split = not (full_copy_count == logical_by_id[component_id].logical_instance_count and all(abs(share - 1.0) < 0.001 for _, _, share in placements))
+                for tier_id, count, share in placements:
+                    partition_type = "partial" if is_split else "full"
+                    if partition_type == "partial":
+                        partial_index += 1
+                    partition_name = canonical_partition_name(component_name, category, tier_id, partition_type, partial_index)
+                    partition_rows.append((f"PP_{partition_name}", component_id, tier_id, partition_name, partition_type, category, count, share))
+        partitions = [
+            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, resource_category=category, physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {category} content of {logical_id} to {tier_id}.")
+            for id, logical_id, tier_id, name, ptype, category, count, ratio in partition_rows
+        ]
+        def category_area_for_seed(component_id: str, category: str) -> float:
+            values = logical_metric_values[component_id]
+            child_values = [logical_metric_values[child.id] for child in children_by_parent.get(component_id, []) if child.id in logical_metric_values]
+            index = {"sram": 1, "logic": 2, "block": 3}[category]
+            value = values[index] - sum(row[index] for row in child_values) if child_values else values[index]
+            return max(0.0, value)
+
+        partition_metric_values: dict[str, tuple[float, float, float, float, str]] = {}
+        rows_by_component_category: dict[tuple[str, str], list[tuple[str, str, str, str, str, str, int, float]]] = {}
+        for row in partition_rows:
+            rows_by_component_category.setdefault((row[1], row[5]), []).append(row)
+        for (component_id, category), rows in rows_by_component_category.items():
+            category_area = category_area_for_seed(component_id, category)
+            total_equivalent = sum(count * (1.0 if ptype == "full" else ratio) for _, _, _, _, ptype, _, count, ratio in rows) or 1.0
+            component_power = logical_metric_values[component_id][4]
+            category_count = len(required_categories_for_seed(component_id)) or 1
+            for partition_id, _logical_id, tier_id, _name, ptype, _category, count, ratio in rows:
+                equivalent = count * (1.0 if ptype == "full" else ratio)
+                share = equivalent / total_equivalent
+                logic_area = round(category_area * share, 3) if category == "logic" else 0.0
+                sram_area = round(category_area * share, 3) if category == "sram" else 0.0
+                block_area = round(category_area * share, 3) if category == "block" else 0.0
+                power = round(component_power * share / category_count, 3)
+                partition_metric_values[partition_id] = (logic_area, sram_area, block_area, power, f"{category}_{tier_id.lower()}")
         metrics: list[Metric] = []
         for component_id, (signals, sram_area, logic_area, block_area, power) in logical_metric_values.items():
             for name, value, unit, category, workload in [("signal_count_total", signals, "count", "logical", "nominal"), ("logic_area", logic_area, "mm2", "logical_area", "nominal"), ("sram_area", sram_area, "mm2", "logical_area", "nominal"), ("block_area", block_area, "mm2", "logical_area", "nominal"), ("power", power, "W", "power", "peak")]:
@@ -1858,5 +1899,5 @@ def get_import_template(background_tasks: BackgroundTasks, team: str | None = No
     return FileResponse(
         TEMPLATE_PATH,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename="soc_mapping_metrics_review_v7.xlsx",
+        filename="soc_mapping_metrics_review_v7_resource_category.xlsx",
     )

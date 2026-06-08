@@ -163,7 +163,7 @@ It includes:
 
 - 3 scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
 - 36 logical components across CPU, GPU, NPU, ISP, media, display, 5G modem, memory, NoC, IO/PHY, secure island, and always-on PMU
-- 35 physical partitions across compute, SRAM/cache, and IO/always-on tiers
+- 93 physical partitions across logic, SRAM, and block resource-category mappings
 - Metrics for signal count, logic/SRAM/block area, power, tier utilization, and shape descriptors
 
 Demo seeding is controlled by:

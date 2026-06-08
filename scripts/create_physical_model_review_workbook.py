@@ -9,7 +9,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "templates" / "soc_mapping_metrics_review_v7.xlsx"
+OUTPUT = ROOT / "templates" / "soc_mapping_metrics_review_v7_resource_category.xlsx"
 
 
 SHEETS: dict[str, list[list[object]]] = {
@@ -20,7 +20,7 @@ SHEETS: dict[str, list[list[object]]] = {
         ["Sheet", "Meaning"],
         ["module_definitions", "Reusable RTL/IP/block master definitions."],
         ["logical_components", "Architecture-level logical hierarchy. Repeated use is represented by logical_instance_count."],
-        ["physical_partitions", "Minimal physical partition table from logical components to scenario/tier placement. Ratio is logical content share; physical_instance_count shows how many physical copies are realized there. Details live in metrics."],
+        ["physical_partitions", "Minimal physical partition table from logical components to scenario/tier placement. resource_category splits logic, SRAM, and block/hard-macro content. Details live in metrics."],
         ["metrics", "Unified metric table. Metrics can attach to logical_component, physical_partition, tier, or scenario."],
         ["metric_dictionary", "Allowed metric names, value types, units, categories, and applicable subject types."],
         ["coverage_checks", "Review helper showing whether physical partition rows close against logical counts and ratios."],
@@ -28,7 +28,7 @@ SHEETS: dict[str, list[list[object]]] = {
         ["Design Rules"],
         ["1", "Do not expand logical components into _0/_1/_2 rows for repeated instances."],
         ["2", "Use physical_instance_count to show how many physical copies this partition realizes on the tier."],
-        ["3", "Use partition_ratio to describe how much logical content is carried by the partition. For a repeated full module, ratio can be physical_instance_count / logical_instance_count."],
+        ["3", "Use content_share to describe how much content is carried by a partial partition. Full partitions always use content_share=1."],
         ["4", "If one logical module is split across dies, create multiple physical_partitions with the same logical_component_id."],
         ["5", "Keep logical_components compact. Store signal count and area breakdowns as logical_component metrics."],
         ["6", "For early-stage logical area, use logic_area, sram_area, and block_area only."],
@@ -65,15 +65,15 @@ SHEETS: dict[str, list[list[object]]] = {
         ["B5", "P001", "B0", "MD_DDR_PHY", "DDR_PHY", "phy", "phy_analog", "Memory IO", "SOC_TOP/DDR_PHY", 1, "Fixed bottom-tier PHY."],
     ],
     "physical_partitions": [
-        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count", "partition_ratio", "description"],
-        ["PP_NPU_MAC_T0_TALL", "S2", "B30", "T0", "NPU_MAC_TOP_TALL", "full", 1, 0.25, "One of four logical NPU_MAC_ARRAY copies is implemented as this top-tier physical partition. Shape details live in metrics if needed."],
-        ["PP_NPU_MAC_T0_WIDE", "S2", "B30", "T0", "NPU_MAC_TOP_WIDE", "full", 1, 0.25, "A second NPU_MAC_ARRAY copy is implemented on the same top tier, but can use a different physical shape metric."],
-        ["PP_NPU_MAC_T1_STD", "S2", "B30", "T1", "NPU_MAC_MID_STD", "full", 2, 0.50, "Two of four NPU_MAC_ARRAY copies are implemented by this middle-tier partition style."],
-        ["PP_NPU_SRAM_T1", "S2", "B8", "T1", "NPU_SRAM_BANK_MID", "full", 2, 1.00, "Both logical SRAM bank copies are carried by this middle-tier partition."],
-        ["PP_GPU_LOGIC_T0", "S2", "B2", "T0", "GPU_SHADER_LOGIC_TOP", "partial", 1, 0.65, "GPU logic-side partition on top tier. Logic/SRAM/block area details live in metrics."],
-        ["PP_GPU_CACHE_T1", "S2", "B2", "T1", "GPU_CACHE_SRAM_MID", "partial", 1, 0.35, "GPU cache/SRAM-side partition on middle tier. Logic/SRAM/block area details live in metrics."],
-        ["PP_NPU_TOP_GLUE_T0", "S2", "B3", "T0", "NPU_TOP_GLUE", "partial", 1, 1.00, "Parent glue/control/interconnect should be modeled as a logical residual child in the current schema."],
-        ["PP_DDR_PHY_T2", "S2", "B5", "T2", "DDR_PHY_BOTTOM", "full", 1, 1.00, "Fixed PHY partition on bottom tier."],
+        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "resource_category", "partition_type", "physical_instance_count", "content_share", "description"],
+        ["PP_NPU_MAC_ARRAY_logic_T0", "S2", "B30", "T0", "NPU_MAC_ARRAY_logic_T0", "logic", "full", 4, 1.00, "All four MAC logic copies are implemented on the top tier."],
+        ["PP_NPU_MAC_ARRAY_block_T0", "S2", "B30", "T0", "NPU_MAC_ARRAY_block_T0", "block", "full", 4, 1.00, "All four MAC block-area copies are implemented on the top tier."],
+        ["PP_NPU_SRAM_BANK_logic_T1", "S2", "B8", "T1", "NPU_SRAM_BANK_logic_T1", "logic", "full", 2, 1.00, "SRAM peripheral/control logic on the memory tier."],
+        ["PP_NPU_SRAM_BANK_sram_T1", "S2", "B8", "T1", "NPU_SRAM_BANK_sram_T1", "sram", "full", 2, 1.00, "Both logical SRAM bank copies are carried by this middle-tier partition."],
+        ["PP_NPU_SRAM_BANK_block_T1", "S2", "B8", "T1", "NPU_SRAM_BANK_block_T1", "block", "full", 2, 1.00, "Block-level SRAM-bank implementation area on the memory tier."],
+        ["PP_GPU_TOP_logic_T0_P1", "S2", "B2", "T0", "GPU_TOP_logic_T0_P1", "logic", "partial", 1, 0.65, "GPU residual/self logic-side partition on top tier."],
+        ["PP_GPU_TOP_logic_T1_P2", "S2", "B2", "T1", "GPU_TOP_logic_T1_P2", "logic", "partial", 1, 0.35, "GPU residual/self logic-side partition on memory tier."],
+        ["PP_DDR_PHY_block_T2", "S2", "B5", "T2", "DDR_PHY_block_T2", "block", "full", 1, 1.00, "Fixed PHY hard/block content on bottom tier."],
     ],
     "metrics": [
         ["id", "scenario_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
@@ -85,13 +85,13 @@ SHEETS: dict[str, list[list[object]]] = {
         ["M_LOG_B8_LOGIC_AREA", "S2", "logical_component", "B8", "logic_area", 0.2, "mm2", "logical_area", "number", "typical", "nominal", "draft", "Peripheral/control logic area.", "2026-05-27"],
         ["M_LOG_B8_SRAM_AREA", "S2", "logical_component", "B8", "sram_area", 7.6, "mm2", "logical_area", "number", "typical", "nominal", "draft", "SRAM macro area estimate.", "2026-05-27"],
         ["M_LOG_B8_BLOCK_AREA", "S2", "logical_component", "B8", "block_area", 8.2, "mm2", "logical_area", "number", "typical", "nominal", "draft", "Block area estimate including early overhead.", "2026-05-27"],
-        ["M_PART_MAC_T0_TALL_LOGIC_AREA", "S2", "physical_partition", "PP_NPU_MAC_T0_TALL", "logic_area", 2.8, "mm2", "implementation_area", "number", "typical", "nominal", "review", "Implementation-level logic area for this physical partition.", "2026-05-27"],
-        ["M_PART_MAC_T0_TALL_SHAPE", "S2", "physical_partition", "PP_NPU_MAC_T0_TALL", "shape_type", "tall_rectangle", "", "physical_shape", "text", "typical", "nominal", "draft", "Optional shape descriptor, kept out of physical_partitions.", "2026-05-27"],
-        ["M_PART_MAC_T0_WIDE_SHAPE", "S2", "physical_partition", "PP_NPU_MAC_T0_WIDE", "shape_type", "wide_rectangle", "", "physical_shape", "text", "typical", "nominal", "draft", "Same logical module and die, different shape metric.", "2026-05-27"],
-        ["M_PART_MAC_T1_LOGIC_AREA", "S2", "physical_partition", "PP_NPU_MAC_T1_STD", "logic_area", 6.2, "mm2", "implementation_area", "number", "typical", "nominal", "review", "Implementation logic area for this middle-tier partition.", "2026-05-27"],
-        ["M_PART_GPU_LOGIC_LOGIC_AREA", "S2", "physical_partition", "PP_GPU_LOGIC_T0", "logic_area", 12.0, "mm2", "implementation_area", "number", "typical", "nominal", "draft", "Logic-side area for GPU top-tier partition.", "2026-05-27"],
-        ["M_PART_GPU_CACHE_SRAM_AREA", "S2", "physical_partition", "PP_GPU_CACHE_T1", "sram_area", 6.7, "mm2", "implementation_area", "number", "typical", "nominal", "draft", "SRAM/cache-side area for GPU middle-tier partition.", "2026-05-27"],
-        ["M_PART_GPU_LOGIC_POWER", "S2", "physical_partition", "PP_GPU_LOGIC_T0", "power", 3.6, "W", "power", "number", "typical", "peak", "draft", "Power estimate for GPU logic partition.", "2026-05-27"],
+        ["M_PART_MAC_LOGIC_AREA", "S2", "physical_partition", "PP_NPU_MAC_ARRAY_logic_T0", "logic_area", 10.6, "mm2", "implementation_area", "number", "typical", "nominal", "review", "Implementation-level logic area for MAC logic partition.", "2026-05-27"],
+        ["M_PART_MAC_LOGIC_SHAPE", "S2", "physical_partition", "PP_NPU_MAC_ARRAY_logic_T0", "shape_type", "logic_array", "", "physical_shape", "text", "typical", "nominal", "draft", "Optional shape descriptor, kept out of physical_partitions.", "2026-05-27"],
+        ["M_PART_MAC_BLOCK_AREA", "S2", "physical_partition", "PP_NPU_MAC_ARRAY_block_T0", "block_area", 11.8, "mm2", "implementation_area", "number", "typical", "nominal", "review", "Implementation block area for MAC array.", "2026-05-27"],
+        ["M_PART_SRAM_SRAM_AREA", "S2", "physical_partition", "PP_NPU_SRAM_BANK_sram_T1", "sram_area", 7.6, "mm2", "implementation_area", "number", "typical", "nominal", "draft", "SRAM area for NPU SRAM bank partition.", "2026-05-27"],
+        ["M_PART_GPU_LOGIC_AREA_TOP", "S2", "physical_partition", "PP_GPU_TOP_logic_T0_P1", "logic_area", 12.0, "mm2", "implementation_area", "number", "typical", "nominal", "draft", "Logic-side area for GPU top-tier partition.", "2026-05-27"],
+        ["M_PART_GPU_LOGIC_AREA_MID", "S2", "physical_partition", "PP_GPU_TOP_logic_T1_P2", "logic_area", 6.7, "mm2", "implementation_area", "number", "typical", "nominal", "draft", "Logic-side area for GPU middle-tier partition.", "2026-05-27"],
+        ["M_PART_GPU_LOGIC_POWER", "S2", "physical_partition", "PP_GPU_TOP_logic_T0_P1", "power", 3.6, "W", "power", "number", "typical", "peak", "draft", "Power estimate for GPU logic partition.", "2026-05-27"],
         ["M_TIER_T0_POWER", "S2", "tier", "T0", "power", 7.6, "W", "power", "number", "typical", "peak", "draft", "Tier-level rollup or target.", "2026-05-27"],
         ["M_SCENARIO_AREA", "S2", "scenario", "S2", "area", 74.6, "mm2", "physical", "number", "typical", "nominal", "draft", "Scenario-level summary estimate.", "2026-05-27"],
     ],
@@ -112,27 +112,28 @@ SHEETS: dict[str, list[list[object]]] = {
     "relationship_examples": [
         ["Question", "How v7 represents it"],
         ["Logic does not expand repeated instances", "logical_components has one B30 NPU_MAC_ARRAY row with logical_instance_count=4."],
-        ["Physical count is explicit", "physical_partitions maps B30 into physical_instance_count 1 + 1 + 2 = 4 across T0/T0/T1."],
+        ["Physical count is explicit", "physical_partitions maps B30 into physical_instance_count 4 for each required resource category."],
         ["Logical table stays compact", "Signal count and logical area breakdowns live in metrics with subject_type=logical_component."],
         ["Logical area uses three explicit metrics", "logic_area, sram_area, and block_area avoid ambiguous overlap with implementation-level area."],
-        ["Physical partition ratio is simple", "B30 NPU_MAC_ARRAY maps to three physical_partitions with ratios 0.25, 0.25, and 0.50, matching 1/4, 1/4, and 2/4 physical counts."],
-        ["Same die has different physical styles", "PP_NPU_MAC_T0_TALL and PP_NPU_MAC_T0_WIDE are two partition rows; shape details are optional metrics."],
-        ["One logical module is partitioned across dies", "B2 GPU_TOP maps to PP_GPU_LOGIC_T0 and PP_GPU_CACHE_T1 with partition_ratio 0.65 and 0.35."],
-        ["Residual subsystem partition", "B3 NPU_TOP can have PP_NPU_TOP_RESIDUAL_T0 for glue/control/interconnect not represented by child modules."],
+        ["Resource categories close independently", "logic, sram, and block rows each close equivalent instance coverage separately."],
+        ["Same die can still have different physical styles", "Use multiple partial rows with generated suffixes and put shape details in metrics."],
+        ["One logical module is partitioned across dies", "B2 GPU_TOP logic maps to top and middle tiers with content_share 0.65 and 0.35."],
+        ["Residual subsystem partition", "Parent residual/self area is derived from parent total metrics minus direct child metrics; no parent_residual component row is stored."],
         ["Metrics avoid overlap", "The same metric_name can appear at logical_component, physical_partition, tier, or scenario level; subject_type defines meaning."],
     ],
     "coverage_checks": [
-        ["scenario_id", "logical_component_id", "logical_name", "logical_instance_count", "sum_physical_instance_count", "sum_partition_ratio", "count_status", "ratio_status", "note"],
-        ["S2", "B30", "NPU_MAC_ARRAY", 4, '=SUMIFS(physical_partitions!$G$2:$G$100,physical_partitions!$B$2:$B$100,A2,physical_partitions!$C$2:$C$100,B2)', '=SUMIFS(physical_partitions!$H$2:$H$100,physical_partitions!$B$2:$B$100,A2,physical_partitions!$C$2:$C$100,B2)', '=IF(D2=E2,"OK","CHECK")', '=IF(ABS(F2-1)<0.0001,"OK","CHECK")', "Repeated full module: four logical copies are realized as 1 + 1 + 2 physical copies across tiers."],
-        ["S2", "B8", "NPU_SRAM_BANK", 2, '=SUMIFS(physical_partitions!$G$2:$G$100,physical_partitions!$B$2:$B$100,A3,physical_partitions!$C$2:$C$100,B3)', '=SUMIFS(physical_partitions!$H$2:$H$100,physical_partitions!$B$2:$B$100,A3,physical_partitions!$C$2:$C$100,B3)', '=IF(D3=E3,"OK","CHECK")', '=IF(ABS(F3-1)<0.0001,"OK","CHECK")', "Two SRAM bank copies are both implemented on T1."],
-        ["S2", "B2", "GPU_TOP", 1, '=SUMIFS(physical_partitions!$G$2:$G$100,physical_partitions!$B$2:$B$100,A4,physical_partitions!$C$2:$C$100,B4)', '=SUMIFS(physical_partitions!$H$2:$H$100,physical_partitions!$B$2:$B$100,A4,physical_partitions!$C$2:$C$100,B4)', '=IF(D4=E4,"OK","CHECK")', '=IF(ABS(F4-1)<0.0001,"OK","CHECK")', "Single logical subsystem split by content ratio across two tiers."],
-        ["S2", "B3", "NPU_TOP", 1, '=SUMIFS(physical_partitions!$G$2:$G$100,physical_partitions!$B$2:$B$100,A5,physical_partitions!$C$2:$C$100,B5)', '=SUMIFS(physical_partitions!$H$2:$H$100,physical_partitions!$B$2:$B$100,A5,physical_partitions!$C$2:$C$100,B5)', '=IF(D5=E5,"OK","CHECK")', '=IF(ABS(F5-1)<0.0001,"OK","CHECK")', "Residual parent partition only covers glue/control not represented by child rows."],
-        ["S2", "B5", "DDR_PHY", 1, '=SUMIFS(physical_partitions!$G$2:$G$100,physical_partitions!$B$2:$B$100,A6,physical_partitions!$C$2:$C$100,B6)', '=SUMIFS(physical_partitions!$H$2:$H$100,physical_partitions!$B$2:$B$100,A6,physical_partitions!$C$2:$C$100,B6)', '=IF(D6=E6,"OK","CHECK")', '=IF(ABS(F6-1)<0.0001,"OK","CHECK")', "Fixed PHY has one logical copy and one physical partition."],
+        ["scenario_id", "logical_component_id", "resource_category", "logical_name", "logical_instance_count", "equivalent_instances", "status", "note"],
+        ["S2", "B30", "logic", "NPU_MAC_ARRAY", 4, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A2)*(physical_partitions!$C$2:$C$100=B2)*(physical_partitions!$F$2:$F$100=C2)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E2=F2,"OK","CHECK")', "MAC logic closes to four copies."],
+        ["S2", "B30", "block", "NPU_MAC_ARRAY", 4, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A3)*(physical_partitions!$C$2:$C$100=B3)*(physical_partitions!$F$2:$F$100=C3)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E3=F3,"OK","CHECK")', "MAC block content closes separately."],
+        ["S2", "B8", "sram", "NPU_SRAM_BANK", 2, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A4)*(physical_partitions!$C$2:$C$100=B4)*(physical_partitions!$F$2:$F$100=C4)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E4=F4,"OK","CHECK")', "SRAM content closes to two copies."],
+        ["S2", "B2", "logic", "GPU_TOP", 1, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A5)*(physical_partitions!$C$2:$C$100=B5)*(physical_partitions!$F$2:$F$100=C5)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(ABS(E5-F5)<0.0001,"OK","CHECK")', "GPU residual/self logic is split by content_share across two tiers."],
+        ["S2", "B5", "block", "DDR_PHY", 1, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A6)*(physical_partitions!$C$2:$C$100=B6)*(physical_partitions!$F$2:$F$100=C6)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E6=F6,"OK","CHECK")', "Fixed PHY block content has one full physical partition."],
     ],
 }
 
 
 VALIDATION_LISTS = {
+    "resource_category": ["logic", "sram", "block"],
     "partition_type": ["full", "partial"],
     "subject_type": ["logical_component", "physical_partition", "tier", "scenario"],
     "value_type": ["number", "text", "boolean"],
@@ -178,7 +179,8 @@ def add_list_validation(ws, range_address: str, values: list[str]) -> None:
 
 def add_validations(wb: Workbook) -> None:
     partition_ws = wb["physical_partitions"]
-    add_list_validation(partition_ws, "F2:F100", VALIDATION_LISTS["partition_type"])
+    add_list_validation(partition_ws, "F2:F100", VALIDATION_LISTS["resource_category"])
+    add_list_validation(partition_ws, "G2:G100", VALIDATION_LISTS["partition_type"])
 
     metrics_ws = wb["metrics"]
     add_list_validation(metrics_ws, "C2:C200", VALIDATION_LISTS["subject_type"])

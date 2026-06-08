@@ -367,7 +367,7 @@ The seeded demo is `Orion X1 Mobile SoC`.
 It includes:
 
 - 36 logical components
-- 35 physical partitions
+- 93 physical partitions
 - 3 scenarios
 - 3 tiers in the 3DIC scenario
 

@@ -65,6 +65,7 @@ cd $env:PROJECT_ROOT
 - Added `templates/soc_mapping_metrics_review_v5.xlsx` after simplifying `physical_implementations` to 11 mapping-only columns. Redundant fields such as `module_definition_id`, indexes, and partition labels were removed.
 - Added `templates/soc_mapping_metrics_review_v6.xlsx` after renaming the mapping table to `physical_partitions`, replacing instance counts with simple `partition_ratio`, and moving all detailed implementation quantities into `metrics` with `subject_type=physical_partition`.
 - Added `templates/soc_mapping_metrics_review_v7.xlsx` after restoring explicit physical partition quantity as `physical_instance_count` while keeping `partition_ratio` for logical content share. V7 also adds a `coverage_checks` sheet so repeated logical modules can be reviewed against physical counts and ratio closure.
+- Added `templates/soc_mapping_metrics_review_v7_resource_category.xlsx` as the current import template after resource-category mapping split physical partitions into `logic`, `sram`, and `block` rows.
 - Updated the FastAPI/SQLite platform code to use the V7 structure:
   - `ModuleDefinition`
   - `LogicalComponent`
@@ -73,12 +74,12 @@ cd $env:PROJECT_ROOT
 - Added `GET /api/module-definitions` and `GET /api/physical-partitions`.
 - Updated existing dashboard, components, tree, tiers, metrics, and import APIs to read/write V7 data while preserving the frontend page flow.
 - Updated the frontend hierarchy and tier pages so logical hierarchy, physical instance count, partition ratio, and metric details come from API data.
-- Updated Excel import to accept `soc_mapping_metrics_review_v7.xlsx` and validate the V7 sheets.
+- Updated Excel import to accept `soc_mapping_metrics_review_v7_resource_category.xlsx` and validate the current V7 resource-category sheets.
 - Replaced the small V7 seed with a realistic flagship mobile SoC demo:
   - Project: `Orion X1 Mobile SoC`
   - Scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
   - 36 logical components covering CPU, GPU, NPU, ISP, media, display, 5G modem, memory subsystem, NoC, IO/PHY, secure island, and always-on PMU
-  - 35 physical partitions across compute, SRAM/cache, and IO/always-on tiers
+  - 93 physical partitions across logic, SRAM, and block resource-category mappings
   - Logical and physical metrics for signal count, logic/SRAM/block area, power, utilization, and shape descriptors
 - Phase-1 close-out updates:
   - Updated `AGENTS.md` to reflect the current V7 model instead of the original `ComponentInstance` / `ComponentMetric` draft.
@@ -202,7 +203,7 @@ npm run build
 
 ```text
 components: 36
-physical_partitions: 35
+physical_partitions: 93
 dashboard: total_area=119.0, total_power=45.3, total_sram_area=72.9, phy_area=19.3
 quality_issues: 0
 ```
@@ -210,15 +211,15 @@ quality_issues: 0
 
 ```text
 AI Team components: 4
-AI Team physical_partitions: 5
+AI Team physical_partitions: 13
 AI Team quality_issues: 0
 ```
 - Team workbook round-trip passed in `scripts/check_phase1.py`:
 
 ```text
 AI Team imported logical_components: 4
-AI Team imported physical_partitions: 5
-AI Team imported metrics: 45
+AI Team imported physical_partitions: 13
+AI Team imported metrics: 85
 ```
 - Component detail save smoke check passed:
 
@@ -268,6 +269,24 @@ dangerous PUT removing T0 from S2 -> 409 impact errors
 browser Save on 实现方案 page -> saved implementation v2
 ```
 
+- Resource-category demo seed close-out passed:
+
+```text
+components: 36
+physical_partitions: 93
+quality_issues: 0
+AI Team physical_partitions: 13
+AI Team imported metrics: 85
+```
+
+- Current static import template passed:
+
+```text
+soc_mapping_metrics_review_v7_resource_category.xlsx
+physical_partitions: 8
+metrics: 17
+```
+
 ## Startup Commands
 
 Start backend:
@@ -306,10 +325,9 @@ npm install --fetch-retries=5 --fetch-retry-factor=2 --fetch-retry-mintimeout=20
 - Old local working copies may remain locked while an existing Codex workspace or terminal is attached to them. Close old sessions before deleting them.
 - This MVP intentionally does not include Docker, PostgreSQL, Alembic, complex auth, AI features, auto partition optimization, or thermal surrogate modeling.
 
-## Suggested Next Steps
+## Suggested Phase-2 Next Steps
 
-- Add simple create/update APIs after the read-only flow is stable.
 - Split the single `App.tsx` prototype into page and component files.
-- Add basic backend API tests for the seven read-only endpoints.
+- Add dedicated backend tests for scenario implementation persistence and resource-category closure.
 - Extend Web maintenance from physical partitions into friendly logical metric cards.
 - Add a guided mapping wizard on top of the same component detail API.
