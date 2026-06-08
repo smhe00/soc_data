@@ -39,6 +39,10 @@ Core tables:
 - `logical_component`
 - `process_node`
 - `tier`
+- `scenario_implementation`
+- `implementation_tier`
+- `implementation_interface`
+- `implementation_package_escape`
 - `physical_partition`
 - `metric`
 - `responsibility_assignment`
@@ -88,6 +92,7 @@ Fields:
 - `scenario_id`
 - `logical_component_id`
 - `tier_id`
+- `resource_category`: `logic`, `sram`, or `block`
 - `partition_name`
 - `partition_type`: `full` or `partial`
 - `physical_instance_count`
@@ -95,6 +100,10 @@ Fields:
 - `description`
 
 Use `physical_instance_count` for how many physical copies are realized on that tier. Use `content_share` only for partial content split; full partitions always have `content_share = 1`. Do not ask users to fill `instance_share`; compute it from `physical_instance_count / logical_instance_count`.
+
+Logic, SRAM, and block/hard-macro content can map independently. Equivalent instance closure is checked per `(logical_component, scenario, resource_category)`, not across all resource categories combined. Existing coarse mappings can remain `block` until a user refines them into `logic` and `sram` rows.
+
+Mapping rows should be shown in fixed category order: `logic`, `sram`, then `block`. Users should not manually edit physical partition ID/name in the daily UI. Generate the base name as `logicalName_resourceCategory_tier`; `full` rows use that base directly, and `partial` rows append `_P1`, `_P2`, etc. Multiple partial rows on the same tier are allowed and should be numbered per resource category/tier.
 
 Parent-level self/glue logic is residual data derived from parent total metrics minus direct child metrics. Do not store residual as a logical component row.
 
@@ -215,6 +224,13 @@ Physical partition edits must use the selected scenario as the working context. 
 
 The frontend also includes a scenario-level `实现方案` prototype. Treat it as implementation-form definition for `scenario`, not as logical hierarchy or physical partition maintenance. One project can have multiple scenarios, and each scenario can represent a monolithic, 2.5D, or W2W 3DIC implementation form.
 
+Implementation definitions are persisted in `scenario_implementation`, `implementation_tier`, `implementation_interface`, and `implementation_package_escape`. The API boundary is:
+
+- `GET /api/scenarios/{scenario_id}/implementation`
+- `PUT /api/scenarios/{scenario_id}/implementation`
+
+If no saved implementation exists, the GET endpoint synthesizes starting tier definitions from `tier` rows for that scenario. Saves are versioned. Keep tier-structure edits conservative: if `physical_partition` rows already use a tier in the same scenario, the backend must block saves that remove/rename that tier or reorder it.
+
 Implementation-definition rules to preserve:
 
 - single-layer monolithic scenarios are valid and do not have inter-layer interfaces
@@ -224,7 +240,7 @@ Implementation-definition rules to preserve:
 - TSV parameters are side-specific; `Back-to-Back` can require independent upper-side and lower-side TSV pitch/keep-out
 - bottom-die package escape is derived from the last die-to-die orientation; if the bottom die back side faces bumps, represent it as a derived `Tn-BUMP` TSV interface
 - cross-section Face/Back surface markers are derived from interface orientation and should remain synchronized with orientation edits
-- do not add these detailed implementation-interface fields to the SQLite schema until the UI terminology and data model are intentionally promoted beyond the prototype
+- do not merge implementation-form storage with physical partition storage; partitions describe logical-to-tier mapping, while implementation tables describe scenario stack/interface intent
 
 ## Development Principles
 

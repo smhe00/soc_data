@@ -129,10 +129,25 @@ cd $env:PROJECT_ROOT
   - Component detail saves no longer hard-code `S2`; new and updated physical partitions are written for the selected scenario.
   - Backend dashboard now accepts `?scenario_id=...`.
   - Backend import validation now rejects a `physical_partition` whose `tier_id` belongs to a different scenario.
+- Added resource-category-specific physical partition mapping:
+  - Added `physical_partition.resource_category` with `logic`, `sram`, and `block` values.
+  - Component detail mapping now edits category per partition row.
+  - Equivalent instance closure is now checked independently per resource category.
+  - Existing coarse mappings default to `block` for compatibility until refined into logic/SRAM/block rows.
+  - Import templates and workbook validation include `resource_category`.
+  - Mapping rows sort as Logic, SRAM, then Block.
+  - Partition ID/name are generated from logical component name, resource category, tier, and partial index; users no longer edit ID/name directly.
+  - Multiple partial rows can target the same tier and are numbered independently per resource category/tier.
 - Improved implementation and partition editing ergonomics:
   - Added compact field labels, segmented controls, unit-number inputs, and layer count stepper controls.
   - Added Face/Back-linked cross-section surface markers so tier surface lines reflect chained interface orientation.
   - Added current-scenario empty states on the `3D Tier` page.
+- Persisted scenario implementation definitions:
+  - Added `scenario_implementation`, `implementation_tier`, `implementation_interface`, and `implementation_package_escape` tables.
+  - Added `GET /api/scenarios/{scenario_id}/implementation` and `PUT /api/scenarios/{scenario_id}/implementation`.
+  - The implementation page now loads saved scenario implementation data and saves versioned drafts.
+  - If no saved implementation exists, the backend synthesizes starting tier definitions from that scenario's `tier` rows.
+  - Backend impact checks block dangerous saves when physical partitions already reference a tier that would be removed, renamed, or reordered.
 - Added frontend display themes:
   - Light/dark theme toggle in the header.
   - Theme preference is stored in browser `localStorage`.
@@ -229,6 +244,28 @@ npm run build
 
 ```sh
 .venv/bin/python -m py_compile backend/main.py
+```
+
+- Backend Python syntax check passed after adding scenario implementation persistence:
+
+```sh
+.venv/bin/python -m py_compile backend/main.py
+```
+
+- Frontend production build passed after wiring the implementation page to the persistence API:
+
+```sh
+cd frontend
+npm run build
+```
+
+- Scenario implementation API smoke checks passed:
+
+```text
+GET /api/scenarios/S2/implementation -> synthesized/saved tier definitions
+PUT /api/scenarios/S2/implementation -> saved implementation v1
+dangerous PUT removing T0 from S2 -> 409 impact errors
+browser Save on 实现方案 page -> saved implementation v2
 ```
 
 ## Startup Commands

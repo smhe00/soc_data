@@ -113,6 +113,7 @@ class PhysicalPartition(SQLModel, table=True):
     tier_id: str = Field(foreign_key="tier.id")
     partition_name: str
     partition_type: str
+    resource_category: str = "block"
     physical_instance_count: int = 1
     partition_ratio: float = 1
     content_share: float = 1
@@ -148,11 +149,55 @@ class ResponsibilityAssignment(SQLModel, table=True):
     can_write: bool = True
 
 
+class ScenarioImplementation(SQLModel, table=True):
+    scenario_id: str = Field(primary_key=True, foreign_key="scenario.id")
+    implementation_type: str
+    status: str = "draft"
+    version: int = 1
+    updated_at: str
+
+
+class ImplementationTier(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    scenario_id: str = Field(foreign_key="scenario.id")
+    tier_id: str
+    tier_index: int
+    name: str
+    process: str
+    role: str
+    thickness_um: float = 0
+
+
+class ImplementationInterface(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    scenario_id: str = Field(foreign_key="scenario.id")
+    from_tier_id: str
+    to_tier_id: str
+    orientation: str
+    interconnect: str
+    hb_pitch_um: float = 0
+    upper_tsv_pitch_um: float = 0
+    upper_tsv_keepout_um: float = 0
+    lower_tsv_pitch_um: float = 0
+    lower_tsv_keepout_um: float = 0
+    description: str = ""
+
+
+class ImplementationPackageEscape(SQLModel, table=True):
+    scenario_id: str = Field(primary_key=True, foreign_key="scenario.id")
+    bottom_tier_id: str
+    requires_tsv: bool = False
+    pitch_um: float = 0
+    keepout_um: float = 0
+    description: str = ""
+
+
 class PartitionInput(BaseModel):
     id: str
     tier_id: str
     partition_name: str
     partition_type: str
+    resource_category: str = "block"
     physical_instance_count: int
     content_share: float | None = None
     partition_ratio: float | None = None
@@ -164,6 +209,44 @@ class ComponentDetailUpdate(BaseModel):
     team: str | None = None
     logical_instance_count: int
     partitions: list[PartitionInput]
+
+
+class ImplementationTierInput(BaseModel):
+    id: str
+    name: str
+    process: str
+    role: str
+    thickness_um: float
+
+
+class ImplementationInterfaceInput(BaseModel):
+    id: str
+    from_tier_id: str
+    to_tier_id: str
+    orientation: str
+    interconnect: str
+    hb_pitch_um: float = 0
+    upper_tsv_pitch_um: float = 0
+    upper_tsv_keepout_um: float = 0
+    lower_tsv_pitch_um: float = 0
+    lower_tsv_keepout_um: float = 0
+    description: str = ""
+
+
+class ImplementationPackageEscapeInput(BaseModel):
+    bottom_tier_id: str
+    requires_tsv: bool = False
+    pitch_um: float = 0
+    keepout_um: float = 0
+    description: str = ""
+
+
+class ScenarioImplementationUpdate(BaseModel):
+    implementation_type: str
+    status: str = "draft"
+    tiers: list[ImplementationTierInput]
+    interfaces: list[ImplementationInterfaceInput]
+    package_escape: ImplementationPackageEscapeInput
 
 
 app = FastAPI(title="SoC Cross-Die Database API", version="0.2.0")
@@ -198,6 +281,8 @@ def ensure_sqlite_schema_compatibility() -> None:
                     "SET content_share = CASE WHEN partition_type = 'full' THEN 1 ELSE partition_ratio END"
                 )
             )
+        if "resource_category" not in partition_columns:
+            connection.execute(text("ALTER TABLE physicalpartition ADD COLUMN resource_category VARCHAR DEFAULT 'block'"))
         connection.execute(text("UPDATE physicalpartition SET partition_type = 'partial' WHERE partition_type = 'residual'"))
         connection.execute(
             text(
@@ -425,7 +510,7 @@ def seed_data() -> None:
             ("PP_PMU_T2", "B_PMU", "T2", "AON_PMU_SENSOR_BOTTOM", "full", 1, 1.00),
         ]
         partitions = [
-            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {logical_id} to {tier_id}.")
+            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, resource_category="block", physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {logical_id} to {tier_id}.")
             for id, logical_id, tier_id, name, ptype, count, ratio in partition_rows
         ]
 
@@ -536,8 +621,33 @@ def normalized_content_share(partition_type: str, value: float | None) -> float:
     return float(value if value is not None else 1.0)
 
 
+def normalized_resource_category(value: str | None) -> str:
+    return value if value in ALLOWED_PARTITION_RESOURCE_CATEGORIES else "block"
+
+
 def partition_equivalent_instances(partition: PhysicalPartition) -> float:
     return partition.physical_instance_count * normalized_content_share(partition.partition_type, partition.content_share)
+
+
+def canonical_partition_name(component_name: str, category: str, tier_id: str, partition_type: str, partial_index: int = 0) -> str:
+    base_name = f"{component_name}_{category}_{tier_id}"
+    return f"{base_name}_P{partial_index}" if partition_type == "partial" else base_name
+
+
+def component_required_resource_categories(session: Session, component: LogicalComponent, scenario_id: str) -> set[str]:
+    metrics = metrics_for(session, scenario_id, "logical_component", component.id)
+    area_summary = logical_area_summary(session, component, scenario_id)
+    metric_names = {
+        "logic": "residual_logic_area" if area_summary["has_children"] else "logic_area",
+        "sram": "residual_sram_area" if area_summary["has_children"] else "sram_area",
+        "block": "residual_block_area" if area_summary["has_children"] else "block_area",
+    }
+    categories: set[str] = set()
+    for category, metric_name in metric_names.items():
+        value = area_summary[metric_name] if area_summary["has_children"] else metric_number(metrics, metric_name)
+        if value > 0:
+            categories.add(category)
+    return categories or {"block"}
 
 
 def is_global_team(team: str | None) -> bool:
@@ -609,6 +719,7 @@ def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, An
         "tier_id": partition.tier_id,
         "partition_name": partition.partition_name,
         "partition_type": partition.partition_type,
+        "resource_category": normalized_resource_category(partition.resource_category),
         "physical_instance_count": partition.physical_instance_count,
         "content_share": content_share,
         "instance_share": round(partition.physical_instance_count / logical_count, 4) if logical_count else 0,
@@ -659,7 +770,11 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
     confidence_order = {"approved": 0, "review": 1, "draft": 2}
     confidence = min((metric.confidence for metric in metrics.values()), key=lambda item: confidence_order.get(item, 9), default="draft")
     partition_rows = [partition_ui(session, partition) for partition in partitions]
-    physical_instance_count = round(sum(row["physical_instance_count"] * row["content_share"] for row in partition_rows), 4)
+    equivalent_by_category = {
+        category: round(sum(row["physical_instance_count"] * row["content_share"] for row in partition_rows if row["resource_category"] == category), 4)
+        for category in sorted(ALLOWED_PARTITION_RESOURCE_CATEGORIES)
+    }
+    physical_instance_count = max(equivalent_by_category.values(), default=0)
     instance_share = round(physical_instance_count / component.logical_instance_count, 4) if component.logical_instance_count else 0
     block_area = metric_number(metrics, "block_area")
     if not block_area:
@@ -677,6 +792,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "owner_team": component.owner_team,
         "visibility_level": component.visibility_level,
         "physical_instance_count": physical_instance_count,
+        "equivalent_instances_by_category": equivalent_by_category,
         "instance_share": instance_share,
         "partition_ratio": instance_share,
         "signal_count_total": metric_number(metrics, "signal_count_total"),
@@ -719,6 +835,94 @@ def scenario_ui(session: Session, scenario: Scenario) -> dict[str, Any]:
         "created_at": scenario.created_at,
         "updated_at": scenario.updated_at,
     }
+
+
+def implementation_ui(session: Session, scenario_id: str) -> dict[str, Any]:
+    implementation = session.get(ScenarioImplementation, scenario_id)
+    tiers = session.exec(select(ImplementationTier).where(ImplementationTier.scenario_id == scenario_id).order_by(ImplementationTier.tier_index)).all()
+    interfaces = session.exec(select(ImplementationInterface).where(ImplementationInterface.scenario_id == scenario_id)).all()
+    package_escape = session.get(ImplementationPackageEscape, scenario_id)
+    return {
+        "exists": implementation is not None,
+        "scenario_id": scenario_id,
+        "implementation_type": implementation.implementation_type if implementation else "",
+        "status": implementation.status if implementation else "draft",
+        "version": implementation.version if implementation else 0,
+        "updated_at": implementation.updated_at if implementation else "",
+        "tiers": [
+            {
+                "id": tier.tier_id,
+                "name": tier.name,
+                "process": tier.process,
+                "role": tier.role,
+                "thickness_um": tier.thickness_um,
+            }
+            for tier in tiers
+        ] if tiers else [
+            {
+                "id": tier.id,
+                "name": tier.name,
+                "process": tier.process_id,
+                "role": tier.role,
+                "thickness_um": tier.thickness_um,
+            }
+            for tier in session.exec(select(Tier).where(Tier.scenario_id == scenario_id).order_by(Tier.tier_index)).all()
+        ],
+        "interfaces": [
+            {
+                "id": row.id.removeprefix(f"{scenario_id}:"),
+                "from_tier_id": row.from_tier_id,
+                "to_tier_id": row.to_tier_id,
+                "orientation": row.orientation,
+                "interconnect": row.interconnect,
+                "hb_pitch_um": row.hb_pitch_um,
+                "upper_tsv_pitch_um": row.upper_tsv_pitch_um,
+                "upper_tsv_keepout_um": row.upper_tsv_keepout_um,
+                "lower_tsv_pitch_um": row.lower_tsv_pitch_um,
+                "lower_tsv_keepout_um": row.lower_tsv_keepout_um,
+                "description": row.description,
+            }
+            for row in interfaces
+        ],
+        "package_escape": {
+            "bottom_tier_id": package_escape.bottom_tier_id if package_escape else "",
+            "requires_tsv": package_escape.requires_tsv if package_escape else False,
+            "pitch_um": package_escape.pitch_um if package_escape else 0,
+            "keepout_um": package_escape.keepout_um if package_escape else 0,
+            "description": package_escape.description if package_escape else "",
+        },
+    }
+
+
+def implementation_impact_errors(session: Session, scenario_id: str, payload: ScenarioImplementationUpdate) -> list[str]:
+    errors: list[str] = []
+    new_tier_ids = [tier.id for tier in payload.tiers]
+    if not new_tier_ids:
+        errors.append("At least one implementation tier is required.")
+    if len(new_tier_ids) != len(set(new_tier_ids)):
+        errors.append("Tier ids must be unique within an implementation.")
+
+    partition_rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+    partition_usage: dict[str, int] = {}
+    for row in partition_rows:
+        partition_usage[row.tier_id] = partition_usage.get(row.tier_id, 0) + 1
+
+    new_tier_set = set(new_tier_ids)
+    for tier_id in sorted(tier_id for tier_id in partition_usage if tier_id not in new_tier_set):
+        errors.append(f"Tier {tier_id} is used by {partition_usage[tier_id]} physical partitions and cannot be removed or renamed.")
+
+    existing_tiers = session.exec(select(ImplementationTier).where(ImplementationTier.scenario_id == scenario_id)).all()
+    existing_index = {row.tier_id: row.tier_index for row in existing_tiers}
+    for index, tier_id in enumerate(new_tier_ids):
+        if tier_id in partition_usage and tier_id in existing_index and existing_index[tier_id] != index:
+            errors.append(f"Tier {tier_id} is used by {partition_usage[tier_id]} physical partitions and cannot be reordered.")
+
+    for row in payload.interfaces:
+        if row.from_tier_id not in new_tier_set or row.to_tier_id not in new_tier_set:
+            errors.append(f"Interface {row.id} references tiers outside this implementation.")
+    if payload.package_escape.bottom_tier_id and payload.package_escape.bottom_tier_id not in new_tier_set:
+        errors.append(f"Package escape bottom_tier_id {payload.package_escape.bottom_tier_id} is not in this implementation.")
+    return errors
 
 
 def make_quality_issue(
@@ -767,20 +971,34 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
         if not component_partitions:
             continue
 
-        equivalent_instances = sum(partition_equivalent_instances(partition) for partition in component_partitions)
-        if abs(equivalent_instances - component.logical_instance_count) > 0.001:
-            issues.append(
-                make_quality_issue(
-                    "High",
-                    "Implementation coverage not closed",
-                    f"{component.name} maps to {equivalent_instances:.3f} equivalent instances, expected {component.logical_instance_count}.",
-                    "Adjust physical_instance_count and content_share so count * content_share closes to the logical instance count.",
-                    "logical_component",
-                    component.id,
+        categories = sorted(component_required_resource_categories(session, component, scenario_id) | {normalized_resource_category(partition.resource_category) for partition in component_partitions})
+        for category in categories:
+            category_partitions = [partition for partition in component_partitions if normalized_resource_category(partition.resource_category) == category]
+            equivalent_instances = sum(partition_equivalent_instances(partition) for partition in category_partitions)
+            if abs(equivalent_instances - component.logical_instance_count) > 0.001:
+                issues.append(
+                    make_quality_issue(
+                        "High",
+                        f"{category.upper()} implementation coverage not closed",
+                        f"{component.name} {category} maps to {equivalent_instances:.3f} equivalent instances, expected {component.logical_instance_count}.",
+                        "Adjust physical_instance_count and content_share for this resource category so count * content_share closes to the logical instance count.",
+                        "logical_component",
+                        component.id,
+                    )
                 )
-            )
 
         for partition in component_partitions:
+            if partition.resource_category not in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
+                issues.append(
+                    make_quality_issue(
+                        "Medium",
+                        "Unsupported partition resource category",
+                        f"{partition.id} uses resource_category={partition.resource_category}.",
+                        "Use logic, sram, or block.",
+                        "physical_partition",
+                        partition.id,
+                    )
+                )
             if partition.partition_type == "full" and abs(partition.content_share - 1.0) > 0.001:
                 issues.append(
                     make_quality_issue(
@@ -897,6 +1115,86 @@ def get_scenarios() -> list[dict[str, Any]]:
         return [scenario_ui(session, scenario) for scenario in session.exec(select(Scenario)).all()]
 
 
+@app.get("/api/scenarios/{scenario_id}/implementation")
+def get_scenario_implementation(scenario_id: str) -> dict[str, Any]:
+    with Session(engine) as session:
+        scenario = session.get(Scenario, scenario_id)
+        if not scenario:
+            raise HTTPException(status_code=404, detail=f"Unknown scenario_id: {scenario_id}")
+        return implementation_ui(session, scenario_id)
+
+
+@app.put("/api/scenarios/{scenario_id}/implementation")
+def update_scenario_implementation(scenario_id: str, payload: ScenarioImplementationUpdate) -> dict[str, Any]:
+    with Session(engine) as session:
+        scenario = session.get(Scenario, scenario_id)
+        if not scenario:
+            raise HTTPException(status_code=404, detail=f"Unknown scenario_id: {scenario_id}")
+
+        errors = implementation_impact_errors(session, scenario_id, payload)
+        if errors:
+            raise HTTPException(status_code=409, detail={"errors": errors})
+
+        previous = session.get(ScenarioImplementation, scenario_id)
+        session.merge(
+            ScenarioImplementation(
+                scenario_id=scenario_id,
+                implementation_type=payload.implementation_type,
+                status=payload.status,
+                version=(previous.version + 1) if previous else 1,
+                updated_at=now_iso(),
+            )
+        )
+        session.exec(delete(ImplementationTier).where(ImplementationTier.scenario_id == scenario_id))
+        session.exec(delete(ImplementationInterface).where(ImplementationInterface.scenario_id == scenario_id))
+        existing_escape = session.get(ImplementationPackageEscape, scenario_id)
+        if existing_escape:
+            session.delete(existing_escape)
+
+        for index, tier in enumerate(payload.tiers):
+            session.add(
+                ImplementationTier(
+                    id=f"{scenario_id}:{tier.id}",
+                    scenario_id=scenario_id,
+                    tier_id=tier.id,
+                    tier_index=index,
+                    name=tier.name,
+                    process=tier.process,
+                    role=tier.role,
+                    thickness_um=tier.thickness_um,
+                )
+            )
+        for row in payload.interfaces:
+            session.add(
+                ImplementationInterface(
+                    id=f"{scenario_id}:{row.id}",
+                    scenario_id=scenario_id,
+                    from_tier_id=row.from_tier_id,
+                    to_tier_id=row.to_tier_id,
+                    orientation=row.orientation,
+                    interconnect=row.interconnect,
+                    hb_pitch_um=row.hb_pitch_um,
+                    upper_tsv_pitch_um=row.upper_tsv_pitch_um,
+                    upper_tsv_keepout_um=row.upper_tsv_keepout_um,
+                    lower_tsv_pitch_um=row.lower_tsv_pitch_um,
+                    lower_tsv_keepout_um=row.lower_tsv_keepout_um,
+                    description=row.description,
+                )
+            )
+        session.add(
+            ImplementationPackageEscape(
+                scenario_id=scenario_id,
+                bottom_tier_id=payload.package_escape.bottom_tier_id,
+                requires_tsv=payload.package_escape.requires_tsv,
+                pitch_um=payload.package_escape.pitch_um,
+                keepout_um=payload.package_escape.keepout_um,
+                description=payload.package_escape.description,
+            )
+        )
+        session.commit()
+        return {"implementation": implementation_ui(session, scenario_id), "impact": {"blocked": False, "errors": []}}
+
+
 @app.get("/api/module-definitions")
 def get_module_definitions() -> list[ModuleDefinition]:
     with Session(engine) as session:
@@ -945,17 +1243,29 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         if payload.logical_instance_count < 0:
             raise HTTPException(status_code=400, detail="logical_instance_count must be non-negative")
 
-        seen_partition_ids: set[str] = set()
+        canonical_partitions: list[tuple[PartitionInput, str, str, str]] = []
+        partial_counters: dict[tuple[str, str], int] = {}
         for partition in payload.partitions:
-            if not partition.id:
-                raise HTTPException(status_code=400, detail="partition id is required")
-            if partition.id in seen_partition_ids:
-                raise HTTPException(status_code=400, detail=f"Duplicate partition id: {partition.id}")
-            seen_partition_ids.add(partition.id)
+            category = normalized_resource_category(partition.resource_category)
+            partial_index = 0
+            if partition.partition_type == "partial":
+                counter_key = (category, partition.tier_id)
+                partial_index = partial_counters.get(counter_key, 0) + 1
+                partial_counters[counter_key] = partial_index
+            partition_name = canonical_partition_name(component.name, category, partition.tier_id, partition.partition_type, partial_index)
+            canonical_partitions.append((partition, category, f"PP_{partition_name}", partition_name))
+
+        seen_partition_ids: set[str] = set()
+        for partition, category, partition_id, _partition_name in canonical_partitions:
+            if partition_id in seen_partition_ids:
+                raise HTTPException(status_code=400, detail=f"Duplicate generated partition id: {partition_id}")
+            seen_partition_ids.add(partition_id)
             if partition.tier_id not in tier_ids:
                 raise HTTPException(status_code=400, detail=f"Unknown tier_id for scenario {payload.scenario_id}: {partition.tier_id}")
             if partition.partition_type not in ALLOWED_PARTITION_TYPES:
                 raise HTTPException(status_code=400, detail=f"Unsupported partition_type: {partition.partition_type}")
+            if category not in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
+                raise HTTPException(status_code=400, detail=f"Unsupported resource_category: {partition.resource_category}")
             if partition.physical_instance_count < 0:
                 raise HTTPException(status_code=400, detail=f"{partition.id} has negative physical_instance_count")
             content_share = normalized_content_share(partition.partition_type, partition.content_share if partition.content_share is not None else partition.partition_ratio)
@@ -985,15 +1295,16 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 )
                 session.delete(partition)
 
-        for partition in payload.partitions:
+        for partition, category, partition_id, partition_name in canonical_partitions:
             content_share = normalized_content_share(partition.partition_type, partition.content_share if partition.content_share is not None else partition.partition_ratio)
             row = PhysicalPartition(
-                id=partition.id,
+                id=partition_id,
                 scenario_id=payload.scenario_id,
                 logical_component_id=component_id,
                 tier_id=partition.tier_id,
-                partition_name=partition.partition_name,
+                partition_name=partition_name,
                 partition_type=partition.partition_type,
+                resource_category=category,
                 physical_instance_count=partition.physical_instance_count,
                 partition_ratio=content_share,
                 content_share=content_share,
@@ -1144,7 +1455,7 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
     ),
     "physical_partitions": (
         PhysicalPartition,
-        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count", "content_share", "description"],
+        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "resource_category", "partition_type", "physical_instance_count", "content_share", "description"],
         {"id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count"},
     ),
     "metrics": (
@@ -1158,6 +1469,7 @@ ALLOWED_SUBJECT_TYPES = {"logical_component", "physical_partition", "tier", "sce
 ALLOWED_VALUE_TYPES = {"number", "text", "boolean"}
 ALLOWED_CONFIDENCE = {"approved", "review", "draft"}
 ALLOWED_PARTITION_TYPES = {"full", "partial"}
+ALLOWED_PARTITION_RESOURCE_CATEGORIES = {"logic", "sram", "block"}
 
 
 def normalize_cell(value: Any) -> Any:
@@ -1175,13 +1487,17 @@ def read_sheet_rows(workbook_file: SpooledTemporaryFile[bytes], sheet_name: str,
     sheet = workbook[sheet_name]
     header = [str(cell.value or "").strip() for cell in sheet[1]]
     aliases = {"content_share": "partition_ratio"} if sheet_name == "physical_partitions" else {}
-    missing = [column for column in expected_columns if column not in header and aliases.get(column) not in header]
+    missing = [column for column in required_columns if column not in header and aliases.get(column) not in header]
     if missing:
         raise HTTPException(status_code=400, detail=f"Sheet {sheet_name} is missing columns: {', '.join(missing)}")
-    indexes = {column: header.index(column if column in header else aliases[column]) for column in expected_columns}
+    indexes = {
+        column: header.index(column if column in header else aliases[column])
+        for column in expected_columns
+        if column in header or aliases.get(column) in header
+    }
     rows: list[dict[str, Any]] = []
     for row_index, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-        record = {column: normalize_cell(row[indexes[column]]) for column in expected_columns}
+        record = {column: normalize_cell(row[indexes[column]]) if column in indexes else None for column in expected_columns}
         if all(value is None for value in record.values()):
             continue
         missing_required = [column for column in required_columns if record.get(column) is None]
@@ -1214,6 +1530,7 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
         row["updated_at"] = row.get("updated_at") or created
     for row in all_rows["physical_partitions"]:
         row["physical_instance_count"] = int(row["physical_instance_count"])
+        row["resource_category"] = normalized_resource_category(row.get("resource_category"))
         raw_content_share = row.get("content_share")
         row["content_share"] = normalized_content_share(row["partition_type"], float(raw_content_share) if raw_content_share is not None else None)
         row["partition_ratio"] = row["content_share"]
@@ -1265,6 +1582,8 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
             errors.append(f"physical_partition {row['id']} tier_id {row['tier_id']} belongs to scenario {tier_scenario_ids.get(row['tier_id'])}, not {row['scenario_id']}")
         if row["partition_type"] not in ALLOWED_PARTITION_TYPES:
             errors.append(f"physical_partition {row['id']} uses unsupported partition_type {row['partition_type']}")
+        if row["resource_category"] not in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
+            errors.append(f"physical_partition {row['id']} uses unsupported resource_category {row['resource_category']}")
         if row["physical_instance_count"] < 0:
             errors.append(f"physical_partition {row['id']} has negative physical_instance_count")
         if row["content_share"] < 0:
@@ -1401,6 +1720,7 @@ def write_import_sheet(workbook: Workbook, sheet_name: str, columns: list[str], 
 
     if sheet_name == "physical_partitions":
         validations = {
+            "resource_category": sorted(ALLOWED_PARTITION_RESOURCE_CATEGORIES),
             "partition_type": sorted(ALLOWED_PARTITION_TYPES),
         }
         for column_name, values in validations.items():

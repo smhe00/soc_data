@@ -31,6 +31,7 @@ export interface ComponentDetailUpdate {
     tier_id: string;
     partition_name: string;
     partition_type: string;
+    resource_category: "logic" | "sram" | "block";
     physical_instance_count: number;
     content_share: number;
     description: string;

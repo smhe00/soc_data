@@ -31,7 +31,7 @@ import { importTemplateUrl, uploadImportWorkbook, type ImportResult } from "./ap
 import { getDashboard } from "./api/metrics";
 import { getQualityIssues, type QualityIssue } from "./api/quality";
 import { getResponsibilityTeams } from "./api/responsibilities";
-import { getScenarios } from "./api/scenarios";
+import { getScenarioImplementation, getScenarios, updateScenarioImplementation, type ScenarioImplementationResponse } from "./api/scenarios";
 import { getTiers } from "./api/tiers";
 import type { DashboardData } from "./types/metric";
 
@@ -42,6 +42,7 @@ type SeverityLevel = "High" | "Medium" | "Low";
 type BadgeTone = "slate" | "blue" | "green" | "amber" | "red" | "violet";
 type TabId = "dashboard" | "hierarchy" | "tiers" | "implementation" | "compare" | "imports" | "quality" | "schema";
 type ThemeMode = "light" | "dark";
+type PartitionResourceCategory = "logic" | "sram" | "block";
 
 interface Project {
   id: string;
@@ -125,6 +126,7 @@ interface PhysicalPartition {
   tier_id: string;
   partition_name: string;
   partition_type: string;
+  resource_category: PartitionResourceCategory;
   physical_instance_count: number;
   content_share: number;
   instance_share: number;
@@ -355,7 +357,7 @@ const schemaTables: SchemaTable[] = [
   {
     table: "physical_partition",
     purpose: "逻辑模块到Tier的物理承载事实",
-    fields: "id, logical_component_id, tier_id, physical_instance_count, content_share",
+    fields: "id, logical_component_id, tier_id, resource_category, physical_instance_count, content_share",
   },
   {
     table: "metric",
@@ -421,9 +423,31 @@ const defaultPackageEscape: PackageEscapeDefinition = {
   description: "Package-side TSV escape from bottom die back side to bumps.",
 };
 
+const stackTierColors = [
+  "bg-sky-100 border-sky-300 text-sky-950",
+  "bg-emerald-100 border-emerald-300 text-emerald-950",
+  "bg-amber-100 border-amber-300 text-amber-950",
+  "bg-violet-100 border-violet-300 text-violet-950",
+  "bg-rose-100 border-rose-300 text-rose-950",
+];
 const orientationOptions: StackInterfaceDefinition["orientation"][] = ["Face-to-Face", "Face-to-Back", "Back-to-Face", "Back-to-Back"];
 const interconnectOptions: StackInterfaceDefinition["interconnect"][] = ["HB", "TSV", "HB + TSV"];
 const stackTypeOptions: StackImplementationType[] = ["Monolithic", "Wafer-to-Wafer", "2.5D Interposer"];
+const partitionResourceCategories: { id: PartitionResourceCategory; label: string }[] = [
+  { id: "logic", label: "Logic" },
+  { id: "sram", label: "SRAM" },
+  { id: "block", label: "Block" },
+];
+const partitionResourceLabels: Record<PartitionResourceCategory, string> = {
+  logic: "Logic",
+  sram: "SRAM",
+  block: "Block",
+};
+const partitionResourceOrder: Record<PartitionResourceCategory, number> = {
+  logic: 0,
+  sram: 1,
+  block: 2,
+};
 const orientationShortLabels: Record<StackInterfaceDefinition["orientation"], string> = {
   "Face-to-Face": "F-F",
   "Face-to-Back": "F-B",
@@ -486,6 +510,59 @@ function withInterfaceParameterDefaults(interfaceItem: StackInterfaceDefinition)
 
 function normalizeInterfaces(interfaces: StackInterfaceDefinition[]): StackInterfaceDefinition[] {
   return normalizeInterfaceOrientations(interfaces).map(withInterfaceParameterDefaults);
+}
+
+function defaultInterfacesForTiers(tierDefinitions: StackTierDefinition[], current: StackInterfaceDefinition[] = []): StackInterfaceDefinition[] {
+  return normalizeInterfaces(Array.from({ length: Math.max(0, tierDefinitions.length - 1) }, (_, index) => {
+    const fromTierId = tierDefinitions[index].id;
+    const toTierId = tierDefinitions[index + 1].id;
+    return (
+      current.find((item) => item.fromTierId === fromTierId && item.toTierId === toTierId) ?? {
+        id: `I${index + 1}${index + 2}`,
+        fromTierId,
+        toTierId,
+        orientation: index === 0 ? "Face-to-Face" : "Back-to-Face",
+        interconnect: index === 0 ? "HB" : "HB + TSV",
+        hbPitchUm: 0.8,
+        upperTsvPitchUm: index === 0 ? 0 : 5,
+        upperTsvKeepOutUm: index === 0 ? 0 : 8,
+        lowerTsvPitchUm: 0,
+        lowerTsvKeepOutUm: 0,
+        description: "W2W interface definition.",
+      }
+    );
+  }));
+}
+
+function implementationTypeFromApi(value: string): StackImplementationType {
+  return stackTypeOptions.includes(value as StackImplementationType) ? (value as StackImplementationType) : "Wafer-to-Wafer";
+}
+
+function tiersFromImplementation(implementation: ScenarioImplementationResponse): StackTierDefinition[] {
+  return implementation.tiers.map((tier, index) => ({
+    id: tier.id,
+    name: tier.name,
+    process: tier.process,
+    role: tier.role,
+    thicknessUm: tier.thickness_um,
+    color: stackTierColors[index] ?? stackTierColors[stackTierColors.length - 1],
+  }));
+}
+
+function interfacesFromImplementation(implementation: ScenarioImplementationResponse): StackInterfaceDefinition[] {
+  return normalizeInterfaces(implementation.interfaces.map((item) => ({
+    id: item.id,
+    fromTierId: item.from_tier_id,
+    toTierId: item.to_tier_id,
+    orientation: item.orientation as StackInterfaceDefinition["orientation"],
+    interconnect: item.interconnect as StackInterfaceDefinition["interconnect"],
+    hbPitchUm: item.hb_pitch_um,
+    upperTsvPitchUm: item.upper_tsv_pitch_um,
+    upperTsvKeepOutUm: item.upper_tsv_keepout_um,
+    lowerTsvPitchUm: item.lower_tsv_pitch_um,
+    lowerTsvKeepOutUm: item.lower_tsv_keepout_um,
+    description: item.description,
+  })));
 }
 
 function getBottomInterface(tiers: StackTierDefinition[], interfaces: StackInterfaceDefinition[]): StackInterfaceDefinition | undefined {
@@ -817,19 +894,118 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
   );
 }
 
+function requiredPartitionCategories(component: BlockNode): PartitionResourceCategory[] {
+  const areaByCategory: Record<PartitionResourceCategory, number> = component.has_children
+    ? {
+        logic: component.residual_logic_area,
+        sram: component.residual_sram_area,
+        block: component.residual_block_area,
+      }
+    : {
+        logic: component.logic_area,
+        sram: component.sram_area,
+        block: component.block_area,
+      };
+  const categories = partitionResourceCategories.filter((category) => Number(areaByCategory[category.id] || 0) > 0).map((category) => category.id);
+  return categories.length > 0 ? categories : ["block"];
+}
+
+function preferredTierForCategory(category: PartitionResourceCategory, tiers: TierInfo[]): string {
+  const haystack = (tier: TierInfo): string => [tier.id, tier.name, tier.role, tier.process, tier.interconnect].join(" ").toLowerCase();
+  if (category === "sram") {
+    return tiers.find((tier) => /sram|cache|memory/.test(haystack(tier)))?.id ?? tiers[0]?.id ?? "T0";
+  }
+  if (category === "block") {
+    return tiers.find((tier) => /io|phy|analog|always|bottom/.test(haystack(tier)))?.id ?? tiers[0]?.id ?? "T0";
+  }
+  return tiers.find((tier) => /logic|compute|top/.test(haystack(tier)))?.id ?? tiers[0]?.id ?? "T0";
+}
+
+function makeDefaultPartition(component: BlockNode, selectedScenarioId: string, logicalCount: number, tiers: TierInfo[], category: PartitionResourceCategory, suffix: number): PhysicalPartition {
+  const tierId = preferredTierForCategory(category, tiers);
+  return {
+    id: "",
+    scenario_id: selectedScenarioId,
+    logical_component_id: component.id,
+    logical_component_name: component.name,
+    tier_id: tierId,
+    partition_name: "",
+    partition_type: "full",
+    resource_category: category,
+    physical_instance_count: Math.max(1, logicalCount),
+    content_share: 1,
+    instance_share: logicalCount ? 1 : 0,
+    partition_ratio: 1,
+    logic_area: 0,
+    sram_area: 0,
+    block_area: 0,
+    power: 0,
+    shape_type: "",
+    description: `Auto-filled ${partitionResourceLabels[category]} mapping for ${component.name}.`,
+  };
+}
+
+function canonicalPartitionBaseName(component: BlockNode, partition: PhysicalPartition): string {
+  return `${component.name}_${partition.resource_category ?? "block"}_${partition.tier_id}`;
+}
+
+function canonicalizePartitionNames<T extends PhysicalPartition>(component: BlockNode, rows: T[]): T[] {
+  const partialCounters = new Map<string, number>();
+  return rows.map((row) => {
+    const baseName = canonicalPartitionBaseName(component, row);
+    const partialKey = `${row.resource_category ?? "block"}:${row.tier_id}`;
+    const partialIndex = row.partition_type === "partial" ? (partialCounters.get(partialKey) ?? 0) + 1 : 0;
+    if (row.partition_type === "partial") partialCounters.set(partialKey, partialIndex);
+    const generatedName = row.partition_type === "partial" ? `${baseName}_P${partialIndex}` : baseName;
+    return {
+      ...row,
+      id: `PP_${generatedName}`,
+      partition_name: generatedName,
+    };
+  });
+}
+
+function sortPartitionsForDisplay<T extends PhysicalPartition>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const categoryDelta = partitionResourceOrder[a.resource_category ?? "block"] - partitionResourceOrder[b.resource_category ?? "block"];
+    if (categoryDelta !== 0) return categoryDelta;
+    const tierDelta = a.tier_id.localeCompare(b.tier_id);
+    if (tierDelta !== 0) return tierDelta;
+    return a.partition_type.localeCompare(b.partition_type);
+  });
+}
+
 function PartitionMappingEditor({ component, tiers, selectedScenarioId, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
   const [logicalCount, setLogicalCount] = useState<number>(component.logical_instance_count);
   const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const requiredCategories = useMemo(() => requiredPartitionCategories(component), [component]);
 
   useEffect(() => {
     setLogicalCount(component.logical_instance_count);
-    setPartitions(component.partitions);
+    const normalizedPartitions = component.partitions.map((partition) => ({ ...partition, resource_category: partition.resource_category ?? "block" }));
+    const missingCategories = requiredPartitionCategories(component).filter((category) => !normalizedPartitions.some((partition) => partition.resource_category === category));
+    setPartitions([
+      ...normalizedPartitions,
+      ...missingCategories.map((category, index) => makeDefaultPartition(component, selectedScenarioId, component.logical_instance_count, tiers, category, normalizedPartitions.length + index + 1)),
+    ]);
     setSaveError(null);
-  }, [component]);
+  }, [component, selectedScenarioId, tiers]);
 
-  const equivalentInstances = partitions.reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0) * Number(partition.content_share || 0), 0);
+  const categoryCoverage = partitionResourceCategories.map((category) => {
+    const equivalent = partitions
+      .filter((partition) => partition.resource_category === category.id)
+      .reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0) * Number(partition.content_share || 0), 0);
+    const rowCount = partitions.filter((partition) => partition.resource_category === category.id).length;
+    return {
+      ...category,
+      equivalent,
+      rowCount,
+      required: requiredCategories.includes(category.id),
+      closed: !requiredCategories.includes(category.id) && rowCount === 0 ? true : Math.abs(equivalent - logicalCount) < 0.001,
+    };
+  });
   const tierSummary = tiers
     .map((tier) => {
       const count = partitions.filter((partition) => partition.tier_id === tier.id).reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0), 0);
@@ -837,7 +1013,8 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
     })
     .filter(Boolean)
     .join(", ");
-  const coverageClosed = Math.abs(equivalentInstances - logicalCount) < 0.001;
+  const coverageClosed = categoryCoverage.every((category) => category.closed);
+  const displayedPartitions = canonicalizePartitionNames(component, sortPartitionsForDisplay(partitions.map((partition, index) => ({ ...partition, originalIndex: index } as PhysicalPartition & { originalIndex: number }))));
 
   function updatePartition(index: number, patch: Partial<PhysicalPartition>): void {
     setPartitions((rows) =>
@@ -851,29 +1028,11 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
   }
 
   function addPartition(): void {
-    const tierId = tiers[0]?.id ?? "T0";
     const suffix = partitions.length + 1;
+    const resourceCategory = requiredCategories.find((category) => !partitions.some((partition) => partition.resource_category === category)) ?? partitionResourceCategories.find((category) => !partitions.some((partition) => partition.resource_category === category.id))?.id ?? "logic";
     setPartitions((rows) => [
       ...rows,
-      {
-        id: `PP_${component.id.replace(/^B_?/, "")}_${tierId}_${suffix}`,
-        scenario_id: selectedScenarioId,
-        logical_component_id: component.id,
-        logical_component_name: component.name,
-        tier_id: tierId,
-        partition_name: `${component.name}_${tierId}_${suffix}`,
-        partition_type: "full",
-        physical_instance_count: 1,
-        content_share: 1,
-        instance_share: logicalCount ? 1 / logicalCount : 0,
-        partition_ratio: 1,
-        logic_area: 0,
-        sram_area: 0,
-        block_area: 0,
-        power: 0,
-        shape_type: "",
-        description: "",
-      },
+      makeDefaultPartition(component, selectedScenarioId, logicalCount, tiers, resourceCategory, suffix),
     ]);
   }
 
@@ -881,7 +1040,7 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
     try {
       setSaving(true);
       setSaveError(null);
-      await onSave(component, logicalCount, partitions);
+      await onSave(component, component.logical_instance_count, canonicalizePartitionNames(component, sortPartitionsForDisplay(partitions)));
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Unknown save error");
     } finally {
@@ -895,28 +1054,28 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
 
   return (
     <Card title="Physical Partition Mapping" subtitle={mappingSubtitle} icon={SplitSquareVertical}>
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
-        <label className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Logical Instances</div>
-          <input
-            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
-            min={0}
-            type="number"
-            value={logicalCount}
-            onChange={(event) => setLogicalCount(Number(event.target.value))}
-          />
-        </label>
+      <div className="mb-4 grid gap-3 md:grid-cols-5">
         <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Mapped Equivalent</div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-lg font-semibold text-slate-900">{equivalentInstances.toFixed(2)}/{logicalCount}</span>
-            <Badge tone={coverageClosed ? "green" : "amber"}>{coverageClosed ? "closed" : "open"}</Badge>
+          <div className="text-xs text-slate-500">Logical Instances</div>
+          <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+            {logicalCount}x
+          </div>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4 md:col-span-2">
+          <div className="text-xs text-slate-500">Mapped Equivalent by Category</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {categoryCoverage.map((category) => (
+              <Badge key={category.id} tone={category.closed ? "green" : "amber"}>
+                {category.label} {category.required ? `${category.equivalent.toFixed(2)}/${logicalCount}` : category.rowCount === 0 ? "optional" : `${category.equivalent.toFixed(2)}/${logicalCount}`}
+              </Badge>
+            ))}
           </div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
           <div className="text-xs text-slate-500">Input Rule</div>
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-900">full=1, partial editable</span>
+            <span className="text-sm font-semibold text-slate-900">category + full/partial</span>
+            <Badge tone={coverageClosed ? "green" : "amber"}>{coverageClosed ? "closed" : "open"}</Badge>
           </div>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
@@ -926,11 +1085,11 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
-        <table className="w-full min-w-[920px] text-left text-sm">
+        <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-3">ID</th>
-              <th className="px-3 py-3">Name</th>
+              <th className="px-3 py-3">Generated Name</th>
+              <th className="px-3 py-3">Category</th>
               <th className="px-3 py-3">Tier</th>
               <th className="px-3 py-3">Type</th>
               <th className="px-3 py-3">Count</th>
@@ -941,26 +1100,30 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 bg-white">
-            {partitions.map((partition, index) => (
-              <tr key={`${partition.id}-${index}`}>
+            {displayedPartitions.map((partition) => (
+              <tr key={`${partition.id || partition.partition_name || "partition"}-${partition.originalIndex}`}>
                 <td className="px-3 py-2">
-                  <input className="w-40 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono outline-none focus:border-slate-400" value={partition.id} onChange={(event) => updatePartition(index, { id: event.target.value })} />
+                  <div className="w-56 rounded-lg bg-slate-50 px-2 py-1 text-xs font-mono text-slate-600">
+                    {partition.partition_name}
+                  </div>
                 </td>
                 <td className="px-3 py-2">
-                  <input className="w-48 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_name} onChange={(event) => updatePartition(index, { partition_name: event.target.value })} />
+                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.resource_category ?? "block"} onChange={(event) => updatePartition(partition.originalIndex, { resource_category: event.target.value as PartitionResourceCategory })}>
+                    {partitionResourceCategories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+                  </select>
                 </td>
                 <td className="px-3 py-2">
-                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.tier_id} onChange={(event) => updatePartition(index, { tier_id: event.target.value })}>
+                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.tier_id} onChange={(event) => updatePartition(partition.originalIndex, { tier_id: event.target.value })}>
                     {tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.id}</option>)}
                   </select>
                 </td>
                 <td className="px-3 py-2">
-                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_type} onChange={(event) => updatePartition(index, { partition_type: event.target.value, content_share: event.target.value === "full" ? 1 : partition.content_share })}>
+                  <select className="rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.partition_type} onChange={(event) => updatePartition(partition.originalIndex, { partition_type: event.target.value, content_share: event.target.value === "full" ? 1 : partition.content_share })}>
                     {["full", "partial"].map((type) => <option key={type} value={type}>{type}</option>)}
                   </select>
                 </td>
                 <td className="px-3 py-2">
-                  <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} type="number" value={partition.physical_instance_count} onChange={(event) => updatePartition(index, { physical_instance_count: Number(event.target.value) })} />
+                  <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} type="number" value={partition.physical_instance_count} onChange={(event) => updatePartition(partition.originalIndex, { physical_instance_count: Number(event.target.value) })} />
                 </td>
                 <td className="px-3 py-2">
                   <span className="text-sm font-medium text-slate-700">{logicalCount ? (Number(partition.physical_instance_count || 0) / logicalCount * 100).toFixed(1) : "0.0"}%</span>
@@ -973,14 +1136,14 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
                     step={0.001}
                     type="number"
                     value={partition.partition_type === "full" ? 1 : partition.content_share}
-                    onChange={(event) => updatePartition(index, { content_share: Number(event.target.value) })}
+                    onChange={(event) => updatePartition(partition.originalIndex, { content_share: Number(event.target.value) })}
                   />
                 </td>
                 <td className="px-3 py-2">
-                  <input className="w-56 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.description} onChange={(event) => updatePartition(index, { description: event.target.value })} />
+                  <input className="w-56 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" value={partition.description} onChange={(event) => updatePartition(partition.originalIndex, { description: event.target.value })} />
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <button className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" type="button" onClick={() => setPartitions((rows) => rows.filter((_, rowIndex) => rowIndex !== index))}>Remove</button>
+                  <button className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50" type="button" onClick={() => setPartitions((rows) => rows.filter((_, rowIndex) => rowIndex !== partition.originalIndex))}>Remove</button>
                 </td>
               </tr>
             ))}
@@ -1330,6 +1493,7 @@ function TiersView({ tiers, physicalPartitions, selectedScenarioId, loading, err
               <tr>
                 <th className="px-4 py-3">Partition</th>
                 <th className="px-4 py-3">Logical Block</th>
+                <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Tier</th>
                 <th className="px-4 py-3">Physical Count</th>
                 <th className="px-4 py-3">Content Share</th>
@@ -1341,6 +1505,7 @@ function TiersView({ tiers, physicalPartitions, selectedScenarioId, loading, err
                 <tr key={partition.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{partition.partition_name}</td>
                   <td className="px-4 py-3 text-slate-600">{partition.logical_component_name}</td>
+                  <td className="px-4 py-3 text-slate-600">{partition.resource_category ?? "block"}</td>
                   <td className="px-4 py-3"><Badge tone="blue">{partition.tier_id}</Badge></td>
                   <td className="px-4 py-3 text-slate-600">{partition.physical_instance_count}</td>
                   <td className="px-4 py-3 text-slate-600">{(partition.content_share * 100).toFixed(0)}%</td>
@@ -1353,7 +1518,7 @@ function TiersView({ tiers, physicalPartitions, selectedScenarioId, loading, err
               ))}
               {physicalPartitions.length === 0 && (
                 <tr>
-                  <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
+                  <td className="px-4 py-5 text-sm text-slate-500" colSpan={7}>
                     No physical partitions for scenario {selectedScenarioId}.
                   </td>
                 </tr>
@@ -1468,6 +1633,10 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
   const [tiers, setTiers] = useState<StackTierDefinition[]>(defaultStackTiers);
   const [interfaces, setInterfaces] = useState<StackInterfaceDefinition[]>(defaultStackInterfaces);
   const [packageEscape, setPackageEscape] = useState<PackageEscapeDefinition>(defaultPackageEscape);
+  const [implementationLoading, setImplementationLoading] = useState(false);
+  const [implementationSaving, setImplementationSaving] = useState(false);
+  const [implementationMessage, setImplementationMessage] = useState<string | null>(null);
+  const [implementationError, setImplementationError] = useState<string | null>(null);
   const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? scenarios[0];
   const bottomRequiresPackageTsv = requiresPackageTsv(tiers, interfaces);
   const derivedBottomBumpSide = getDerivedBottomBumpSide(tiers, interfaces);
@@ -1475,43 +1644,61 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
 
   const setTierCount = (count: number): void => {
     const boundedCount = Math.max(1, Math.min(5, count));
-    setTiers((current) => {
-      const next = [...current];
-      while (next.length < boundedCount) {
-        const index = next.length + 1;
-        next.push({
-          id: `T${index}`,
-          name: `Tier ${index}`,
-          role: index === 1 ? "Compute logic" : "Memory / IO",
-          process: index === 1 ? "N3E" : "N5",
-          thicknessUm: 55,
-          color: ["bg-sky-100 border-sky-300 text-sky-950", "bg-emerald-100 border-emerald-300 text-emerald-950", "bg-amber-100 border-amber-300 text-amber-950", "bg-violet-100 border-violet-300 text-violet-950", "bg-rose-100 border-rose-300 text-rose-950"][index - 1],
-        });
-      }
-      return next.slice(0, boundedCount);
-    });
-    setInterfaces((current) =>
-      normalizeInterfaces(Array.from({ length: boundedCount - 1 }, (_, index) => {
-        const fromTierId = `T${index + 1}`;
-        const toTierId = `T${index + 2}`;
-        return (
-          current.find((item) => item.fromTierId === fromTierId && item.toTierId === toTierId) ?? {
-            id: `I${index + 1}${index + 2}`,
-            fromTierId,
-            toTierId,
-            orientation: index === 0 ? "Face-to-Face" : "Back-to-Face",
-            interconnect: index === 0 ? "HB" : "HB + TSV",
-            hbPitchUm: 0.8,
-            upperTsvPitchUm: index === 0 ? 0 : 5,
-            upperTsvKeepOutUm: index === 0 ? 0 : 8,
-            lowerTsvPitchUm: 0,
-            lowerTsvKeepOutUm: 0,
-            description: "W2W interface definition.",
-          }
-        );
-      })),
-    );
+    const nextTiers = [...tiers];
+    while (nextTiers.length < boundedCount) {
+      const index = nextTiers.length + 1;
+      nextTiers.push({
+        id: `T${index}`,
+        name: `Tier ${index}`,
+        role: index === 1 ? "Compute logic" : "Memory / IO",
+        process: index === 1 ? "N3E" : "N5",
+        thicknessUm: 55,
+        color: stackTierColors[index - 1] ?? stackTierColors[stackTierColors.length - 1],
+      });
+    }
+    const clippedTiers = nextTiers.slice(0, boundedCount);
+    setTiers(clippedTiers);
+    setInterfaces((current) => defaultInterfacesForTiers(clippedTiers, current));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadImplementation(): Promise<void> {
+      if (!selectedScenarioId) return;
+      setImplementationLoading(true);
+      setImplementationError(null);
+      setImplementationMessage(null);
+      try {
+        const implementation = await getScenarioImplementation(selectedScenarioId);
+        if (cancelled) return;
+        const loadedTiers = tiersFromImplementation(implementation);
+        if (implementation.exists) {
+          setStackType(implementationTypeFromApi(implementation.implementation_type));
+        }
+        if (loadedTiers.length > 0) {
+          setTiers(loadedTiers);
+          setInterfaces(implementation.interfaces.length > 0 ? interfacesFromImplementation(implementation) : defaultInterfacesForTiers(loadedTiers));
+        }
+        setPackageEscape({
+          pitchUm: implementation.package_escape.pitch_um || defaultPackageEscape.pitchUm,
+          keepOutUm: implementation.package_escape.keepout_um || defaultPackageEscape.keepOutUm,
+          description: implementation.package_escape.description || defaultPackageEscape.description,
+        });
+        if (implementation.exists) {
+          setImplementationMessage(`Loaded saved implementation v${implementation.version}`);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setImplementationError(error instanceof Error ? error.message : "Failed to load implementation.");
+      } finally {
+        if (!cancelled) setImplementationLoading(false);
+      }
+    }
+    loadImplementation();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedScenarioId]);
 
   const applyScenarioDefaults = (scenarioId: string): void => {
     setSelectedScenarioId(scenarioId);
@@ -1573,9 +1760,73 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
     setPackageEscape((current) => ({ ...current, [key]: value }));
   };
 
+  const saveImplementation = async (): Promise<void> => {
+    setImplementationSaving(true);
+    setImplementationError(null);
+    setImplementationMessage(null);
+    try {
+      const result = await updateScenarioImplementation(selectedScenarioId, {
+        implementation_type: stackType,
+        status: "draft",
+        tiers: tiers.map((tier) => ({
+          id: tier.id,
+          name: tier.name,
+          process: tier.process,
+          role: tier.role,
+          thickness_um: tier.thicknessUm,
+        })),
+        interfaces: interfaces.map((item) => ({
+          id: item.id,
+          from_tier_id: item.fromTierId,
+          to_tier_id: item.toTierId,
+          orientation: item.orientation,
+          interconnect: item.interconnect,
+          hb_pitch_um: item.hbPitchUm,
+          upper_tsv_pitch_um: item.upperTsvPitchUm,
+          upper_tsv_keepout_um: item.upperTsvKeepOutUm,
+          lower_tsv_pitch_um: item.lowerTsvPitchUm,
+          lower_tsv_keepout_um: item.lowerTsvKeepOutUm,
+          description: item.description,
+        })),
+        package_escape: {
+          bottom_tier_id: bottomTierId,
+          requires_tsv: bottomRequiresPackageTsv,
+          pitch_um: packageEscape.pitchUm,
+          keepout_um: packageEscape.keepOutUm,
+          description: packageEscape.description,
+        },
+      });
+      setImplementationMessage(`Saved implementation v${result.implementation.version}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save implementation.";
+      try {
+        const parsed = JSON.parse(message) as { errors?: string[] };
+        setImplementationError(parsed.errors?.join(" ") || message);
+      } catch {
+        setImplementationError(message);
+      }
+    } finally {
+      setImplementationSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <Card title="Scenario Implementation" subtitle="Implementation form for one project scenario" icon={Package}>
+      <Card
+        title="Scenario Implementation"
+        subtitle="Implementation form for one project scenario"
+        icon={Package}
+        right={
+          <button
+            className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={implementationLoading || implementationSaving || !selectedScenarioId}
+            onClick={saveImplementation}
+            type="button"
+          >
+            {implementationSaving ? "Saving..." : "Save"}
+          </button>
+        }
+      >
         <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_170px_110px_1fr]">
           <FieldLabel htmlFor="implementation-scenario" label="Scenario">
             <select
@@ -1614,6 +1865,11 @@ function ImplementationView({ scenarios }: Pick<DataPageProps, "scenarios">): JS
             </div>
           </div>
         </div>
+        {(implementationLoading || implementationMessage || implementationError) && (
+          <div className={`mt-3 rounded-lg border px-3 py-2 text-sm ${implementationError ? "border-red-100 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+            {implementationLoading ? "Loading implementation..." : implementationError ?? implementationMessage}
+          </div>
+        )}
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -2147,6 +2403,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         tier_id: partition.tier_id,
         partition_name: partition.partition_name,
         partition_type: partition.partition_type,
+        resource_category: partition.resource_category ?? "block",
         physical_instance_count: partition.physical_instance_count,
         content_share: partition.partition_type === "full" ? 1 : partition.content_share,
         description: partition.description,

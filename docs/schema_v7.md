@@ -19,6 +19,10 @@ flowchart LR
   Project --> LogicalComponent
   ModuleDefinition --> LogicalComponent
   Scenario --> Tier
+  Scenario --> ScenarioImplementation
+  ScenarioImplementation --> ImplementationTier
+  ScenarioImplementation --> ImplementationInterface
+  ScenarioImplementation --> ImplementationPackageEscape
   Scenario --> PhysicalPartition
   LogicalComponent --> PhysicalPartition
   Tier --> PhysicalPartition
@@ -63,7 +67,14 @@ Key fields:
 - `process_combo`
 - `status`
 
-Scenario is also the natural owner for implementation-form definition. In phase 1, the frontend `实现方案` page treats each scenario as one implementation option under a project, such as monolithic, 2.5D, or wafer-to-wafer 3DIC. The current SQLite schema stores scenario summary fields and tier rows; detailed implementation-interface fields are still a frontend prototype and should be promoted to schema only after the terminology stabilizes.
+Scenario is also the owner for implementation-form definition. The frontend `实现方案` page treats each scenario as one implementation option under a project, such as monolithic, 2.5D, or wafer-to-wafer 3DIC.
+
+Implementation-form details are stored separately from physical partitions so a scenario can describe both:
+
+- the stack definition: tier order, names, processes, roles, thicknesses, orientations, and package escape
+- the logical-to-physical mapping: physical partition rows attached to logical components and scenario tiers
+
+Because physical partitions reference `tier_id`, changing a saved implementation's tier structure is impact-checked. If any physical partition already uses a tier, the implementation save must not remove/rename that tier or reorder it.
 
 ### module_definition
 
@@ -130,16 +141,86 @@ Phase-1 frontend interface semantics:
 - TSV parameters are side-specific: upper-side TSV and lower-side TSV are separate; `Back-to-Back` can require both
 - bottom-die package escape is derived from the final die-to-die orientation; if the bottom die back side faces bumps, a derived `Tn-BUMP` TSV escape must be parameterized separately
 
+### scenario_implementation
+
+One saved implementation-form definition for a scenario.
+
+Key fields:
+
+- `scenario_id`
+- `implementation_type`
+- `status`
+- `version`
+- `updated_at`
+
+The version increments on each successful implementation save. This table intentionally stores scenario-level implementation metadata only; detailed rows live in the implementation child tables.
+
+### implementation_tier
+
+Saved tier/die definitions for the scenario implementation.
+
+Key fields:
+
+- `id`
+- `scenario_id`
+- `tier_id`
+- `tier_index`
+- `name`
+- `process`
+- `role`
+- `thickness_um`
+
+`tier_id` is the user-facing stable tier key, such as `T0`, `T1`, or `T2`. The backend stores a scenario-prefixed primary key internally, but API payloads use the plain tier key.
+
+### implementation_interface
+
+Saved die-to-die interface definitions between adjacent implementation tiers.
+
+Key fields:
+
+- `id`
+- `scenario_id`
+- `from_tier_id`
+- `to_tier_id`
+- `orientation`
+- `interconnect`
+- `hb_pitch_um`
+- `upper_tsv_pitch_um`
+- `upper_tsv_keepout_um`
+- `lower_tsv_pitch_um`
+- `lower_tsv_keepout_um`
+- `description`
+
+HB pitch and TSV pitch are independent. Upper-side TSV and lower-side TSV parameters are also independent, including for `Back-to-Back` interfaces.
+
+### implementation_package_escape
+
+Saved derived bottom-tier-to-package-bump TSV escape parameters.
+
+Key fields:
+
+- `scenario_id`
+- `bottom_tier_id`
+- `requires_tsv`
+- `pitch_um`
+- `keepout_um`
+- `description`
+
+`requires_tsv` is derived from the final die-to-die orientation in the UI. If the bottom die back side faces package bumps, the page represents the package escape as a derived `Tn-BUMP` TSV row and stores its pitch/keep-out here.
+
 ### physical_partition
 
 Physical carrying of a logical component in a scenario.
 
 `physical_partition` is scenario-specific by design. A logical component can map to different tiers, counts, or content shares in different implementation scenarios. The tuple of `scenario_id`, `logical_component_id`, and `tier_id` must therefore be interpreted together.
 
+It is also resource-category-specific. Logic, SRAM, and hard/block content can be mapped independently for the same logical component. This avoids forcing one content share to describe heterogeneous resources that may live on different tiers.
+
 Use this table for placement/mapping facts:
 
 - Which scenario
 - Which logical component
+- Which resource category
 - Which tier
 - How many physical copies
 - What content share is carried by a partial partition
@@ -151,6 +232,7 @@ Key fields:
 - `logical_component_id`
 - `tier_id`
 - `partition_name`
+- `resource_category`
 - `partition_type`
 - `physical_instance_count`
 - `content_share`
@@ -161,6 +243,22 @@ The referenced `tier_id` must belong to the same `scenario_id` as the physical p
 
 - `full`: a whole logical instance/copy is realized by this partition
 - `partial`: one logical module is split across multiple tiers/partitions
+
+`resource_category` values:
+
+- `logic`
+- `sram`
+- `block`
+
+`block` is also the compatibility category for existing coarse mappings that have not yet been split into logic/SRAM/block-specific rows.
+
+Partition row display and generated naming follow a stable category order:
+
+- `logic`
+- `sram`
+- `block`
+
+Partition `id` and `partition_name` should be generated by the application instead of manually entered. The generated base is `logicalName_resourceCategory_tier`. `full` rows use that base directly; `partial` rows append a per-resource-category/per-tier partial index such as `_P1`, `_P2`, etc. Multiple partial rows can target the same tier.
 
 `instance_share` is not stored and should not be manually entered. It is computed as `physical_instance_count / logical_instance_count`.
 
@@ -253,7 +351,7 @@ Tier/scenario metrics:
 
 ## Closure Rules
 
-For each logical component that has physical partitions in a scenario:
+For each logical component that has physical partitions in a scenario and resource category:
 
 - `sum(physical_instance_count * content_share)` should equal `logical_instance_count`
 - `full` partitions always use `content_share = 1`

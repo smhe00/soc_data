@@ -112,6 +112,10 @@ Core tables:
 - `logical_component`
 - `process_node`
 - `tier`
+- `scenario_implementation`
+- `implementation_tier`
+- `implementation_interface`
+- `implementation_package_escape`
 - `physical_partition`
 - `metric`
 - `responsibility_assignment`
@@ -217,9 +221,20 @@ The Hierarchy page now includes a small Component Detail maintenance surface for
 
 Physical partition mapping is scenario-scoped. The header `Scenario` selector controls which scenario's tiers and physical partitions are loaded and edited. This prevents a logical block mapping for one implementation form, such as `S2` W2W 3DIC, from being mixed with another implementation form, such as `S1` monolithic.
 
+Physical partition rows also carry a resource category:
+
+- `logic`
+- `sram`
+- `block`
+
+This lets one logical component map logic, SRAM, and hard/block content independently. Each category can use `full` or `partial` rows and closes its own equivalent instance coverage. Existing coarse mappings are treated as `block` category rows until they are refined.
+
+Mapping rows are displayed in a fixed category order: Logic first, SRAM second, Block last. Partition ID/name are generated rather than manually entered. The generated base is `logicalName_resourceCategory_tier`; `full` rows use the base name directly, while `partial` rows add a per-category/tier suffix such as `_P1`, `_P2`, etc. Multiple partial rows on the same tier are allowed.
+
 For the selected logical component, users can edit:
 
 - `logical_instance_count`
+- resource category
 - partition `tier_id`
 - partition type
 - physical instance count
@@ -230,7 +245,7 @@ The page computes instance share from physical count and logical instance count.
 
 ## Scenario Implementation View
 
-The frontend includes an `实现方案` page for scenario-level implementation definition. This page is currently a UI prototype for the `scenario` concept: one project can have multiple implementation forms, such as monolithic, 2.5D interposer, or wafer-to-wafer 3DIC.
+The frontend includes an `实现方案` page for scenario-level implementation definition. One project can have multiple scenarios, and each scenario can store one implementation form, such as monolithic, 2.5D interposer, or wafer-to-wafer 3DIC.
 
 Current supported implementation forms:
 
@@ -251,11 +266,22 @@ The view also includes light and dark display themes. The theme toggle is stored
 
 The cross-section preview now renders Face/Back surface marks from the chained interface orientation. `F` marks the face side and `B` marks the back side, so the tier drawing follows `Face-to-Face`, `Face-to-Back`, `Back-to-Face`, and `Back-to-Back` selections.
 
+Implementation definitions are persisted through:
+
+```text
+GET /api/scenarios/{scenario_id}/implementation
+PUT /api/scenarios/{scenario_id}/implementation
+```
+
+If no saved implementation exists, the GET endpoint synthesizes initial tier definitions from the scenario's `tier` rows. Saving writes versioned implementation rows. The backend blocks dangerous saves when physical partitions already depend on a tier: a used tier cannot be removed, renamed to another tier id, or reordered.
+
 ## Useful API Endpoints
 
 ```text
 GET /api/projects
 GET /api/scenarios
+GET /api/scenarios/{scenario_id}/implementation
+PUT /api/scenarios/{scenario_id}/implementation
 GET /api/module-definitions
 GET /api/components?scenario_id=S2
 GET /api/components/tree?scenario_id=S2
