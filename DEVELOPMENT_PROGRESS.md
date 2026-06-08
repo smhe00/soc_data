@@ -59,7 +59,7 @@ cd $env:PROJECT_ROOT
   - backend fallback generation when formula cache values are absent
   - natural-key metric upsert to avoid duplicate imports
 - Iterated through several review workbook versions while converging the schema from physical implementation sketches to the current V7 `logical_components` / `physical_partitions` / `metrics` model.
-- Added `templates/soc_mapping_metrics_review_v7_resource_category.xlsx` as the only retained import template after resource-category mapping split physical partitions into `logic`, `sram`, and `block` rows.
+- Added `templates/soc_import_template.xlsx` as the only retained import template after resource-category mapping split physical partitions into `logic`, `sram`, and `block` rows.
 - Updated the FastAPI/SQLite platform code to use the V7 structure:
   - `ModuleDefinition`
   - `LogicalComponent`
@@ -68,7 +68,7 @@ cd $env:PROJECT_ROOT
 - Added `GET /api/module-definitions` and `GET /api/physical-partitions`.
 - Updated existing dashboard, components, tree, tiers, metrics, and import APIs to read/write V7 data while preserving the frontend page flow.
 - Updated the frontend hierarchy and tier pages so logical hierarchy, physical instance count, partition ratio, and metric details come from API data.
-- Updated Excel import to accept `soc_mapping_metrics_review_v7_resource_category.xlsx` and validate the current V7 resource-category sheets.
+- Updated Excel import to accept `soc_import_template.xlsx` and validate the current V7 resource-category sheets.
 - Replaced the small V7 seed with a realistic flagship mobile SoC demo:
   - Project: `Orion X1 Mobile SoC`
   - Scenarios: monolithic N3E baseline, 3-tier 3DIC performance option, and cost-optimized 2.5D option
@@ -276,7 +276,7 @@ AI Team imported metrics: 85
 - Current static import template passed:
 
 ```text
-soc_mapping_metrics_review_v7_resource_category.xlsx
+soc_import_template.xlsx
 physical_partitions: 8
 metrics: 17
 ```

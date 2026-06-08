@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.main import app
 
-TEMPLATE = ROOT / "templates" / "soc_mapping_metrics_review_v7_resource_category.xlsx"
+TEMPLATE = ROOT / "templates" / "soc_import_template.xlsx"
 
 
 def main() -> None:

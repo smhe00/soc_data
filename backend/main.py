@@ -21,7 +21,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_URL = f"sqlite:///{BASE_DIR / 'soc_3dic.db'}"
-TEMPLATE_PATH = BASE_DIR.parent / "templates" / "soc_mapping_metrics_review_v7_resource_category.xlsx"
+TEMPLATE_PATH = BASE_DIR.parent / "templates" / "soc_import_template.xlsx"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
@@ -1899,5 +1899,5 @@ def get_import_template(background_tasks: BackgroundTasks, team: str | None = No
     return FileResponse(
         TEMPLATE_PATH,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename="soc_mapping_metrics_review_v7_resource_category.xlsx",
+        filename="soc_import_template.xlsx",
     )

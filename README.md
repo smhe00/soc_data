@@ -151,7 +151,7 @@ Seeded dataset:
 Current V7 workbook:
 
 ```text
-templates/soc_mapping_metrics_review_v7_resource_category.xlsx
+templates/soc_import_template.xlsx
 ```
 
 Download from the running backend:

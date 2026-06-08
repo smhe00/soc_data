@@ -9,7 +9,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "templates" / "soc_mapping_metrics_review_v7_resource_category.xlsx"
+OUTPUT = ROOT / "templates" / "soc_import_template.xlsx"
 
 
 SHEETS: dict[str, list[list[object]]] = {
