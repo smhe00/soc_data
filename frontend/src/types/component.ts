@@ -9,6 +9,7 @@ export interface BlockNode {
   resource: string;
   hierarchy_path: string;
   logical_instance_count: number;
+  absolute_logical_instance_count: number;
   owner_team: string;
   visibility_level: string;
   physical_instance_count: number;
@@ -32,6 +33,8 @@ export interface BlockNode {
   partitions: PhysicalPartition[];
   tier_area_distribution: TierAreaDistribution[];
   description: string;
+  own_mapping_closed?: boolean;
+  subtree_mapping_closed?: boolean;
 }
 
 export interface TreeBlock extends BlockNode {

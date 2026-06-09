@@ -194,7 +194,7 @@ GET http://localhost:8000/api/quality/issues
 
 Phase-1 rules check:
 
-- equivalent instance closure: `sum(physical_instance_count * content_share) == logical_instance_count`
+- equivalent instance closure: `sum(physical_instance_count * content_share) == logical_instance_count` (both relative to parent)
 - full partitions force `content_share = 1`
 - required logical metrics
 - numeric metric values

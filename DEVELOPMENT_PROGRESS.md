@@ -100,11 +100,11 @@ cd $env:PROJECT_ROOT
   - The editor shows live equivalent instance closure and tier summary before saving.
   - Save refreshes component data and quality issues.
 - Clarified physical partition coverage semantics:
-  - `physical_instance_count` remains the manually maintained quantity.
+  - `physical_instance_count` remains the manually maintained parent-relative quantity.
   - `content_share` replaces the user-facing `partition_ratio` concept.
   - `content_share` is fixed to `1` for `full` partitions and only editable for `partial`.
-  - `instance_share` is computed from `physical_instance_count / logical_instance_count` and is not manually entered.
-  - Quality closure now checks `sum(physical_instance_count * content_share) == logical_instance_count`.
+  - `instance_share` is computed from `physical_instance_count / logical_instance_count` (both relative to parent) and is not manually entered.
+  - Quality closure now checks `sum(physical_instance_count * content_share) == logical_instance_count` (both relative to parent).
 - Moved residual/self/glue semantics into derived data:
   - Parent total area metrics include direct child module area.
   - Residual/self area is computed as parent total area minus direct child area, not stored as component rows.
@@ -153,6 +153,10 @@ cd $env:PROJECT_ROOT
   - Demo seed now maps parent residual/self area so SoC top base area closes before process scaling.
   - The UI shows base-area mapping closure in the Total Area card and process-scaled tier area in Physical Coverage.
   - Quality checks now reject zero-area category maps and verify recursive logic/SRAM/block mapping closure.
+- Added MVP functional enhancements:
+  - Added a Web form for editing logical component metrics (Logical Instances, Signal Count, Logic Area, SRAM Area, Block Area, Power) inside the details editor panel, which updates the DB metrics via the detail save endpoint.
+  - Added quality checks and warnings for tier area limit exceedance after process scaling.
+  - Updated the detail panel to clearly distinguish between Self/Residual mapping closure and Subtree mapping closure status.
 
 ## Verified
 

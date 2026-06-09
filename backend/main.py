@@ -212,6 +212,11 @@ class ComponentDetailUpdate(BaseModel):
     team: str | None = None
     logical_instance_count: int
     partitions: list[PartitionInput]
+    signal_count_total: int | None = None
+    logic_area: float | None = None
+    sram_area: float | None = None
+    block_area: float | None = None
+    power: float | None = None
 
 
 class ImplementationTierInput(BaseModel):
@@ -380,6 +385,11 @@ def seed_data() -> None:
             ModuleDefinition(id="MD_PHY", name="SERDES_PHY", module_type="phy_analog", ip_owner="PHY Team", reuse_class="fixed_hard_macro", description="Fixed IO/PHY hard macro."),
             ModuleDefinition(id="MD_CRYPTO", name="CRYPTO_ENGINE", module_type="security", ip_owner="Security Team", reuse_class="shared_ip", description="AES/SHA/public-key accelerator."),
             ModuleDefinition(id="MD_NOC", name="COHERENT_NOC", module_type="interconnect", ip_owner="Platform Team", reuse_class="platform_fabric", description="Coherent system fabric and QoS."),
+            ModuleDefinition(id="MD_CPU_ALU", name="CPU_EXECUTION_UNIT", module_type="cpu_subblock", ip_owner="CPU Team", reuse_class="replicated", description="CPU execution and ALU datapath."),
+            ModuleDefinition(id="MD_L1_CACHE", name="CPU_L1_CACHE", module_type="memory_macro", ip_owner="CPU Team", reuse_class="compiler_macro", description="L1 Instruction and Data cache."),
+            ModuleDefinition(id="MD_L2_CACHE", name="CPU_L2_CACHE", module_type="memory_macro", ip_owner="CPU Team", reuse_class="compiler_macro", description="L2 cache macro."),
+            ModuleDefinition(id="MD_DISPLAY_PIXEL_PROC", name="DISPLAY_PIXEL_PROCESSOR", module_type="display_subblock", ip_owner="Display Team", reuse_class="replicated", description="Pixel blending and color management pipe unit."),
+            ModuleDefinition(id="MD_DISPLAY_PIPE_SRAM", name="DISPLAY_LINE_BUFFER", module_type="memory_macro", ip_owner="Display Team", reuse_class="compiler_macro", description="Display line buffer and FIFO SRAM."),
         ]
 
         owner_overrides = {
@@ -413,7 +423,12 @@ def seed_data() -> None:
             ("B0", None, None, "SOC_TOP", "top", "mixed", "SoC", 1, "Logical root for the Orion X1 mobile SoC."),
             ("B_CPU", "B0", None, "CPU_CLUSTER", "subsystem", "logic+memory", "Compute", 1, "4P+4E CPU cluster with shared DSU/L3."),
             ("B_CPU_P", "B_CPU", "MD_CPU_P_CORE", "P_CORE", "block", "logic", "CPU", 4, "Four high-performance CPU cores."),
+            ("B_CPU_P_ALU", "B_CPU_P", "MD_CPU_ALU", "P_CORE_ALU", "block", "logic", "CPU", 1, "CPU Core execution ALU datapath."),
+            ("B_CPU_P_CTRL", "B_CPU_P", None, "P_CORE_CTRL", "block", "logic", "CPU", 1, "CPU Core control logic."),
+            ("B_CPU_P_L1", "B_CPU_P", "MD_L1_CACHE", "P_CORE_L1_CACHE", "cache", "logic+memory", "CPU Cache", 1, "L1 Instruction and Data cache."),
             ("B_CPU_E", "B_CPU", "MD_CPU_E_CORE", "E_CORE", "block", "logic", "CPU", 4, "Four efficiency CPU cores."),
+            ("B_CPU_E_ALU", "B_CPU_E", "MD_CPU_ALU", "E_CORE_ALU", "block", "logic", "CPU", 1, "Efficiency CPU Core execution ALU datapath."),
+            ("B_CPU_E_CTRL", "B_CPU_E", None, "E_CORE_CTRL", "block", "logic", "CPU", 1, "Efficiency CPU Core control logic."),
             ("B_CPU_L3", "B_CPU", "MD_SRAM_BANK", "CPU_DSU_L3", "cache", "logic+memory", "CPU Cache", 1, "Shared DSU and 12 MB L3 cache."),
             ("B_GPU", "B0", None, "GPU_TOP", "subsystem", "logic+memory", "Graphics", 1, "Flagship mobile GPU with shader slices and cache."),
             ("B_GPU_SHADER", "B_GPU", "MD_GPU_SHADER", "GPU_SHADER_SLICE", "block", "logic", "Graphics", 6, "Six shader slices."),
@@ -430,6 +445,8 @@ def seed_data() -> None:
             ("B_VENC", "B_MEDIA", "MD_VIDEO_CODEC", "VIDEO_ENCODER", "block", "logic", "Video Encode", 1, "4K/8K encode engine."),
             ("B_DISPLAY", "B0", None, "DISPLAY_TOP", "subsystem", "logic", "Display", 1, "Display compositor and panel interface subsystem."),
             ("B_DPU", "B_DISPLAY", "MD_DISPLAY_PIPE", "DISPLAY_PIPE", "block", "logic", "Display", 2, "Dual display pipelines."),
+            ("B_DPU_PIXEL_PROC", "B_DPU", "MD_DISPLAY_PIXEL_PROC", "DISPLAY_PIXEL_PROC", "block", "logic", "Display", 1, "Display compositor pixel processor block."),
+            ("B_DPU_SRAM", "B_DPU", "MD_DISPLAY_PIPE_SRAM", "DISPLAY_PIPE_FIFO", "cache", "logic+memory", "Display", 1, "Display line buffer and FIFO SRAM."),
             ("B_MODEM", "B0", None, "5G_MODEM_TOP", "subsystem", "logic+memory", "Cellular", 1, "Integrated 5G baseband and RF digital frontend."),
             ("B_MODEM_DSP", "B_MODEM", None, "BASEBAND_DSP", "block", "logic", "Cellular DSP", 2, "Dual vector DSP baseband engines."),
             ("B_MODEM_SRAM", "B_MODEM", "MD_SRAM_BANK", "BASEBAND_SRAM", "macro_group", "memory", "Cellular Memory", 4, "Baseband SRAM banks."),
@@ -478,15 +495,26 @@ def seed_data() -> None:
             for team, user_id, root in responsibility_roots
         ]
         tiers = [
-            Tier(id="T0", scenario_id="S2", tier_index=0, name="Compute Logic Tier", process_id="PN3E", role="CPU/GPU/NPU/ISP/media high-performance logic", orientation="Face-down", thickness_um=42, area_limit_mm2=72.0, description="Advanced logic tier with hot compute blocks and fine-pitch hybrid bonding."),
-            Tier(id="T1", scenario_id="S2", tier_index=1, name="SRAM + Cache Tier", process_id="PN5", role="Large SRAM/cache plus medium logic", orientation="Face-up / Face-to-face", thickness_um=48, area_limit_mm2=64.0, description="Cache/SRAM-heavy tier serving CPU/GPU/NPU and modem memories."),
-            Tier(id="T2", scenario_id="S2", tier_index=2, name="IO + Always-On Tier", process_id="PN6", role="LPDDR/PHY/IO/security/AON/analog-friendly logic", orientation="Backside PDN", thickness_um=60, area_limit_mm2=44.0, description="Mature-node companion tier for IO PHYs, PMU, RF digital, and low-power islands."),
+            Tier(id="T0", scenario_id="S2", tier_index=0, name="Compute Logic Tier", process_id="PN3E", role="CPU/GPU/NPU/ISP/media high-performance logic", orientation="Face-down", thickness_um=42, area_limit_mm2=300.0, description="Advanced logic tier with hot compute blocks and fine-pitch hybrid bonding."),
+            Tier(id="T1", scenario_id="S2", tier_index=1, name="SRAM + Cache Tier", process_id="PN5", role="Large SRAM/cache plus medium logic", orientation="Face-up / Face-to-face", thickness_um=48, area_limit_mm2=250.0, description="Cache/SRAM-heavy tier serving CPU/GPU/NPU and modem memories."),
+            Tier(id="T2", scenario_id="S2", tier_index=2, name="IO + Always-On Tier", process_id="PN6", role="LPDDR/PHY/IO/security/AON/analog-friendly logic", orientation="Backside PDN", thickness_um=60, area_limit_mm2=180.0, description="Mature-node companion tier for IO PHYs, PMU, RF digital, and low-power islands."),
         ]
 
         logical_metric_values = {
-            "B0": (2200, 84.0, 168.0, 285.0, 0.0), "B_CPU": (620, 10.0, 28.0, 42.0, 9.8), "B_CPU_P": (320, 0.0, 18.4, 20.2, 7.8), "B_CPU_E": (220, 0.0, 5.8, 6.5, 2.2), "B_CPU_L3": (180, 9.6, 2.1, 12.8, 1.6),
+            "B0": (2200, 84.0, 168.0, 285.0, 0.0), "B_CPU": (620, 10.0, 28.0, 42.0, 9.8),
+            "B_CPU_P": (320, 0.0, 18.4, 20.2, 7.8),
+            "B_CPU_P_ALU": (160, 0.0, 10.0, 10.0, 4.0),
+            "B_CPU_P_CTRL": (80, 0.0, 5.0, 5.0, 2.0),
+            "B_CPU_P_L1": (80, 0.0, 2.0, 3.2, 1.0),
+            "B_CPU_E": (220, 0.0, 5.8, 6.5, 2.2),
+            "B_CPU_E_ALU": (120, 0.0, 3.5, 4.0, 1.2),
+            "B_CPU_E_CTRL": (60, 0.0, 1.5, 1.5, 0.6),
+            "B_CPU_L3": (180, 9.6, 2.1, 12.8, 1.6),
             "B_GPU": (740, 10.5, 30.8, 44.0, 9.4), "B_GPU_SHADER": (520, 0.0, 27.6, 30.2, 8.6), "B_GPU_L2": (96, 8.6, 0.8, 9.9, 0.8), "B_NPU": (680, 14.2, 24.7, 43.5, 7.2), "B_NPU_TENSOR": (360, 0.0, 20.8, 22.4, 6.4), "B_NPU_SRAM": (128, 12.8, 0.9, 14.2, 0.7), "B_NPU_DMA": (104, 0.8, 2.5, 3.6, 0.6),
-            "B_ISP": (420, 4.0, 13.3, 19.0, 3.6), "B_ISP_PIPE": (240, 1.8, 9.6, 12.0, 2.8), "B_CV_DSP": (150, 1.2, 3.7, 5.2, 0.9), "B_MEDIA": (240, 1.2, 7.8, 10.0, 2.1), "B_VDEC": (120, 0.5, 3.6, 4.6, 0.9), "B_VENC": (130, 0.6, 4.2, 5.3, 1.1), "B_DISPLAY": (150, 0.8, 4.2, 5.6, 1.0), "B_DPU": (120, 0.6, 3.6, 4.8, 0.9),
+            "B_ISP": (420, 4.0, 13.3, 19.0, 3.6), "B_ISP_PIPE": (240, 1.8, 9.6, 12.0, 2.8), "B_CV_DSP": (150, 1.2, 3.7, 5.2, 0.9), "B_MEDIA": (240, 1.2, 7.8, 10.0, 2.1), "B_VDEC": (120, 0.5, 3.6, 4.6, 0.9), "B_VENC": (130, 0.6, 4.2, 5.3, 1.1), "B_DISPLAY": (150, 0.8, 4.2, 5.6, 1.0),
+            "B_DPU": (120, 0.6, 3.6, 4.8, 0.9),
+            "B_DPU_PIXEL_PROC": (70, 0.0, 2.0, 3.0, 0.5),
+            "B_DPU_SRAM": (40, 0.4, 0.5, 1.0, 0.2),
             "B_MODEM": (520, 7.8, 19.6, 31.0, 5.4), "B_MODEM_DSP": (260, 1.6, 10.2, 12.6, 3.2), "B_MODEM_SRAM": (90, 5.4, 0.7, 6.4, 0.5), "B_MODEM_RF": (110, 0.8, 3.8, 5.1, 0.9), "B_MEM": (260, 32.0, 6.0, 42.0, 2.5), "B_SYS_CACHE": (80, 25.6, 0.9, 28.2, 1.1), "B_LPDDR_CTRL": (180, 1.2, 4.8, 6.1, 1.4), "B_NOC": (300, 0.8, 8.5, 10.5, 2.2),
             "B_IO": (210, 0.5, 18.0, 24.0, 2.0), "B_DDR_PHY": (70, 0.0, 8.8, 9.6, 1.1), "B_UFS_PHY": (24, 0.0, 1.5, 1.8, 0.2), "B_USB_PCIE_PHY": (42, 0.0, 2.8, 3.4, 0.4), "B_MIPI_PHY": (52, 0.0, 3.6, 4.5, 0.3), "B_SEC": (95, 1.2, 2.2, 4.0, 0.6), "B_CRYPTO": (50, 0.2, 1.2, 1.7, 0.4), "B_PMU": (86, 0.8, 2.8, 4.2, 0.3),
         }
@@ -518,7 +546,12 @@ def seed_data() -> None:
             ("B0", [("T0", 1, 0.45), ("T1", 1, 0.35), ("T2", 1, 0.20)]),
             ("B_CPU", [("T0", 1, 1.00)]),
             ("B_CPU_P", [("T0", 4, 1.00)]),
+            ("B_CPU_P_ALU", [("T0", 4, 1.00)]),
+            ("B_CPU_P_CTRL", [("T0", 4, 1.00)]),
+            ("B_CPU_P_L1", [("T0", 4, 1.00)]),
             ("B_CPU_E", [("T0", 4, 1.00)]),
+            ("B_CPU_E_ALU", [("T0", 4, 1.00)]),
+            ("B_CPU_E_CTRL", [("T0", 4, 1.00)]),
             ("B_CPU_L3", [("T0", 1, 0.25), ("T1", 1, 0.75)]),
             ("B_GPU_SHADER", [("T0", 6, 1.00)]),
             ("B_GPU_L2", [("T1", 2, 1.00)]),
@@ -535,6 +568,8 @@ def seed_data() -> None:
             ("B_VENC", [("T0", 1, 1.00)]),
             ("B_DISPLAY", [("T0", 1, 1.00)]),
             ("B_DPU", [("T0", 2, 1.00)]),
+            ("B_DPU_PIXEL_PROC", [("T0", 2, 1.00)]),
+            ("B_DPU_SRAM", [("T0", 2, 1.00)]),
             ("B_MODEM", [("T2", 1, 1.00)]),
             ("B_MODEM_DSP", [("T0", 2, 1.00)]),
             ("B_MODEM_SRAM", [("T1", 4, 1.00)]),
@@ -554,12 +589,29 @@ def seed_data() -> None:
         ]
         partition_rows: list[tuple[str, str, str, str, str, str, int, float]] = []
         for component_id, placements in mapping_specs:
-            component_name = logical_by_id[component_id].name
+            comp = logical_by_id[component_id]
+            component_name = comp.name
+            
+            # calculate parent multiplier to convert absolute counts in mapping_specs to relative
+            curr = comp.parent_id
+            parent_mult = 1
+            while curr:
+                p = logical_by_id[curr]
+                parent_mult *= p.logical_instance_count
+                curr = p.parent_id
+                
+            relative_placements = []
+            for tier_id, count, share in placements:
+                rel_count = count / parent_mult
+                if rel_count.is_integer():
+                    rel_count = int(rel_count)
+                relative_placements.append((tier_id, rel_count, share))
+                
             for category in required_categories_for_seed(component_id):
                 partial_index = 0
-                full_copy_count = sum(count for _, count, share in placements if abs(share - 1.0) < 0.001)
-                is_split = not (full_copy_count == logical_by_id[component_id].logical_instance_count and all(abs(share - 1.0) < 0.001 for _, _, share in placements))
-                for tier_id, count, share in placements:
+                full_copy_count = sum(c for _, c, share in relative_placements if abs(share - 1.0) < 0.001)
+                is_split = not (full_copy_count == comp.logical_instance_count and all(abs(share - 1.0) < 0.001 for _, _, share in relative_placements))
+                for tier_id, count, share in relative_placements:
                     partition_type = "partial" if is_split else "full"
                     if partition_type == "partial":
                         partial_index += 1
@@ -767,10 +819,22 @@ def partition_ids_for_components(session: Session, scenario_id: str, component_i
     return {row.id for row in rows if row.logical_component_id in component_ids}
 
 
+def absolute_logical_instance_count(session: Session, component: LogicalComponent) -> int:
+    count = component.logical_instance_count
+    curr = component
+    while curr.parent_id:
+        parent = session.get(LogicalComponent, curr.parent_id)
+        if not parent:
+            break
+        count *= parent.logical_instance_count
+        curr = parent
+    return count
+
+
 def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, Any]:
     logical = session.get(LogicalComponent, partition.logical_component_id)
     metrics = metrics_for(session, partition.scenario_id, "physical_partition", partition.id)
-    logical_count = logical.logical_instance_count if logical and logical.logical_instance_count else 0
+    logical_count = logical.logical_instance_count if logical else 0
     content_share = normalized_content_share(partition.partition_type, partition.content_share)
     return {
         "id": partition.id,
@@ -934,11 +998,86 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         for category in sorted(ALLOWED_PARTITION_RESOURCE_CATEGORIES)
     }
     physical_instance_count = max(equivalent_by_category.values(), default=0)
+    abs_logical_count = absolute_logical_instance_count(session, component)
     instance_share = round(physical_instance_count / component.logical_instance_count, 4) if component.logical_instance_count else 0
     block_area = metric_number(metrics, "block_area")
     if not block_area:
         block_area = sum(row["logic_area"] + row["sram_area"] + row["block_area"] for row in partition_rows)
     area_summary = logical_area_summary(session, component, scenario_id)
+    
+    # compute own_mapping_closed
+    own_closed = True
+    self_area = {
+        "logic": area_summary["residual_logic_area"] if area_summary["has_children"] else metric_number(metrics, "logic_area"),
+        "sram": area_summary["residual_sram_area"] if area_summary["has_children"] else metric_number(metrics, "sram_area"),
+        "block": area_summary["residual_block_area"] if area_summary["has_children"] else metric_number(metrics, "block_area"),
+    }
+    
+    for category in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
+        category_partitions = [p for p in partitions if normalized_resource_category(p.resource_category) == category]
+        expected_area = self_area[category]
+        
+        if len(category_partitions) == 0:
+            if expected_area > 0.01:
+                own_closed = False
+            continue
+            
+        equiv = sum(partition_equivalent_instances(p) for p in category_partitions)
+        mapped_area = sum(
+            metric_number(metrics_for(session, scenario_id, "physical_partition", p.id), f"{category}_area")
+            for p in category_partitions
+        )
+        
+        if abs(equiv - component.logical_instance_count) > 0.001 or abs(mapped_area - expected_area) > 0.01:
+            own_closed = False
+
+    # compute subtree_mapping_closed recursively
+    child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component.id)).all()
+    if not own_closed:
+        subtree_closed = False
+    else:
+        def check_descendant_closed(c: LogicalComponent) -> bool:
+            c_metrics = metrics_for(session, scenario_id, "logical_component", c.id)
+            c_partitions = session.exec(
+                select(PhysicalPartition).where(
+                    PhysicalPartition.scenario_id == scenario_id,
+                    PhysicalPartition.logical_component_id == c.id,
+                )
+            ).all()
+            c_area_summary = logical_area_summary(session, c, scenario_id)
+            c_self_area = {
+                "logic": c_area_summary["residual_logic_area"] if c_area_summary["has_children"] else metric_number(c_metrics, "logic_area"),
+                "sram": c_area_summary["residual_sram_area"] if c_area_summary["has_children"] else metric_number(c_metrics, "sram_area"),
+                "block": c_area_summary["residual_block_area"] if c_area_summary["has_children"] else metric_number(c_metrics, "block_area"),
+            }
+            
+            for cat in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
+                cat_parts = [p for p in c_partitions if normalized_resource_category(p.resource_category) == cat]
+                exp_area = c_self_area[cat]
+                if len(cat_parts) == 0:
+                    if exp_area > 0.01:
+                        return False
+                    continue
+                eq = sum(partition_equivalent_instances(p) for p in cat_parts)
+                ma = sum(
+                    metric_number(metrics_for(session, scenario_id, "physical_partition", p.id), f"{cat}_area")
+                    for p in cat_parts
+                )
+                if abs(eq - c.logical_instance_count) > 0.001 or abs(ma - exp_area) > 0.01:
+                    return False
+            
+            c_children = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == c.id)).all()
+            for child in c_children:
+                if not check_descendant_closed(child):
+                    return False
+            return True
+
+        subtree_closed = True
+        for child in child_rows:
+            if not check_descendant_closed(child):
+                subtree_closed = False
+                break
+
     return {
         "id": component.id,
         "parent": component.parent_id,
@@ -948,6 +1087,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "resource": component.resource_type,
         "hierarchy_path": component.hierarchy_path,
         "logical_instance_count": component.logical_instance_count,
+        "absolute_logical_instance_count": abs_logical_count,
         "owner_team": component.owner_team,
         "visibility_level": component.visibility_level,
         "physical_instance_count": physical_instance_count,
@@ -965,6 +1105,8 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "partitions": partition_rows,
         "tier_area_distribution": component_tier_area_distribution(session, component, scenario_id),
         "description": component.description,
+        "own_mapping_closed": own_closed,
+        "subtree_mapping_closed": subtree_closed,
         **area_summary,
     }
 
@@ -1118,6 +1260,21 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
             if (row.subject_type == "logical_component" and row.subject_id in allowed_component_ids)
             or (row.subject_type == "physical_partition" and row.subject_id in allowed_partition_ids)
         ]
+    all_components = session.exec(select(LogicalComponent)).all()
+    by_id = {c.id: c for c in all_components}
+    abs_counts: dict[str, int] = {}
+    def get_abs_count(cid: str) -> int:
+        if cid in abs_counts:
+            return abs_counts[cid]
+        c = by_id.get(cid)
+        if not c:
+            return 1
+        if not c.parent_id:
+            abs_counts[cid] = c.logical_instance_count
+        else:
+            abs_counts[cid] = c.logical_instance_count * get_abs_count(c.parent_id)
+        return abs_counts[cid]
+
     partitions_by_component: dict[str, list[PhysicalPartition]] = {}
     metrics_by_subject: dict[tuple[str, str], dict[str, Metric]] = {}
     children_by_parent: dict[str, list[LogicalComponent]] = {}
@@ -1166,22 +1323,23 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
         for category in sorted(ALLOWED_PARTITION_RESOURCE_CATEGORIES):
             category_partitions = [partition for partition in component_partitions if normalized_resource_category(partition.resource_category) == category]
             expected_area = self_area[category]
-            equivalent_instances = sum(partition_equivalent_instances(partition) for partition in category_partitions)
-            mapped_area = sum(partition_area_by_category(partition, category) for partition in category_partitions)
-            if expected_area <= area_epsilon:
-                if category_partitions:
+            if len(category_partitions) == 0:
+                if expected_area > area_epsilon:
                     component_closed = False
                     issues.append(
                         make_quality_issue(
                             "High",
-                            f"{category.upper()} zero-area resource should not be mapped",
-                            f"{component.name} has {expected_area:.3f} mm2 self/residual {category} area but has {len(category_partitions)} {category} partition rows.",
-                            "Remove this resource category from the component's physical partitions, or add a non-zero logical metric if it is real content.",
+                            f"{category.upper()} implementation coverage not closed",
+                            f"{component.name} self/residual {category} maps to 0.000 equivalent instances, expected {component.logical_instance_count}.",
+                            "Add physical partition rows for this resource category so count * content_share closes to the logical instance count.",
                             "logical_component",
                             component.id,
                         )
                     )
                 continue
+                
+            equivalent_instances = sum(partition_equivalent_instances(partition) for partition in category_partitions)
+            mapped_area = sum(partition_area_by_category(partition, category) for partition in category_partitions)
 
             if abs(equivalent_instances - component.logical_instance_count) > 0.001:
                 component_closed = False
@@ -1346,6 +1504,37 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
                     )
                 )
 
+    # Check tier area limits after process scaling
+    tiers_in_scenario = session.exec(select(Tier).where(Tier.scenario_id == scenario_id)).all()
+    processes = {p.id: p for p in session.exec(select(ProcessNode)).all()}
+    for tier in tiers_in_scenario:
+        process = processes.get(tier.process_id)
+        tier_partitions = [p for p in partitions if p.tier_id == tier.id]
+        total_scaled_area = 0.0
+        for partition in tier_partitions:
+            partition_metrics = metrics_by_subject.get(("physical_partition", partition.id), {})
+            p_logic = metric_number(partition_metrics, "logic_area")
+            p_sram = metric_number(partition_metrics, "sram_area")
+            p_block = metric_number(partition_metrics, "block_area")
+            
+            scaled_logic = p_logic * process_scale_for_category(process, "logic")
+            scaled_sram = p_sram * process_scale_for_category(process, "sram")
+            scaled_block = p_block * process_scale_for_category(process, "block")
+            
+            total_scaled_area += (scaled_logic + scaled_sram + scaled_block)
+            
+        if tier.area_limit_mm2 > 0 and total_scaled_area > tier.area_limit_mm2:
+            issues.append(
+                make_quality_issue(
+                    "Medium",
+                    "Tier physical area limit exceeded",
+                    f"Tier {tier.id} ({tier.name}) computed area {total_scaled_area:.3f} mm² (after process scaling) exceeds its limit of {tier.area_limit_mm2:.3f} mm².",
+                    "Optimize partition mappings, move blocks to other tiers, or use a more advanced process node with better area scaling.",
+                    "tier",
+                    tier.id,
+                )
+            )
+
     return issues
 
 
@@ -1471,6 +1660,101 @@ def get_physical_partitions(scenario_id: str = "S2", team: str | None = None) ->
         return [partition_ui(session, row) for row in rows]
 
 
+
+def recalculate_component_partitions(session: Session, scenario_id: str, component_id: str):
+    partitions = session.exec(
+        select(PhysicalPartition).where(
+            PhysicalPartition.scenario_id == scenario_id,
+            PhysicalPartition.logical_component_id == component_id,
+        )
+    ).all()
+    if not partitions:
+        return
+
+    logical_metrics = metrics_for(session, scenario_id, "logical_component", component_id)
+    current_logic_area = metric_number(logical_metrics, "logic_area")
+    current_sram_area = metric_number(logical_metrics, "sram_area")
+    current_block_area = metric_number(logical_metrics, "block_area")
+    current_power = metric_number(logical_metrics, "power")
+
+    child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component_id)).all()
+    child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
+    for child in child_rows:
+        child_metrics = metrics_for(session, scenario_id, "logical_component", child.id)
+        for m_name in child_sum:
+            child_sum[m_name] += metric_number(child_metrics, m_name)
+
+    self_area = {
+        "logic": max(0.0, current_logic_area - child_sum["logic_area"]),
+        "sram": max(0.0, current_sram_area - child_sum["sram_area"]),
+        "block": max(0.0, current_block_area - child_sum["block_area"]),
+    }
+
+    required_cats = {cat for cat, val in self_area.items() if val > 0.01}
+    if not required_cats:
+        required_cats = {"block"}
+    category_count = len(required_cats)
+
+    partitions_by_cat = {}
+    for p in partitions:
+        partitions_by_cat.setdefault(normalized_resource_category(p.resource_category), []).append(p)
+
+    for cat in ["logic", "sram", "block"]:
+        cat_items = partitions_by_cat.get(cat, [])
+        cat_area = self_area[cat]
+
+        total_equiv = 0.0
+        for p in cat_items:
+            c_share = normalized_content_share(p.partition_type, p.content_share if p.content_share is not None else p.partition_ratio)
+            total_equiv += p.physical_instance_count * c_share
+
+        if total_equiv <= 0.001:
+            total_equiv = 1.0
+
+        for p in cat_items:
+            c_share = normalized_content_share(p.partition_type, p.content_share if p.content_share is not None else p.partition_ratio)
+            equiv = p.physical_instance_count * c_share
+            share = equiv / total_equiv
+
+            p_logic_val = round(cat_area * share, 3) if cat == "logic" else 0.0
+            p_sram_val = round(cat_area * share, 3) if cat == "sram" else 0.0
+            p_block_val = round(cat_area * share, 3) if cat == "block" else 0.0
+            p_power_val = round(current_power * share / category_count, 3)
+            p_shape = f"{cat}_{p.tier_id.lower()}"
+
+            p_metric_configs = [
+                ("logic_area", p_logic_val, "mm2", "implementation_area", "number", "typical", "nominal"),
+                ("sram_area", p_sram_val, "mm2", "implementation_area", "number", "typical", "nominal"),
+                ("block_area", p_block_val, "mm2", "implementation_area", "number", "typical", "nominal"),
+                ("power", p_power_val, "W", "power", "number", "typical", "peak"),
+                ("shape_type", p_shape, "", "physical_shape", "text", "typical", "nominal"),
+            ]
+            for name, val, unit, category_type, val_type, corner, workload in p_metric_configs:
+                metric_id = f"M_PART_{p.id}_{name.upper()}"
+                existing_metric = session.get(Metric, metric_id)
+                if existing_metric:
+                    existing_metric.metric_value = str(val)
+                    session.add(existing_metric)
+                else:
+                    new_metric = Metric(
+                        id=metric_id,
+                        scenario_id=scenario_id,
+                        subject_type="physical_partition",
+                        subject_id=p.id,
+                        metric_name=name,
+                        metric_value=str(val),
+                        metric_unit=unit,
+                        metric_category=category_type,
+                        value_type=val_type,
+                        corner=corner,
+                        workload=workload,
+                        confidence="review",
+                        source_note="Recalculated on child area change",
+                        created_at=now_iso(),
+                    )
+                    session.add(new_metric)
+
+
 @app.put("/api/components/{component_id}/detail")
 def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -> dict[str, Any]:
     with Session(engine) as session:
@@ -1524,6 +1808,41 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         component.updated_at = now_iso()
         session.add(component)
 
+        # Update logical component metrics if provided
+        metric_configs = [
+            ("signal_count_total", payload.signal_count_total, "count", "logical", "number", "typical", "nominal"),
+            ("logic_area", payload.logic_area, "mm2", "logical_area", "number", "typical", "nominal"),
+            ("sram_area", payload.sram_area, "mm2", "logical_area", "number", "typical", "nominal"),
+            ("block_area", payload.block_area, "mm2", "logical_area", "number", "typical", "nominal"),
+            ("power", payload.power, "W", "power", "number", "typical", "peak"),
+        ]
+        
+        for name, val, unit, category, value_type, corner, workload in metric_configs:
+            if val is not None:
+                metric_id = f"M_LOG_{component_id}_{name.upper()}"
+                existing_metric = session.get(Metric, metric_id)
+                if existing_metric:
+                    existing_metric.metric_value = str(val)
+                    session.add(existing_metric)
+                else:
+                    new_metric = Metric(
+                        id=metric_id,
+                        scenario_id=payload.scenario_id,
+                        subject_type="logical_component",
+                        subject_id=component_id,
+                        metric_name=name,
+                        metric_value=str(val),
+                        metric_unit=unit,
+                        metric_category=category,
+                        value_type=value_type,
+                        corner=corner,
+                        workload=workload,
+                        confidence="review",
+                        source_note="Updated via web interface editor",
+                        created_at=now_iso(),
+                    )
+                    session.add(new_metric)
+
         existing = session.exec(
             select(PhysicalPartition).where(
                 PhysicalPartition.scenario_id == payload.scenario_id,
@@ -1557,6 +1876,93 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 description=partition.description,
             )
             session.merge(row)
+
+        # Recalculate physical partition metrics to maintain data consistency
+        logical_metrics = metrics_for(session, payload.scenario_id, "logical_component", component_id)
+        current_logic_area = payload.logic_area if payload.logic_area is not None else metric_number(logical_metrics, "logic_area")
+        current_sram_area = payload.sram_area if payload.sram_area is not None else metric_number(logical_metrics, "sram_area")
+        current_block_area = payload.block_area if payload.block_area is not None else metric_number(logical_metrics, "block_area")
+        current_power = payload.power if payload.power is not None else metric_number(logical_metrics, "power")
+
+        child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component_id)).all()
+        child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
+        for child in child_rows:
+            child_metrics = metrics_for(session, payload.scenario_id, "logical_component", child.id)
+            for m_name in child_sum:
+                child_sum[m_name] += metric_number(child_metrics, m_name)
+
+        self_area = {
+            "logic": max(0.0, current_logic_area - child_sum["logic_area"]),
+            "sram": max(0.0, current_sram_area - child_sum["sram_area"]),
+            "block": max(0.0, current_block_area - child_sum["block_area"]),
+        }
+
+        required_cats = {cat for cat, val in self_area.items() if val > 0.01}
+        if not required_cats:
+            required_cats = {"block"}
+        category_count = len(required_cats)
+
+        partitions_by_cat = {}
+        for item in canonical_partitions:
+            partitions_by_cat.setdefault(item[1], []).append(item)
+
+        for cat in ["logic", "sram", "block"]:
+            cat_items = partitions_by_cat.get(cat, [])
+            cat_area = self_area[cat]
+            
+            total_equiv = 0.0
+            for p_in, _, _, _ in cat_items:
+                c_share = normalized_content_share(p_in.partition_type, p_in.content_share if p_in.content_share is not None else p_in.partition_ratio)
+                total_equiv += p_in.physical_instance_count * c_share
+                
+            if total_equiv <= 0.001:
+                total_equiv = 1.0
+                
+            for p_in, _, p_id, _ in cat_items:
+                c_share = normalized_content_share(p_in.partition_type, p_in.content_share if p_in.content_share is not None else p_in.partition_ratio)
+                equiv = p_in.physical_instance_count * c_share
+                share = equiv / total_equiv
+                
+                p_logic_val = round(cat_area * share, 3) if cat == "logic" else 0.0
+                p_sram_val = round(cat_area * share, 3) if cat == "sram" else 0.0
+                p_block_val = round(cat_area * share, 3) if cat == "block" else 0.0
+                p_power_val = round(current_power * share / category_count, 3)
+                p_shape = f"{cat}_{p_in.tier_id.lower()}"
+                
+                p_metric_configs = [
+                    ("logic_area", p_logic_val, "mm2", "implementation_area", "number", "typical", "nominal"),
+                    ("sram_area", p_sram_val, "mm2", "implementation_area", "number", "typical", "nominal"),
+                    ("block_area", p_block_val, "mm2", "implementation_area", "number", "typical", "nominal"),
+                    ("power", p_power_val, "W", "power", "number", "typical", "peak"),
+                    ("shape_type", p_shape, "", "physical_shape", "text", "typical", "nominal"),
+                ]
+                for name, val, unit, category_type, val_type, corner, workload in p_metric_configs:
+                    metric_id = f"M_PART_{p_id}_{name.upper()}"
+                    existing_metric = session.get(Metric, metric_id)
+                    if existing_metric:
+                        existing_metric.metric_value = str(val)
+                        session.add(existing_metric)
+                    else:
+                        new_metric = Metric(
+                            id=metric_id,
+                            scenario_id=payload.scenario_id,
+                            subject_type="physical_partition",
+                            subject_id=p_id,
+                            metric_name=name,
+                            metric_value=str(val),
+                            metric_unit=unit,
+                            metric_category=category_type,
+                            value_type=val_type,
+                            corner=corner,
+                            workload=workload,
+                            confidence="review",
+                            source_note="Recalculated on component detail save",
+                            created_at=now_iso(),
+                        )
+                        session.add(new_metric)
+
+        if component.parent_id:
+            recalculate_component_partitions(session, payload.scenario_id, component.parent_id)
 
         session.commit()
         session.refresh(component)

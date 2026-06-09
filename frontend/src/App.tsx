@@ -90,6 +90,7 @@ interface BlockNode {
   resource: string;
   hierarchy_path: string;
   logical_instance_count: number;
+  absolute_logical_instance_count: number;
   owner_team: string;
   visibility_level: string;
   physical_instance_count: number;
@@ -113,6 +114,8 @@ interface BlockNode {
   partitions: PhysicalPartition[];
   tier_area_distribution: TierAreaDistribution[];
   description: string;
+  own_mapping_closed?: boolean;
+  subtree_mapping_closed?: boolean;
 }
 
 interface TreeBlock extends BlockNode {
@@ -288,10 +291,22 @@ interface TreeNodeProps {
 
 interface PartitionMappingEditorProps {
   component: BlockNode;
+  blocks: BlockNode[];
   tiers: TierInfo[];
   selectedScenarioId: string;
-  selectedTeam: string;
-  onSave: (component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]) => Promise<void>;
+  selectedTeam: string | null;
+  onSave: (
+    component: BlockNode,
+    logicalInstanceCount: number,
+    partitions: PhysicalPartition[],
+    logicalMetrics?: {
+      signal_count_total?: number;
+      logic_area?: number;
+      sram_area?: number;
+      block_area?: number;
+      power?: number;
+    }
+  ) => Promise<void>;
 }
 
 interface DataPageProps {
@@ -309,7 +324,18 @@ interface DataPageProps {
   importError: string | null;
   selectedScenarioId: string;
   selectedTeam: string;
-  onSaveComponentDetail: (component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]) => Promise<void>;
+  onSaveComponentDetail: (
+    component: BlockNode,
+    logicalInstanceCount: number,
+    partitions: PhysicalPartition[],
+    logicalMetrics?: {
+      signal_count_total?: number;
+      logic_area?: number;
+      sram_area?: number;
+      block_area?: number;
+      power?: number;
+    }
+  ) => Promise<void>;
   onImportWorkbook: (file: File) => Promise<void>;
 }
 
@@ -992,15 +1018,38 @@ function sortPartitionsForDisplay<T extends PhysicalPartition>(rows: T[]): T[] {
   });
 }
 
-function PartitionMappingEditor({ component, tiers, selectedScenarioId, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
+function PartitionMappingEditor({ component, blocks, tiers, selectedScenarioId, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
+  const parentAbsoluteCount = useMemo(() => {
+    let curr = component.parent;
+    let multiplier = 1;
+    while (curr) {
+      const p = blocks.find((b) => b.id === curr);
+      if (!p) break;
+      multiplier *= p.logical_instance_count;
+      curr = p.parent;
+    }
+    return multiplier;
+  }, [component, blocks]);
+
+  const initCount = component.absolute_logical_instance_count || 1;
   const [logicalCount, setLogicalCount] = useState<number>(component.logical_instance_count);
+  const [signalCount, setSignalCount] = useState<number>(Math.round((component.signal_count_total || 0) / initCount));
+  const [logicArea, setLogicArea] = useState<number>((component.logic_area || 0) / initCount);
+  const [sramArea, setSramArea] = useState<number>((component.sram_area || 0) / initCount);
+  const [blockArea, setBlockArea] = useState<number>((component.block_area || 0) / initCount);
+  const [power, setPower] = useState<number>((component.power || 0) / initCount);
   const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const requiredCategories = useMemo(() => requiredPartitionCategories(component), [component]);
 
   useEffect(() => {
+    const absCount = component.absolute_logical_instance_count || 1;
     setLogicalCount(component.logical_instance_count);
+    setSignalCount(Math.round((component.signal_count_total || 0) / absCount));
+    setLogicArea((component.logic_area || 0) / absCount);
+    setSramArea((component.sram_area || 0) / absCount);
+    setBlockArea((component.block_area || 0) / absCount);
+    setPower((component.power || 0) / absCount);
     const normalizedPartitions = component.partitions.map((partition) => ({ ...partition, resource_category: partition.resource_category ?? "block" }));
     const missingCategories = requiredPartitionCategories(component).filter((category) => !normalizedPartitions.some((partition) => partition.resource_category === category));
     setPartitions([
@@ -1009,6 +1058,48 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
     ]);
     setSaveError(null);
   }, [component, selectedScenarioId, tiers]);
+
+  function fixFormResiduals(): void {
+    const count = logicalCount || 1;
+    const absoluteCount = count * parentAbsoluteCount;
+    if (logicArea * absoluteCount < component.child_logic_area) {
+      setLogicArea(component.child_logic_area / absoluteCount);
+    }
+    if (sramArea * absoluteCount < component.child_sram_area) {
+      setSramArea(component.child_sram_area / absoluteCount);
+    }
+    if (blockArea * absoluteCount < component.child_block_area) {
+      setBlockArea(component.child_block_area / absoluteCount);
+    }
+  }
+
+  const liveResiduals = useMemo(() => {
+    const count = logicalCount || 1;
+    const absoluteCount = count * parentAbsoluteCount;
+    const totalLogic = logicArea * absoluteCount;
+    const totalSram = sramArea * absoluteCount;
+    const totalBlock = blockArea * absoluteCount;
+    if (component.has_children) {
+      return {
+        logic: Math.max(0, totalLogic - component.child_logic_area),
+        sram: Math.max(0, totalSram - component.child_sram_area),
+        block: Math.max(0, totalBlock - component.child_block_area),
+      };
+    } else {
+      return {
+        logic: totalLogic,
+        sram: totalSram,
+        block: totalBlock,
+      };
+    }
+  }, [component, logicArea, sramArea, blockArea, logicalCount, parentAbsoluteCount]);
+
+  const liveRequiredCategories = useMemo<PartitionResourceCategory[]>(() => {
+    const cats = partitionResourceCategories
+      .filter((cat) => liveResiduals[cat.id] > 0.01)
+      .map((cat) => cat.id);
+    return cats.length > 0 ? cats : ["block"];
+  }, [liveResiduals]);
 
   const categoryCoverage = partitionResourceCategories.map((category) => {
     const equivalent = partitions
@@ -1019,10 +1110,11 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
       ...category,
       equivalent,
       rowCount,
-      required: requiredCategories.includes(category.id),
-      closed: !requiredCategories.includes(category.id) && rowCount === 0 ? true : Math.abs(equivalent - logicalCount) < 0.001,
+      required: liveRequiredCategories.includes(category.id),
+      closed: !liveRequiredCategories.includes(category.id) && rowCount === 0 ? true : Math.abs(equivalent - logicalCount) < 0.001,
     };
   });
+
   const tierSummary = tiers
     .map((tier) => {
       const count = partitions.filter((partition) => partition.tier_id === tier.id).reduce((sum, partition) => sum + Number(partition.physical_instance_count || 0), 0);
@@ -1046,7 +1138,7 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
 
   function addPartition(): void {
     const suffix = partitions.length + 1;
-    const resourceCategory = requiredCategories.find((category) => !partitions.some((partition) => partition.resource_category === category)) ?? partitionResourceCategories.find((category) => !partitions.some((partition) => partition.resource_category === category.id))?.id ?? "logic";
+    const resourceCategory = liveRequiredCategories.find((category) => !partitions.some((partition) => partition.resource_category === category)) ?? partitionResourceCategories.find((category) => !partitions.some((partition) => partition.resource_category === category.id))?.id ?? "logic";
     setPartitions((rows) => [
       ...rows,
       makeDefaultPartition(component, selectedScenarioId, logicalCount, tiers, resourceCategory, suffix),
@@ -1057,7 +1149,20 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
     try {
       setSaving(true);
       setSaveError(null);
-      await onSave(component, component.logical_instance_count, canonicalizePartitionNames(component, sortPartitionsForDisplay(partitions)));
+      const count = logicalCount || 1;
+      const absoluteCount = count * parentAbsoluteCount;
+      await onSave(
+        component,
+        logicalCount,
+        canonicalizePartitionNames(component, sortPartitionsForDisplay(partitions)),
+        {
+          signal_count_total: Math.round(signalCount * absoluteCount),
+          logic_area: logicArea * absoluteCount,
+          sram_area: sramArea * absoluteCount,
+          block_area: blockArea * absoluteCount,
+          power: power * absoluteCount,
+        }
+      );
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Unknown save error");
     } finally {
@@ -1070,17 +1175,104 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
     : `Daily edit surface for ${selectedTeam}; metrics stay behind friendly fields.`;
 
   return (
-    <Card title="Physical Partition Mapping" subtitle={mappingSubtitle} icon={SplitSquareVertical}>
-      <div className="mb-4 grid gap-3 md:grid-cols-5">
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Logical Instances</div>
-          <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
-            {logicalCount}x
-          </div>
+    <Card title="Logical Info & Physical Partition Editor" subtitle={mappingSubtitle} icon={SplitSquareVertical}>
+      {/* Logical metrics edit form */}
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 md:grid-cols-6 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Logical Instances</label>
+          <input
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            type="number"
+            min={1}
+            value={logicalCount}
+            onChange={(e) => setLogicalCount(Number(e.target.value))}
+          />
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4 md:col-span-2">
-          <div className="text-xs text-slate-500">Mapped Equivalent by Category</div>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Signal Count (per inst)</label>
+          <input
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            type="number"
+            min={0}
+            value={signalCount}
+            onChange={(e) => setSignalCount(Number(e.target.value))}
+          />
+          {logicalCount > 1 && (
+            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+              Total: {Math.round(signalCount * logicalCount)} signals
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Logic Area (per inst)</label>
+          <input
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            type="number"
+            step={0.01}
+            min={0}
+            value={logicArea}
+            onChange={(e) => setLogicArea(Number(e.target.value))}
+          />
+          {logicalCount > 1 && (
+            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+              Total: {(logicArea * logicalCount).toFixed(3)} mm²
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">SRAM Area (per inst)</label>
+          <input
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            type="number"
+            step={0.01}
+            min={0}
+            value={sramArea}
+            onChange={(e) => setSramArea(Number(e.target.value))}
+          />
+          {logicalCount > 1 && (
+            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+              Total: {(sramArea * logicalCount).toFixed(3)} mm²
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Block Area (per inst)</label>
+          <input
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            type="number"
+            step={0.01}
+            min={0}
+            value={blockArea}
+            onChange={(e) => setBlockArea(Number(e.target.value))}
+          />
+          {logicalCount > 1 && (
+            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+              Total: {(blockArea * logicalCount).toFixed(3)} mm²
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Power (per inst)</label>
+          <input
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
+            type="number"
+            step={0.01}
+            min={0}
+            value={power}
+            onChange={(e) => setPower(Number(e.target.value))}
+          />
+          {logicalCount > 1 && (
+            <div className="mt-1 text-[10px] text-slate-500 font-medium">
+              Total: {(power * logicalCount).toFixed(3)} W
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl bg-slate-50/50 border border-slate-100 p-4">
+          <div className="text-xs text-slate-500 font-medium mb-2">Mapped Equivalent by Category</div>
+          <div className="flex flex-wrap gap-2">
             {categoryCoverage.map((category) => (
               <Badge key={category.id} tone={category.closed ? "green" : "amber"}>
                 {category.label} {category.required ? `${category.equivalent.toFixed(2)}/${logicalCount}` : category.rowCount === 0 ? "optional" : `${category.equivalent.toFixed(2)}/${logicalCount}`}
@@ -1088,16 +1280,34 @@ function PartitionMappingEditor({ component, tiers, selectedScenarioId, selected
             ))}
           </div>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Input Rule</div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-sm font-semibold text-slate-900">category + full/partial</span>
+        <div className="rounded-2xl bg-slate-50/50 border border-slate-100 p-4">
+          <div className="text-xs text-slate-500 font-medium mb-2">Mapping Rule</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-slate-950">Category closed</span>
             <Badge tone={coverageClosed ? "green" : "amber"}>{coverageClosed ? "closed" : "open"}</Badge>
           </div>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <div className="text-xs text-slate-500">Tier Summary</div>
-          <div className="mt-2 text-sm font-semibold text-slate-900">{tierSummary || "-"}</div>
+        <div className="rounded-2xl bg-slate-50/50 border border-slate-100 p-4 relative group">
+          <div className="flex items-center justify-between gap-1 text-xs text-slate-50 font-medium mb-2">
+            <span className="text-slate-500">Live Residual Area (mm²)</span>
+            {component.has_children && (liveResiduals.logic < -0.001 || liveResiduals.sram < -0.001 || liveResiduals.block < -0.001) && (
+              <button
+                className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200 hover:bg-amber-100 transition shadow-sm"
+                onClick={fixFormResiduals}
+                title="自动增加当前层面积以消除负值"
+                type="button"
+              >
+                Fix
+              </button>
+            )}
+          </div>
+          <div className="mt-1 text-xs font-mono font-semibold text-slate-950">
+            L: {liveResiduals.logic.toFixed(2)} | S: {liveResiduals.sram.toFixed(2)} | B: {liveResiduals.block.toFixed(2)}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-slate-50/50 border border-slate-100 p-4">
+          <div className="text-xs text-slate-500 font-medium mb-2">Tier Summary</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">{tierSummary || "-"}</div>
         </div>
       </div>
 
@@ -1396,7 +1606,14 @@ function HierarchyView({
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-xs text-slate-500">Logical Instances</div>
-              <div className="mt-2 font-semibold text-slate-900">{selected.logical_instance_count}x</div>
+              <div className="mt-2 font-semibold text-slate-900">
+                {selected.logical_instance_count}x
+                {selected.absolute_logical_instance_count !== selected.logical_instance_count && (
+                  <span className="text-xs text-slate-500 font-normal ml-1">
+                    (total {selected.absolute_logical_instance_count}x)
+                  </span>
+                )}
+              </div>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-xs text-slate-500">Tier Assignment</div>
@@ -1406,52 +1623,118 @@ function HierarchyView({
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-sm font-medium text-slate-900">Total Logic / SRAM / Block Area</div>
-              <div className="mt-3 flex items-end gap-6">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-slate-900">Total Logic / SRAM / Block Area</div>
+                {selected.absolute_logical_instance_count > 1 && (
+                  <Badge tone="blue">Total (for {selected.absolute_logical_instance_count}x instances)</Badge>
+                )}
+              </div>
+              <div className="mt-3 flex items-start gap-6">
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{selected.logic_area}</div>
                   <div className="text-xs text-slate-500">logic mm²</div>
+                  {selected.absolute_logical_instance_count > 1 && (
+                    <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
+                      {(selected.logic_area / selected.absolute_logical_instance_count).toFixed(3)} / inst
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{selected.sram_area}</div>
                   <div className="text-xs text-slate-500">SRAM mm²</div>
+                  {selected.absolute_logical_instance_count > 1 && (
+                    <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
+                      {(selected.sram_area / selected.absolute_logical_instance_count).toFixed(3)} / inst
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{selected.block_area}</div>
                   <div className="text-xs text-slate-500">block mm²</div>
+                  {selected.absolute_logical_instance_count > 1 && (
+                    <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
+                      {(selected.block_area / selected.absolute_logical_instance_count).toFixed(3)} / inst
+                    </div>
+                  )}
                 </div>
               </div>
               {selected.has_children && (
-                <div className="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2">
-                  <div>
-                    <div className="text-xs font-medium text-slate-500">Children Sum</div>
-                    <AreaTriplet compact logic={selected.child_logic_area} sram={selected.child_sram_area} block={selected.child_block_area} />
+                <div className="mt-4 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs font-medium text-slate-500">Children Sum</div>
+                      <AreaTriplet compact logic={selected.child_logic_area} sram={selected.child_sram_area} block={selected.child_block_area} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-slate-500">Residual / Self</div>
+                      <AreaTriplet compact logic={selected.residual_logic_area} sram={selected.residual_sram_area} block={selected.residual_block_area} />
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-xs font-medium text-slate-500">Residual / Self</div>
-                    <AreaTriplet compact logic={selected.residual_logic_area} sram={selected.residual_sram_area} block={selected.residual_block_area} />
-                  </div>
+                  {(selected.residual_logic_area < -0.001 || selected.residual_sram_area < -0.001 || selected.residual_block_area < -0.001) && (
+                    <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between gap-3">
+                      <span className="text-[11px] text-amber-700 font-semibold">检测到负的 Residual 面积！</span>
+                      <button
+                        className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 border border-amber-200 hover:bg-amber-100 transition shadow-sm"
+                        onClick={async () => {
+                          const nextLogic = Math.max(selected.logic_area, selected.child_logic_area);
+                          const nextSram = Math.max(selected.sram_area, selected.child_sram_area);
+                          const nextBlock = Math.max(selected.block_area, selected.child_block_area);
+                          await onSaveComponentDetail(
+                            selected,
+                            selected.logical_instance_count,
+                            selected.partitions,
+                            {
+                              signal_count_total: selected.signal_count_total,
+                              logic_area: nextLogic,
+                              sram_area: nextSram,
+                              block_area: nextBlock,
+                              power: selected.power,
+                            }
+                          );
+                        }}
+                        type="button"
+                        title="点击调整本级面积以对齐下层子模块总和"
+                      >
+                        Fix Residual
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="mt-4 grid gap-2 text-xs sm:grid-cols-3">
                 <div className="rounded-lg bg-slate-50 px-3 py-2">
                   <div className="text-slate-500">Logical base</div>
                   <div className="mt-1 font-semibold text-slate-900">{logicalBaseAreaTotal.toFixed(2)} mm2</div>
+                  {selected.absolute_logical_instance_count > 1 && (
+                    <div className="mt-0.5 text-[10px] text-slate-500 font-medium">
+                      {(logicalBaseAreaTotal / selected.absolute_logical_instance_count).toFixed(2)} / inst
+                    </div>
+                  )}
                 </div>
                 <div className="rounded-lg bg-slate-50 px-3 py-2">
                   <div className="text-slate-500">Mapped base</div>
                   <div className="mt-1 font-semibold text-slate-900">{tierBaseAreaTotal.toFixed(2)} mm2</div>
+                  {selected.absolute_logical_instance_count > 1 && (
+                    <div className="mt-0.5 text-[10px] text-slate-500 font-medium">
+                      {(tierBaseAreaTotal / selected.absolute_logical_instance_count).toFixed(2)} / inst
+                    </div>
+                  )}
                 </div>
                 <div className="rounded-lg bg-slate-50 px-3 py-2">
                   <div className="text-slate-500">Unmapped base</div>
                   <div className={`mt-1 font-semibold ${Math.abs(unmappedBaseArea) < 0.01 ? "text-emerald-700" : "text-amber-700"}`}>
                     {unmappedBaseArea.toFixed(2)} mm2
                   </div>
+                  {selected.absolute_logical_instance_count > 1 && (
+                    <div className="mt-0.5 text-[10px] text-slate-500 font-medium">
+                      {(unmappedBaseArea / selected.absolute_logical_instance_count).toFixed(2)} / inst
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
             <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-sm font-medium text-slate-900">Physical Coverage</div>
+              <div className="text-sm font-medium text-slate-900">Physical Coverage & Closure</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge tone="blue">direct physical {selected.physical_instance_count}x</Badge>
                 <Badge tone={Math.abs(selected.instance_share - 1) < 0.001 ? "green" : "amber"}>
@@ -1459,6 +1742,34 @@ function HierarchyView({
                 </Badge>
                 {children.length > 0 && <Badge>{children.length} child rows</Badge>}
               </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500 font-medium mb-1">Self / Residual Mapping</div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`h-2.5 w-2.5 rounded-full ${selected.own_mapping_closed ? "bg-emerald-500" : "bg-amber-500"}`} />
+                    <span className="text-xs font-semibold text-slate-900">
+                      {selected.own_mapping_closed ? "Closed" : "Open"}
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500 font-medium mb-1">Subtree Mapping</div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {selected.has_children ? (
+                      <>
+                        <span className={`h-2.5 w-2.5 rounded-full ${selected.subtree_mapping_closed ? "bg-emerald-500" : "bg-amber-500"}`} />
+                        <span className="text-xs font-semibold text-slate-900">
+                          {selected.subtree_mapping_closed ? "Closed" : "Open"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs font-medium text-slate-400">Leaf Node (N/A)</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="mt-4 border-t border-slate-100 pt-3">
                 <div className="flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
                   <span>Subtree area by tier</span>
@@ -1490,7 +1801,7 @@ function HierarchyView({
           </div>
         </Card>
 
-        <PartitionMappingEditor component={selected} tiers={tiers} selectedScenarioId={selectedScenarioId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
+        <PartitionMappingEditor component={selected} blocks={blocks} tiers={tiers} selectedScenarioId={selectedScenarioId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
 
         <Card title="建模原则" subtitle="第一阶段需要先统一数据口径" icon={Settings2}>
           <div className="grid gap-4 md:grid-cols-3">
@@ -2457,7 +2768,18 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     }
   }
 
-  async function handleSaveComponentDetail(component: BlockNode, logicalInstanceCount: number, partitions: PhysicalPartition[]): Promise<void> {
+  async function handleSaveComponentDetail(
+    component: BlockNode,
+    logicalInstanceCount: number,
+    partitions: PhysicalPartition[],
+    logicalMetrics?: {
+      signal_count_total?: number;
+      logic_area?: number;
+      sram_area?: number;
+      block_area?: number;
+      power?: number;
+    }
+  ): Promise<void> {
     await updateComponentDetail(component.id, {
       scenario_id: selectedScenarioId,
       team: selectedTeam,
@@ -2472,6 +2794,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         content_share: partition.partition_type === "full" ? 1 : partition.content_share,
         description: partition.description,
       })),
+      ...logicalMetrics,
     });
     await refreshApiData(selectedTeam, selectedScenarioId);
   }

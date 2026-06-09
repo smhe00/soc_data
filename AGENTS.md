@@ -101,7 +101,7 @@ Fields:
 - `content_share`
 - `description`
 
-Use `physical_instance_count` for how many physical copies are realized on that tier. Use `content_share` only for partial content split; full partitions always have `content_share = 1`. Do not ask users to fill `instance_share`; compute it from `physical_instance_count / logical_instance_count`.
+Use `physical_instance_count` for how many parent-relative physical copies are realized on that tier. Use `content_share` only for partial content split; full partitions always have `content_share = 1`. Do not ask users to fill `instance_share`; compute it from `physical_instance_count / logical_instance_count` (both of which are relative to the direct parent).
 
 Logic, SRAM, and block/hard-macro content can map independently. Equivalent instance closure is checked per `(logical_component, scenario, resource_category)`, not across all resource categories combined. Existing coarse mappings can remain `block` until a user refines them into `logic` and `sram` rows.
 

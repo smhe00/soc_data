@@ -36,6 +36,11 @@ export interface ComponentDetailUpdate {
     content_share: number;
     description: string;
   }>;
+  signal_count_total?: number;
+  logic_area?: number;
+  sram_area?: number;
+  block_area?: number;
+  power?: number;
 }
 
 export interface ComponentDetailUpdateResult {
