@@ -69,6 +69,27 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
+  // Expanded nodes and dropdown state for tree selector
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+  const [isTreeDropdownOpen, setIsTreeDropdownOpen] = useState<boolean>(false);
+
+  // Automatically expand all component tree nodes by default on load
+  useEffect(() => {
+    if (componentTree.length > 0) {
+      const initial: Record<string, boolean> = {};
+      const autoExpand = (nodes: TreeBlock[]) => {
+        for (const node of nodes) {
+          initial[node.id] = true;
+          if (node.children && node.children.length > 0) {
+            autoExpand(node.children);
+          }
+        }
+      };
+      autoExpand(componentTree);
+      setExpandedNodes(initial);
+    }
+  }, [componentTree]);
+
   // Load component tree when design option changes
   useEffect(() => {
     async function loadTree() {
@@ -154,6 +175,106 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
     };
     return flatten(componentTree);
   }, [componentTree]);
+
+  // Selected component hierarchical path
+  const selectedComponentPath = useMemo(() => {
+    if (scopeType === "component" && scopeId) {
+      const comp = flatComponents.find(c => c.id === scopeId);
+      return comp ? comp.hierarchy_path : null;
+    }
+    return null;
+  }, [scopeType, scopeId, flatComponents]);
+
+  // Render a conic-gradient based tiny pie chart indicator for completion status
+  const PieChartIndicator = ({ percent }: { percent: number }): JSX.Element => {
+    const activeColor = percent === 100 ? "#10b981" : "#f59e0b"; // emerald-500 or amber-500
+    const inactiveColor = "#f1f5f9"; // slate-100
+    
+    return (
+      <div
+        className="w-3.5 h-3.5 rounded-full border border-slate-350 shrink-0 inline-block align-middle shadow-sm"
+        style={{
+          background: `conic-gradient(${activeColor} 0% ${percent}%, ${inactiveColor} ${percent}% 100%)`
+        }}
+        title={`功耗录入完成度: ${percent}%`}
+      />
+    );
+  };
+
+  // Toggle expand/collapse of tree node
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedNodes(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  // Render tree options recursively
+  const renderTreeOptions = (nodes: TreeBlock[], depth: number = 0): JSX.Element[] => {
+    let elements: JSX.Element[] = [];
+
+    for (const node of nodes) {
+      const isExpanded = !!expandedNodes[node.id];
+      const hasChildren = node.children && node.children.length > 0;
+      
+      // Calculate completion percentage
+      const descendants = getDescendants(node);
+      const totalCount = descendants.length;
+      const observedCount = descendants.filter((d) =>
+        summary?.observations.some((obs) => obs.scope_type === "component" && obs.scope_id === d.id)
+      ).length;
+      const pct = totalCount > 0 ? Math.round((observedCount / totalCount) * 100) : 0;
+      
+      // Check if selected
+      const isSelected = scopeId === node.id;
+
+      elements.push(
+        <div
+          key={node.id}
+          className={`flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg cursor-pointer transition ${
+            isSelected ? "bg-indigo-50 text-indigo-900 font-semibold" : "hover:bg-slate-50 text-slate-700"
+          }`}
+          style={{ paddingLeft: `${depth * 14 + 8}px` }}
+          onClick={() => {
+            setScopeId(node.id);
+            setScopeName(node.name);
+            setIsTreeDropdownOpen(false);
+          }}
+        >
+          <div className="flex items-center gap-1.5 min-w-0">
+            {hasChildren ? (
+              <button
+                type="button"
+                className="w-3.5 h-3.5 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200/50"
+                onClick={(e) => toggleExpand(node.id, e)}
+              >
+                <span className={`text-[8px] transform transition-transform ${isExpanded ? "rotate-90" : ""}`}>
+                  ▶
+                </span>
+              </button>
+            ) : (
+              <div className="w-3.5 h-3.5" /> // spacer
+            )}
+            <span className="truncate" title={node.name}>
+              {node.name} <span className="text-[9px] text-slate-400 font-mono">({node.id})</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0 pl-2">
+            <PieChartIndicator percent={pct} />
+            <span className="text-[9px] text-slate-450 font-medium">{pct}%</span>
+          </div>
+        </div>
+      );
+
+      if (hasChildren && isExpanded) {
+        elements = elements.concat(renderTreeOptions(node.children, depth + 1));
+      }
+    }
+
+    return elements;
+  };
 
   const handleDeleteObservation = async (obsId: string) => {
     if (!window.confirm("确定要删除该条功耗观测记录吗？")) {
@@ -892,27 +1013,42 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 {scopeType === "component" ? (
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">选择逻辑模块 (Component)</label>
-                    <select
-                      className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      value={scopeId}
-                      onChange={(e) => {
-                        const cid = e.target.value;
-                        setScopeId(cid);
-                        const comp = flatComponents.find((c) => c.id === cid);
-                        if (comp) {
-                          setScopeName(comp.name);
-                        } else {
-                          setScopeName("");
-                        }
-                      }}
-                    >
-                      <option value="">-- 请选择模块 --</option>
-                      {dropdownOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.displayLabel}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        className="flex items-center justify-between w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-left transition"
+                        onClick={() => setIsTreeDropdownOpen(!isTreeDropdownOpen)}
+                      >
+                        <span className="truncate">
+                          {scopeId ? (
+                            <span>
+                              {scopeName} <span className="text-xs text-slate-400 font-mono">({scopeId})</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">-- 请选择模块 --</span>
+                          )}
+                        </span>
+                        <span className="text-slate-400 text-[10px] transform transition-transform duration-200">
+                          {isTreeDropdownOpen ? "▲" : "▼"}
+                        </span>
+                      </button>
+
+                      {isTreeDropdownOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setIsTreeDropdownOpen(false)}
+                          />
+                          <div className="absolute left-0 right-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-250 bg-white p-1 shadow-lg space-y-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                            {componentTree.length > 0 ? (
+                              renderTreeOptions(componentTree)
+                            ) : (
+                              <div className="px-3 py-2 text-xs text-slate-400 text-center">无可用组件树</div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <div>
@@ -929,14 +1065,22 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
               </div>
 
               {scopeType === "component" && scopeId && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">确定模块范围名称 (Scope Name)</label>
-                  <input
-                    type="text"
-                    className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 focus:outline-none"
-                    value={scopeName}
-                    readOnly
-                  />
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    模块确认与层次路径 (Component Scope & Path)
+                  </label>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">范围名称: </span>
+                      <span className="text-slate-800 font-semibold font-mono">{scopeName}</span>
+                    </div>
+                    {selectedComponentPath && (
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-slate-400 font-medium shrink-0 mt-0.5">层次路径: </span>
+                        <span className="text-indigo-600 font-semibold font-mono break-all">{selectedComponentPath}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
