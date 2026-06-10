@@ -76,11 +76,11 @@ def main() -> None:
         team_import.raise_for_status()
         team_import_result = team_import.json()
 
-        assert len(components) == 36, f"expected 36 components, got {len(components)}"
-        assert len(partitions) == 129, f"expected 129 physical partitions, got {len(partitions)}"
+        assert len(components) == 43, f"expected 43 components, got {len(components)}"
+        assert len(partitions) == 144, f"expected 144 physical partitions, got {len(partitions)}"
         assert not [row for row in components if row["type"] == "parent_residual"], "logical residual should be computed, not stored as component rows"
         assert not [row for row in partitions if row["partition_type"] == "residual"], "physical partition type residual should not be used"
-        assert dashboard["metrics"]["partition_count"] == 129
+        assert dashboard["metrics"]["partition_count"] == 144
         assert quality_issues == [], f"expected no quality issues, got {quality_issues}"
         assert "AI Team" in teams, f"expected AI Team in responsibility teams, got {teams}"
         assert {row["id"] for row in ai_components} == {"B_NPU", "B_NPU_TENSOR", "B_NPU_SRAM", "B_NPU_DMA"}
