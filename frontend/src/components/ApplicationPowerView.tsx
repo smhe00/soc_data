@@ -199,7 +199,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="impl-option-select" label="实现选项 (Design Option)">
               <select
                 id="impl-option-select"
-                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={selectedImplOptionId}
                 onChange={(e) => handleImplOptionChange(e.target.value)}
               >
@@ -216,7 +216,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="phys-mapping-select" label="物理映射版本 (Physical Mapping)">
               <select
                 id="phys-mapping-select"
-                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={selectedPhysicalMappingId}
                 onChange={(e) => setSelectedPhysicalMappingId(e.target.value)}
                 disabled={physicalMappings.length === 0}
@@ -238,7 +238,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="app-scenario-select" label="应用场景 (Application Scenario)">
               <select
                 id="app-scenario-select"
-                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={selectedApplicationScenarioId}
                 onChange={(e) => setSelectedApplicationScenarioId(e.target.value)}
               >
@@ -255,7 +255,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="op-set-select" label="工作点配置 (Operating Point Set)">
               <select
                 id="op-set-select"
-                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 value={selectedOperatingPointSetId}
                 onChange={(e) => setSelectedOperatingPointSetId(e.target.value)}
               >
@@ -270,9 +270,9 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
         </div>
 
         {/* Advanced Filters */}
-        <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="mt-4 border-t border-slate-100 pt-4">
           <details className="group">
-            <summary className="flex cursor-pointer items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
+            <summary className="flex cursor-pointer items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-800">
               <span className="flex items-center gap-1.5">
                 <Sliders className="h-3.5 w-3.5" />
                 高级过滤条件 (Advanced Filters)
@@ -285,7 +285,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="stat-type-select" label="统计类型 (Statistic)">
                   <select
                     id="stat-type-select"
-                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
                     value={statisticType}
                     onChange={(e) => setStatisticType(e.target.value)}
                   >
@@ -302,7 +302,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="power-type-select" label="功耗分量 (Power Type)">
                   <select
                     id="power-type-select"
-                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
                     value={powerType}
                     onChange={(e) => setPowerType(e.target.value)}
                   >
@@ -318,7 +318,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="time-window-input" label="时间窗口 (Time Window)">
                   <select
                     id="time-window-input"
-                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
                     value={timeWindowName}
                     onChange={(e) => setTimeWindowName(e.target.value)}
                   >
@@ -333,7 +333,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="dev-stage-select" label="开发成熟度 (Stage)">
                   <select
                     id="dev-stage-select"
-                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
                     value={developmentStage}
                     onChange={(e) => setDevelopmentStage(e.target.value)}
                   >
@@ -370,23 +370,23 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
           
           {/* Region 1: Overview Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <Cpu className="h-4 w-4 text-purple-500" />
                 可加和模块总功耗 (Additive Total)
               </div>
-              <div className="mt-3 text-3xl font-bold text-slate-950 dark:text-white">
+              <div className="mt-3 text-3xl font-bold text-slate-950">
                 {displayW(summary.total_additive_power_w)}
               </div>
               <div className="mt-1 text-xs text-slate-500">参与模块分解的独立观测功耗总和</div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <Database className="h-4 w-4 text-blue-500" />
                 非加和总线参考 (SoC Reference)
               </div>
-              <div className="mt-3 text-3xl font-bold text-slate-950 dark:text-white">
+              <div className="mt-3 text-3xl font-bold text-slate-950">
                 {displayW(summary.non_additive_reference_power_w)}
               </div>
               <div className="mt-1 text-xs text-slate-500">
@@ -396,23 +396,23 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <Activity className="h-4 w-4 text-emerald-500" />
                 未解释剩余功耗 (Residual)
               </div>
-              <div className="mt-3 text-3xl font-bold text-slate-950 dark:text-white">
+              <div className="mt-3 text-3xl font-bold text-slate-950">
                 {displayW(summary.residual_power_w)}
               </div>
               <div className="mt-1 text-xs text-slate-500">基准参考值与子模块加总之间的差值</div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <FileText className="h-4 w-4 text-amber-500" />
                 观测指标总数 (Observations)
               </div>
-              <div className="mt-3 text-3xl font-bold text-slate-950 dark:text-white">
+              <div className="mt-3 text-3xl font-bold text-slate-950">
                 {summary.observations.length}
               </div>
               <div className="mt-1 text-xs text-slate-500">命中当前复合筛选条件的数据库记录行数</div>
@@ -445,11 +445,11 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                         <div className="flex items-center gap-2">
                           {getScopeTypeBadge(type)}
                         </div>
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                        <span className="font-semibold text-slate-900">
                           {val.toFixed(2)} W ({((val / (summary.total_additive_power_w || 1)) * 100).toFixed(1)}%)
                         </span>
                       </div>
-                      <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className="h-2 w-full rounded-full bg-slate-100">
                         <div
                           className={`h-2 rounded-full transition-all ${getProgressBarColor(type)}`}
                           style={{ width: `${Math.min(100, percent)}%` }}
@@ -474,11 +474,11 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                       ? (val / summary.total_additive_power_w) * 100
                       : 0;
                     return (
-                      <div key={name} className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm last:border-0 last:pb-0 dark:border-slate-800">
-                        <span className="font-medium text-slate-800 dark:text-slate-200">{name}</span>
+                      <div key={name} className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm last:border-0 last:pb-0">
+                        <span className="font-medium text-slate-800">{name}</span>
                         <div className="flex items-center gap-3">
                           <span className="text-xs text-slate-500">{percent.toFixed(1)}%</span>
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">{val.toFixed(2)} W</span>
+                          <span className="font-semibold text-slate-900">{val.toFixed(2)} W</span>
                         </div>
                       </div>
                     );
@@ -497,10 +497,10 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <div className="space-y-3">
                   {(Object.entries(summary.by_stage) as [string, number][]).map(([stage, count]) => (
                     <div key={stage} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-600 dark:text-slate-400 text-xs truncate max-w-[180px]" title={getStageLabel(stage)}>
+                      <span className="text-slate-600 text-xs truncate max-w-[180px]" title={getStageLabel(stage)}>
                         {getStageLabel(stage).split(" ")[0]}
                       </span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{count} 条记录</span>
+                      <span className="font-semibold text-slate-800">{count} 条记录</span>
                     </div>
                   ))}
                 </div>
@@ -511,14 +511,14 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
               <Card title="非加和基准观测 (Reference Checks)" subtitle="SoC 或电源轨测量的全局约束功耗，不直接加总" icon={Database}>
                 <div className="space-y-3">
                   {summary.non_additive_references.map((ref: { scope_type: string; scope_name: string; power_value_w: number; development_stage: string | null }, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+                    <div key={idx} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-sm border border-slate-100">
                       <div className="flex items-center gap-2">
                         {getScopeTypeBadge(ref.scope_type)}
-                        <span className="font-semibold text-slate-900 dark:text-white">{ref.scope_name}</span>
+                        <span className="font-semibold text-slate-900">{ref.scope_name}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-slate-500">[{ref.development_stage ? getStageLabel(ref.development_stage).split(" ")[0] : "N/A"}]</span>
-                        <span className="font-bold text-indigo-700 dark:text-indigo-400">{ref.power_value_w.toFixed(2)} W</span>
+                        <span className="font-bold text-indigo-700">{ref.power_value_w.toFixed(2)} W</span>
                       </div>
                     </div>
                   ))}
@@ -533,9 +533,9 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
           {/* Region 5: Observations List Table */}
           <Card title="功耗观测明细数据表 (Power Observations Table)" subtitle="SQLite 数据库中该场景工作状态下的原始功耗记录" icon={FileText}>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-900 dark:text-slate-100">
+              <table className="w-full text-left text-sm text-slate-900">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900">
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     <th className="px-4 py-3">ID</th>
                     <th className="px-4 py-3">类型</th>
                     <th className="px-4 py-3">对象名称</th>
@@ -548,16 +548,16 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                     <th className="px-4 py-3">累加?</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-200">
                   {summary.observations.map((obs: PowerObservation) => (
-                    <tr key={obs.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
+                    <tr key={obs.id} className="hover:bg-slate-50/50">
                       <td className="px-4 py-3 text-xs text-slate-400 font-mono">{obs.id}</td>
                       <td className="px-4 py-3">{getScopeTypeBadge(obs.scope_type)}</td>
                       <td className="px-4 py-3 font-medium">{obs.scope_name}</td>
                       <td className="px-4 py-3 text-slate-500 text-xs">{obs.use_case_name || "N/A"}</td>
                       <td className="px-4 py-3 text-slate-500 text-xs">{obs.time_window_name || "N/A"}</td>
                       <td className="px-4 py-3 text-xs capitalize">{obs.power_type}</td>
-                      <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
+                      <td className="px-4 py-3 font-bold text-slate-900">
                         {obs.power_value_w.toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-xs">
@@ -567,8 +567,8 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                           obs.is_additive
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-rose-100 text-rose-800"
                         }`}>
                           {obs.is_additive ? "Y" : "N"}
                         </span>
