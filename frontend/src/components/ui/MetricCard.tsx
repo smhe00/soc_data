@@ -1,6 +1,7 @@
 import React from "react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "./Badge";
+import { formatNumber } from "./Tones";
 
 export interface MetricCardProps {
   label: string;
@@ -21,7 +22,7 @@ export function MetricCard({ label, value, unit, icon: Icon, hint }: MetricCardP
       </div>
       <div className="mt-5">
         <div className="text-3xl font-semibold tracking-tight text-slate-950">
-          {value}
+          {typeof value === "number" ? formatNumber(value) : value}
           <span className="ml-1 text-base font-medium text-slate-500">{unit}</span>
         </div>
         <div className="mt-1 text-sm text-slate-500">{label}</div>

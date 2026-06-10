@@ -1,4 +1,5 @@
 import React from "react";
+import { formatNumber } from "./Tones";
 
 export interface AreaTripletProps {
   logic: number;
@@ -13,15 +14,15 @@ export function AreaTriplet({ logic, sram, block, compact = false }: AreaTriplet
   return (
     <div className={compact ? "mt-2 grid grid-cols-3 gap-2" : "mt-3 flex items-end gap-6"}>
       <div>
-        <div className={numberClass}>{logic}</div>
+        <div className={numberClass}>{formatNumber(logic)}</div>
         <div className={labelClass}>logic mm²</div>
       </div>
       <div>
-        <div className={numberClass}>{sram}</div>
+        <div className={numberClass}>{formatNumber(sram)}</div>
         <div className={labelClass}>SRAM mm²</div>
       </div>
       <div>
-        <div className={numberClass}>{block}</div>
+        <div className={numberClass}>{formatNumber(block)}</div>
         <div className={labelClass}>block mm²</div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import React from "react";
 import { Layers3, SplitSquareVertical, AlertTriangle } from "lucide-react";
-import { Badge, Card, AreaTriplet } from "./ui";
+import { Badge, Card, AreaTriplet, formatNumber } from "./ui";
 import type { TierInfo } from "../types/tier";
 import type { PhysicalPartition } from "../types/component";
 
@@ -42,11 +42,11 @@ export function TiersView({
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Area</div>
-                  <div className="mt-1 font-semibold text-slate-900">{tier.area} mm²</div>
+                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(tier.area)} mm²</div>
                 </div>
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Power</div>
-                  <div className="mt-1 font-semibold text-slate-900">{tier.power} W</div>
+                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(tier.power)} W</div>
                 </div>
               </div>
             </div>

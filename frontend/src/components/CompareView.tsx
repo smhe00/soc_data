@@ -1,6 +1,6 @@
 import React from "react";
 import { SplitSquareVertical, AlertTriangle, BarChart3 } from "lucide-react";
-import { Badge, Card, riskTone } from "./ui";
+import { Badge, Card, riskTone, formatNumber } from "./ui";
 import type { Scenario } from "../types/scenario";
 
 export interface CompareViewProps {
@@ -30,12 +30,12 @@ export function CompareView({ scenarios, loading, error }: CompareViewProps): JS
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Area</div>
-                  <div className="mt-1 text-xl font-semibold text-slate-900">{scenario.area}</div>
+                  <div className="mt-1 text-xl font-semibold text-slate-900">{formatNumber(scenario.area)}</div>
                   <div className="text-xs text-slate-500">mm²</div>
                 </div>
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Power</div>
-                  <div className="mt-1 text-xl font-semibold text-slate-900">{scenario.power}</div>
+                  <div className="mt-1 text-xl font-semibold text-slate-900">{formatNumber(scenario.power)}</div>
                   <div className="text-xs text-slate-500">W</div>
                 </div>
                 <div className="rounded-xl bg-white p-3">

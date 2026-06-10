@@ -16,7 +16,8 @@ import {
   Card,
   ResourceIcon,
   AreaTriplet,
-  confidenceTone
+  confidenceTone,
+  formatNumber
 } from "./ui";
 import type { BlockNode, TreeBlock, PhysicalPartition } from "../types/component";
 import type { TierInfo } from "../types/tier";
@@ -790,7 +791,7 @@ export function HierarchyView({
               </div>
               <div className="mt-3 flex items-start gap-6">
                 <div>
-                  <div className="text-2xl font-semibold text-slate-950">{selected.logic_area}</div>
+                  <div className="text-2xl font-semibold text-slate-950">{formatNumber(selected.logic_area)}</div>
                   <div className="text-xs text-slate-500">logic mm²</div>
                   {selected.absolute_logical_instance_count > 1 && (
                     <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
@@ -799,7 +800,7 @@ export function HierarchyView({
                   )}
                 </div>
                 <div>
-                  <div className="text-2xl font-semibold text-slate-950">{selected.sram_area}</div>
+                  <div className="text-2xl font-semibold text-slate-950">{formatNumber(selected.sram_area)}</div>
                   <div className="text-xs text-slate-500">SRAM mm²</div>
                   {selected.absolute_logical_instance_count > 1 && (
                     <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
@@ -808,7 +809,7 @@ export function HierarchyView({
                   )}
                 </div>
                 <div>
-                  <div className="text-2xl font-semibold text-slate-950">{selected.block_area}</div>
+                  <div className="text-2xl font-semibold text-slate-950">{formatNumber(selected.block_area)}</div>
                   <div className="text-xs text-slate-500">block mm²</div>
                   {selected.absolute_logical_instance_count > 1 && (
                     <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">

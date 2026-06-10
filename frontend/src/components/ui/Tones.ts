@@ -21,3 +21,10 @@ export function severityTone(severity: SeverityLevel): BadgeTone {
   if (severity === "Medium") return "amber";
   return "slate";
 }
+
+export function formatNumber(val: number | string | undefined | null, precision: number = 3): string {
+  if (val === undefined || val === null || val === "") return "-";
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  return String(Number(num.toFixed(precision)));
+}
