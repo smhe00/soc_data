@@ -197,6 +197,62 @@ class ImplementationPackageEscape(SQLModel, table=True):
     description: str = ""
 
 
+class ApplicationScenario(SQLModel, table=True):
+    __tablename__ = "applicationscenario"
+    id: str = Field(primary_key=True)
+    project_id: str = Field(foreign_key="project.id")
+    name: str
+    category: str
+    description: str = ""
+
+
+class PhysicalMapping(SQLModel, table=True):
+    __tablename__ = "physicalmapping"
+    id: str = Field(primary_key=True)
+    impl_option_id: str = Field(foreign_key="imploption.id")
+    name: str
+    mapping_version: str
+    description: str = ""
+    mapping_json: str = ""
+
+
+class OperatingPointSet(SQLModel, table=True):
+    __tablename__ = "operatingpointset"
+    id: str = Field(primary_key=True)
+    project_id: str = Field(foreign_key="project.id")
+    name: str
+    description: str = ""
+    op_json: str = ""
+
+
+class PowerObservation(SQLModel, table=True):
+    __tablename__ = "powerobservation"
+    id: str = Field(primary_key=True)
+    project_id: str = Field(foreign_key="project.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
+    physical_mapping_id: str = Field(foreign_key="physicalmapping.id")
+    application_scenario_id: str = Field(foreign_key="applicationscenario.id")
+    operating_point_set_id: str = Field(foreign_key="operatingpointset.id")
+    
+    scope_type: str
+    scope_id: str | None = Field(default=None, foreign_key="logicalcomponent.id")
+    scope_name: str
+    
+    use_case_name: str | None = None
+    time_window_name: str | None = None
+    statistic_type: str = "average"
+    power_type: str = "total"
+    power_value_w: float = 0.0
+    
+    development_stage: str | None = None
+    source_type: str | None = None
+    confidence: str | None = None
+    is_additive: bool = True
+    
+    context_json: str | None = None
+    note: str | None = None
+
+
 class PartitionInput(BaseModel):
     id: str
     tier_id: str
@@ -350,6 +406,10 @@ def seed_data() -> None:
         session.exec(delete(ModuleDefinition).where(ModuleDefinition.id.like("MD_%")))
         session.exec(delete(ImplOption).where(ImplOption.id.in_(demo_impl_options)))
         session.exec(delete(Project).where(Project.id.in_(["P001", "P002"])))
+        session.exec(delete(PowerObservation))
+        session.exec(delete(OperatingPointSet))
+        session.exec(delete(PhysicalMapping))
+        session.exec(delete(ApplicationScenario))
 
         projects = [
             Project(
@@ -670,7 +730,171 @@ def seed_data() -> None:
             metric("M_IMPL_OPTION_S3_POWER", "S3", "impl_option", "S3", "power", 47.0, "W", "power", "number", "typical", "peak", "review", "2.5D option peak workload power."),
         ])
 
-        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities:
+        app_scenarios = [
+            ApplicationScenario(id="AS_CAMERA_4K60", project_id="P001", name="Camera 4K60 Recording", category="Multimedia", description="Continuous 4K 60FPS video recording using ISP, VPU, and NPU for denoise."),
+            ApplicationScenario(id="AS_GAMING_SUSTAINED", project_id="P001", name="Mobile Gaming Sustained", category="Gaming", description="Sustained gaming workload stressing CPU cluster and GPU shader cores."),
+            ApplicationScenario(id="AS_AI_BURST", project_id="P001", name="AI Photo Enhancement Burst", category="AI", description="Short bursty AI photo enhancement processing using NPU tensor cores."),
+        ]
+        
+        phys_mappings = [
+            PhysicalMapping(id="PM_2D_BASE", impl_option_id="S1", name="2D_BASELINE_MAPPING_V01", mapping_version="V01", description="Baseline monolithic 2D die mapping.", mapping_json='{"SOC_TOP": "monolithic"}'),
+            PhysicalMapping(id="PM_3DIC_A", impl_option_id="S2", name="3DIC_A_MAPPING_V02", mapping_version="V02", description="3DIC split-die mapping with SRAM cache stacked on Middle Tier.", mapping_json='{"NPU_TOP": "T0/T1 split", "GPU_TOP": "T0/T1 split", "CPU_CLUSTER": "T0"}'),
+        ]
+        
+        op_point_sets = [
+            OperatingPointSet(id="OP_CAMERA_PERF", project_id="P001", name="Camera_Perf_OP_Set", description="Performance operating points calibrated for 4K video capture.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.75, "frequency_mhz": 1800}, "GPU_TOP": {"voltage_v": 0.60, "frequency_mhz": 350}, "NPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 1000}}'),
+            OperatingPointSet(id="OP_GAMING_SUSTAINED", project_id="P001", name="Gaming_Sustained_OP_Set", description="Sustained thermal-limit operating points for gaming.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.80, "frequency_mhz": 2200}, "GPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 600}, "NPU_TOP": {"voltage_v": 0.60, "frequency_mhz": 400}}'),
+            OperatingPointSet(id="OP_AI_BURST", project_id="P001", name="AI_Burst_OP_Set", description="Peak performance burst operating points for short AI runs.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.90, "frequency_mhz": 3000}, "GPU_TOP": {"voltage_v": 0.85, "frequency_mhz": 900}, "NPU_TOP": {"voltage_v": 0.80, "frequency_mhz": 1500}}'),
+        ]
+        
+        power_obs = [
+            PowerObservation(
+                id="PO_CAM_ISP", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="component", scope_id="B_ISP", scope_name="ISP_TOP",
+                use_case_name="ISP_4K60_PIPELINE", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=1.4,
+                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_NPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="component", scope_id="B_NPU", scope_name="NPU_TOP",
+                use_case_name="NPU_AI_DENOISE", time_window_name="burst",
+                statistic_type="average", power_type="total", power_value_w=1.8,
+                development_stage="rtl_power", source_type="manual_seed", confidence="review", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_GPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="component", scope_id="B_GPU", scope_name="GPU_TOP",
+                use_case_name="GPU_PREVIEW_RENDER", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=0.8,
+                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_CPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="component", scope_id="B_CPU", scope_name="CPU_CLUSTER",
+                use_case_name="CPU_APP_CONTROL", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=0.6,
+                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_VPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="component", scope_id="B_VIDEO", scope_name="VPU_TOP",
+                use_case_name="VPU_DECODE_ENCODE", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=1.1,
+                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_DDR_PHY", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="component", scope_id="B_DDR_PHY", scope_name="DDR_PHY",
+                use_case_name="DDR_PHY_INTERFACE", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=0.7,
+                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_NOC", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="shared_resource", scope_id=None, scope_name="NoC",
+                use_case_name="SYSTEM_FABRIC", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=0.45,
+                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_INTERACT", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="interaction", scope_id=None, scope_name="NPU_TO_DDR_TRAFFIC",
+                use_case_name="MEMORY_TRAFFIC", time_window_name="burst",
+                statistic_type="average", power_type="total", power_value_w=0.25,
+                development_stage="architecture_estimate", source_type="manual_seed", confidence="review", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_CAM_VDD_NPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="power_rail", scope_id=None, scope_name="VDD_NPU",
+                use_case_name="NPU_RAIL_TOTAL", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=2.7,
+                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
+            ),
+            PowerObservation(
+                id="PO_CAM_SOC_TOTAL", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
+                scope_type="soc", scope_id=None, scope_name="SOC_TOTAL",
+                use_case_name="SOC_ACTIVE_POWER", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=8.1,
+                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=False
+            ),
+            PowerObservation(
+                id="PO_GAME_CPU", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
+                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
+                scope_type="component", scope_id="B_CPU", scope_name="CPU_CLUSTER",
+                use_case_name="CPU_GAMING_THREADS", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=1.8,
+                development_stage="post_pnr_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_GAME_GPU", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
+                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
+                scope_type="component", scope_id="B_GPU", scope_name="GPU_TOP",
+                use_case_name="GPU_3D_RENDER", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=3.2,
+                development_stage="post_pnr_power", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_GAME_NOC", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
+                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
+                scope_type="shared_resource", scope_id=None, scope_name="NoC",
+                use_case_name="SYSTEM_FABRIC", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=0.6,
+                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_GAME_SOC_TOTAL", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
+                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
+                scope_type="soc", scope_id=None, scope_name="SOC_TOTAL",
+                use_case_name="SOC_ACTIVE_POWER", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=6.2,
+                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
+            ),
+            PowerObservation(
+                id="PO_AI_NPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
+                scope_type="component", scope_id="B_NPU", scope_name="NPU_TOP",
+                use_case_name="NPU_TENSOR_RUN", time_window_name="burst",
+                statistic_type="average", power_type="total", power_value_w=4.5,
+                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_AI_CPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
+                scope_type="component", scope_id="B_CPU", scope_name="CPU_CLUSTER",
+                use_case_name="CPU_DISPATCH", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=1.2,
+                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_AI_NOC", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
+                scope_type="shared_resource", scope_id=None, scope_name="NoC",
+                use_case_name="SYSTEM_FABRIC", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=0.8,
+                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=True
+            ),
+            PowerObservation(
+                id="PO_AI_SOC_TOTAL", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
+                scope_type="soc", scope_id=None, scope_name="SOC_TOTAL",
+                use_case_name="SOC_ACTIVE_POWER", time_window_name="steady_state",
+                statistic_type="average", power_type="total", power_value_w=7.0,
+                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
+            ),
+        ]
+        
+        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities + app_scenarios + phys_mappings + op_point_sets + power_obs:
             session.merge(row)
         session.commit()
 
@@ -1539,6 +1763,155 @@ def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str |
             )
 
     return issues
+
+
+@app.get("/api/application-scenarios")
+def get_application_scenarios() -> list[ApplicationScenario]:
+    with Session(engine) as session:
+        return list(session.exec(select(ApplicationScenario)).all())
+
+
+@app.get("/api/physical-mappings")
+def get_physical_mappings(impl_option_id: str | None = None) -> list[PhysicalMapping]:
+    with Session(engine) as session:
+        stmt = select(PhysicalMapping)
+        if impl_option_id:
+            stmt = stmt.where(PhysicalMapping.impl_option_id == impl_option_id)
+        return list(session.exec(stmt).all())
+
+
+@app.get("/api/operating-point-sets")
+def get_operating_point_sets() -> list[OperatingPointSet]:
+    with Session(engine) as session:
+        return list(session.exec(select(OperatingPointSet)).all())
+
+
+@app.get("/api/power-observations")
+def get_power_observations(
+    project_id: str | None = None,
+    impl_option_id: str | None = None,
+    physical_mapping_id: str | None = None,
+    application_scenario_id: str | None = None,
+    operating_point_set_id: str | None = None,
+    scope_type: str | None = None,
+    statistic_type: str | None = None,
+    power_type: str | None = None,
+    development_stage: str | None = None,
+    confidence: str | None = None,
+    is_additive: bool | None = None,
+) -> list[PowerObservation]:
+    with Session(engine) as session:
+        stmt = select(PowerObservation)
+        if project_id:
+            stmt = stmt.where(PowerObservation.project_id == project_id)
+        if impl_option_id:
+            stmt = stmt.where(PowerObservation.impl_option_id == impl_option_id)
+        if physical_mapping_id:
+            stmt = stmt.where(PowerObservation.physical_mapping_id == physical_mapping_id)
+        if application_scenario_id:
+            stmt = stmt.where(PowerObservation.application_scenario_id == application_scenario_id)
+        if operating_point_set_id:
+            stmt = stmt.where(PowerObservation.operating_point_set_id == operating_point_set_id)
+        if scope_type:
+            stmt = stmt.where(PowerObservation.scope_type == scope_type)
+        if statistic_type:
+            stmt = stmt.where(PowerObservation.statistic_type == statistic_type)
+        if power_type:
+            stmt = stmt.where(PowerObservation.power_type == power_type)
+        if development_stage:
+            stmt = stmt.where(PowerObservation.development_stage == development_stage)
+        if confidence:
+            stmt = stmt.where(PowerObservation.confidence == confidence)
+        if is_additive is not None:
+            stmt = stmt.where(PowerObservation.is_additive == is_additive)
+        return list(session.exec(stmt).all())
+
+
+@app.get("/api/power-summary")
+def get_power_summary(
+    impl_option_id: str,
+    physical_mapping_id: str,
+    application_scenario_id: str,
+    operating_point_set_id: str,
+    statistic_type: str = "average",
+    power_type: str = "total",
+    time_window_name: str | None = None,
+    development_stage: str | None = None,
+) -> dict[str, Any]:
+    with Session(engine) as session:
+        stmt = select(PowerObservation).where(
+            PowerObservation.impl_option_id == impl_option_id,
+            PowerObservation.physical_mapping_id == physical_mapping_id,
+            PowerObservation.application_scenario_id == application_scenario_id,
+            PowerObservation.operating_point_set_id == operating_point_set_id,
+            PowerObservation.statistic_type == statistic_type,
+            PowerObservation.power_type == power_type,
+        )
+        if time_window_name:
+            stmt = stmt.where(PowerObservation.time_window_name == time_window_name)
+        if development_stage:
+            stmt = stmt.where(PowerObservation.development_stage == development_stage)
+            
+        observations = list(session.exec(stmt).all())
+        
+        additive_obs = [o for o in observations if o.is_additive]
+        total_additive_power_w = sum(o.power_value_w for o in additive_obs)
+        
+        non_additive_obs = [o for o in observations if not o.is_additive]
+        soc_ref = next((o for o in non_additive_obs if o.scope_type == "soc"), None)
+        non_additive_reference_power_w = soc_ref.power_value_w if soc_ref else None
+        
+        residual_power_w = None
+        if non_additive_reference_power_w is not None:
+            residual_power_w = round(non_additive_reference_power_w - total_additive_power_w, 4)
+            
+        by_scope_type = {}
+        for o in additive_obs:
+            by_scope_type[o.scope_type] = round(by_scope_type.get(o.scope_type, 0.0) + o.power_value_w, 4)
+            
+        by_component = {}
+        for o in additive_obs:
+            if o.scope_type == "component":
+                by_component[o.scope_name] = round(by_component.get(o.scope_name, 0.0) + o.power_value_w, 4)
+                
+        by_stage = {}
+        for o in observations:
+            stage = o.development_stage or "unknown"
+            by_stage[stage] = by_stage.get(stage, 0) + 1
+            
+        return {
+            "filters": {
+                "impl_option_id": impl_option_id,
+                "physical_mapping_id": physical_mapping_id,
+                "application_scenario_id": application_scenario_id,
+                "operating_point_set_id": operating_point_set_id,
+                "statistic_type": statistic_type,
+                "power_type": power_type,
+                "time_window_name": time_window_name,
+                "development_stage": development_stage,
+            },
+            "total_additive_power_w": round(total_additive_power_w, 4),
+            "non_additive_reference_power_w": non_additive_reference_power_w,
+            "residual_power_w": residual_power_w,
+            "by_scope_type": by_scope_type,
+            "by_component": by_component,
+            "by_stage": by_stage,
+            "non_additive_references": [
+                {
+                    "scope_type": o.scope_type,
+                    "scope_name": o.scope_name,
+                    "power_value_w": o.power_value_w,
+                    "development_stage": o.development_stage,
+                }
+                for o in non_additive_obs
+            ],
+            "observations": [o.dict() for o in observations],
+        }
+
+
+@app.get("/api/design-options")
+def get_design_options() -> list[dict[str, Any]]:
+    return get_impl_options()
 
 
 @app.get("/api/projects")

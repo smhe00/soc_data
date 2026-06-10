@@ -11,6 +11,7 @@ import {
   Package,
   Moon,
   Sun,
+  Zap,
 } from "lucide-react";
 
 import { getComponents, getComponentTree, getPhysicalPartitions, updateComponentDetail } from "./api/components";
@@ -36,8 +37,9 @@ import { CompareView } from "./components/CompareView";
 import { ImportsView } from "./components/ImportsView";
 import { QualityView } from "./components/QualityView";
 import { SchemaView } from "./components/SchemaView";
+import { ApplicationPowerView } from "./components/ApplicationPowerView";
 
-type TabId = "dashboard" | "hierarchy" | "tiers" | "implementation" | "compare" | "imports" | "quality" | "schema";
+type TabId = "dashboard" | "hierarchy" | "tiers" | "implementation" | "compare" | "imports" | "quality" | "schema" | "power";
 type ThemeMode = "light" | "dark";
 
 interface TabItem {
@@ -55,6 +57,7 @@ const tabs: TabItem[] = [
   { id: "imports", label: "数据导入", icon: Upload },
   { id: "quality", label: "数据质量", icon: AlertTriangle },
   { id: "schema", label: "数据模型", icon: Database },
+  { id: "power", label: "应用功耗", icon: Zap },
 ];
 
 export default function Soc3dicPhase1Prototype(): JSX.Element {
@@ -396,6 +399,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
           )}
           {active === "quality" && <QualityView qualityIssues={qualityIssues} loading={loading} error={error} />}
           {active === "schema" && <SchemaView />}
+          {active === "power" && <ApplicationPowerView implOptions={implOptions} />}
         </main>
       </div>
     </div>

@@ -299,4 +299,35 @@ GET /api/responsibilities/teams?scenario_id=S2
 PUT /api/components/{component_id}/detail
 GET /api/import/template?scenario_id=S2
 POST /api/import/excel?scenario_id=S2
+
+# Power MVP endpoints
+GET /api/design-options
+GET /api/application-scenarios
+GET /api/physical-mappings?impl_option_id=S2
+GET /api/operating-point-sets
+GET /api/power-observations
+GET /api/power-summary?impl_option_id=S2&physical_mapping_id=PM_3DIC_A&application_scenario_id=AS_CAMERA_4K60&operating_point_set_id=OP_CAMERA_PERF
 ```
+
+## Application Power (应用功耗)
+
+The Application Power tab provides scenario-based power modeling and analysis. 
+
+### Data Modeling Principles
+Power is decoupled from static component attributes and modeled as `PowerObservation` (conditional observations). Power values are determined by the combination of:
+- **Design Option (实现选项)** (mapped to `impl_option`)
+- **Physical Mapping (物理映射)** (mapped to `physical_mapping`)
+- **Application Scenario (应用场景)** (mapped to `application_scenario`)
+- **Operating Point Set (DVFS 工作点)** (mapped to `operating_point_set`)
+
+### Additive vs Non-additive Power
+Observations are marked with `is_additive`:
+- `is_additive = true`: Independent components, shared resources, or traffic interactions that are additive.
+- `is_additive = false`: Global reference points (e.g., SoC total, major rails) used for verification rather than summation.
+- **Residual Power**: Calculated as `SoC Reference Total - Additive Sum` to identify unassigned power losses.
+
+### Development Maturity & Confidence
+Each observation carries:
+- `development_stage`: `architecture_estimate`, `rtl_power`, `post_pnr_power`, `silicon_measurement`
+- `confidence`: `draft`, `review`, `approved`, `measured`
+
