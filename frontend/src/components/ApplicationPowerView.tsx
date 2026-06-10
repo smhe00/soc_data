@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Zap, Cpu, Sliders, Database, Activity, FileText, AlertTriangle, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { Card, Badge, FieldLabel } from "./ui";
 import type { ImplOption } from "../types/impl_option";
@@ -17,8 +17,8 @@ import type {
   PowerSummary,
   PowerObservation,
 } from "../types/power";
-import { getComponents } from "../api/components";
-import type { BlockNode } from "../types/component";
+import { getComponentTree } from "../api/components";
+import type { TreeBlock } from "../types/component";
 
 export interface ApplicationPowerViewProps {
   implOptions: ImplOption[];
@@ -48,8 +48,8 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
   // Refresh trigger to reload summary
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
-  // Components list for scope component dropdown
-  const [components, setComponents] = useState<BlockNode[]>([]);
+  // Component tree for scope component dropdown
+  const [componentTree, setComponentTree] = useState<TreeBlock[]>([]);
 
   // Add modal state
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -69,19 +69,91 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // Load components when design option changes
+  // Load component tree when design option changes
   useEffect(() => {
-    async function loadComponents() {
+    async function loadTree() {
       if (!selectedImplOptionId) return;
       try {
-        const data = await getComponents(undefined, selectedImplOptionId);
-        setComponents(data);
+        const data = await getComponentTree(undefined, selectedImplOptionId);
+        setComponentTree(data);
       } catch (err) {
-        console.error("Failed to load components:", err);
+        console.error("Failed to load component tree:", err);
       }
     }
-    loadComponents();
+    loadTree();
   }, [selectedImplOptionId]);
+
+  // Helper to get descendants of a TreeBlock
+  const getDescendants = (node: TreeBlock): TreeBlock[] => {
+    let list: TreeBlock[] = [node];
+    if (node.children) {
+      for (const child of node.children) {
+        list = list.concat(getDescendants(child));
+      }
+    }
+    return list;
+  };
+
+  // Flatten the component tree into dropdown options with indentation and completion status
+  const dropdownOptions = useMemo(() => {
+    const flatten = (nodes: TreeBlock[], depth: number = 0): Array<{ id: string; name: string; displayLabel: string; hasDirectObs: boolean }> => {
+      let result: Array<{ id: string; name: string; displayLabel: string; hasDirectObs: boolean }> = [];
+      
+      for (const node of nodes) {
+        const descendants = getDescendants(node);
+        const totalCount = descendants.length;
+        const observedCount = descendants.filter((d) =>
+          summary?.observations.some((obs) => obs.scope_type === "component" && obs.scope_id === d.id)
+        ).length;
+        
+        const hasDirectObs = summary?.observations.some(
+          (obs) => obs.scope_type === "component" && obs.scope_id === node.id
+        ) ?? false;
+
+        let completionLabel = "";
+        if (observedCount === totalCount) {
+          completionLabel = "100% 已闭合";
+        } else if (observedCount > 0) {
+          const pct = Math.round((observedCount / totalCount) * 100);
+          completionLabel = `${pct}% 部分录入`;
+        } else {
+          completionLabel = "未录入";
+        }
+
+        const indent = "\u00A0\u00A0\u00A0\u00A0".repeat(depth); // 4 spaces per depth level
+        const prefix = depth > 0 ? "├─ " : "";
+        const displayLabel = `${indent}${prefix}${node.name} (${node.id}) [${completionLabel}]`;
+
+        result.push({
+          id: node.id,
+          name: node.name,
+          displayLabel,
+          hasDirectObs,
+        });
+
+        if (node.children && node.children.length > 0) {
+          result = result.concat(flatten(node.children, depth + 1));
+        }
+      }
+      return result;
+    };
+    return flatten(componentTree);
+  }, [componentTree, summary?.observations]);
+
+  // Flat list of all TreeBlocks to easily query name by selected ID
+  const flatComponents = useMemo(() => {
+    const flatten = (nodes: TreeBlock[]): TreeBlock[] => {
+      let res: TreeBlock[] = [];
+      for (const n of nodes) {
+        res.push(n);
+        if (n.children && n.children.length > 0) {
+          res = res.concat(flatten(n.children));
+        }
+      }
+      return res;
+    };
+    return flatten(componentTree);
+  }, [componentTree]);
 
   const handleDeleteObservation = async (obsId: string) => {
     if (!window.confirm("确定要删除该条功耗观测记录吗？")) {
@@ -826,7 +898,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                       onChange={(e) => {
                         const cid = e.target.value;
                         setScopeId(cid);
-                        const comp = components.find((c) => c.id === cid);
+                        const comp = flatComponents.find((c) => c.id === cid);
                         if (comp) {
                           setScopeName(comp.name);
                         } else {
@@ -835,9 +907,9 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                       }}
                     >
                       <option value="">-- 请选择模块 --</option>
-                      {components.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.id})
+                      {dropdownOptions.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.displayLabel}
                         </option>
                       ))}
                     </select>
