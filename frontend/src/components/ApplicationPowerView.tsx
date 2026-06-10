@@ -199,7 +199,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="impl-option-select" label="实现选项 (Design Option)">
               <select
                 id="impl-option-select"
-                className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                 value={selectedImplOptionId}
                 onChange={(e) => handleImplOptionChange(e.target.value)}
               >
@@ -216,7 +216,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="phys-mapping-select" label="物理映射版本 (Physical Mapping)">
               <select
                 id="phys-mapping-select"
-                className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                 value={selectedPhysicalMappingId}
                 onChange={(e) => setSelectedPhysicalMappingId(e.target.value)}
                 disabled={physicalMappings.length === 0}
@@ -238,7 +238,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="app-scenario-select" label="应用场景 (Application Scenario)">
               <select
                 id="app-scenario-select"
-                className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                 value={selectedApplicationScenarioId}
                 onChange={(e) => setSelectedApplicationScenarioId(e.target.value)}
               >
@@ -255,7 +255,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             <FieldLabel htmlFor="op-set-select" label="工作点配置 (Operating Point Set)">
               <select
                 id="op-set-select"
-                className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                 value={selectedOperatingPointSetId}
                 onChange={(e) => setSelectedOperatingPointSetId(e.target.value)}
               >
@@ -285,7 +285,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="stat-type-select" label="统计类型 (Statistic)">
                   <select
                     id="stat-type-select"
-                    className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-2.5 py-1.5 text-xs text-slate-850 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                     value={statisticType}
                     onChange={(e) => setStatisticType(e.target.value)}
                   >
@@ -302,7 +302,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="power-type-select" label="功耗分量 (Power Type)">
                   <select
                     id="power-type-select"
-                    className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-2.5 py-1.5 text-xs text-slate-850 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                     value={powerType}
                     onChange={(e) => setPowerType(e.target.value)}
                   >
@@ -318,7 +318,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="time-window-input" label="时间窗口 (Time Window)">
                   <select
                     id="time-window-input"
-                    className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-2.5 py-1.5 text-xs text-slate-850 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                     value={timeWindowName}
                     onChange={(e) => setTimeWindowName(e.target.value)}
                   >
@@ -333,7 +333,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 <FieldLabel htmlFor="dev-stage-select" label="开发成熟度 (Stage)">
                   <select
                     id="dev-stage-select"
-                    className="mt-1 block w-full rounded-lg border border-slate-205 bg-white px-2.5 py-1.5 text-xs text-slate-850 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                     value={developmentStage}
                     onChange={(e) => setDevelopmentStage(e.target.value)}
                   >
@@ -427,6 +427,18 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                   const percent = summary.total_additive_power_w > 0
                     ? (val / summary.total_additive_power_w) * 105
                     : 0;
+                  const getProgressBarColor = (scopeType: string) => {
+                    const colorMapping: Record<string, string> = {
+                      soc: "bg-gradient-to-r from-blue-500 to-indigo-650",
+                      component: "bg-gradient-to-r from-violet-500 to-purple-600",
+                      tier: "bg-gradient-to-r from-emerald-500 to-teal-600",
+                      power_rail: "bg-gradient-to-r from-amber-400 to-orange-500",
+                      shared_resource: "bg-gradient-to-r from-cyan-400 to-blue-500",
+                      interaction: "bg-gradient-to-r from-rose-500 to-red-600",
+                      residual: "bg-gradient-to-r from-slate-400 to-slate-600",
+                    };
+                    return colorMapping[scopeType] || "bg-indigo-600";
+                  };
                   return (
                     <div key={type} className="space-y-1">
                       <div className="flex items-center justify-between text-sm">
@@ -439,7 +451,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                       </div>
                       <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800">
                         <div
-                          className="h-2 rounded-full bg-indigo-600 transition-all"
+                          className={`h-2 rounded-full transition-all ${getProgressBarColor(type)}`}
                           style={{ width: `${Math.min(100, percent)}%` }}
                         />
                       </div>
@@ -536,7 +548,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                     <th className="px-4 py-3">累加?</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-150 dark:divide-slate-800">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                   {summary.observations.map((obs: PowerObservation) => (
                     <tr key={obs.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
                       <td className="px-4 py-3 text-xs text-slate-400 font-mono">{obs.id}</td>

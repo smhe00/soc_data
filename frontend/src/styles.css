@@ -130,6 +130,10 @@ body {
   background-color: #2e1065;
 }
 
+.theme-dark .bg-cyan-50 {
+  background-color: #083344;
+}
+
 .theme-dark .text-blue-700,
 .theme-dark .text-blue-800 {
   color: #93c5fd;
@@ -153,9 +157,21 @@ body {
   color: #fca5a5;
 }
 
+.theme-dark .text-violet-700,
+.theme-dark .text-violet-800 {
+  color: #c084fc;
+}
+
+.theme-dark .text-cyan-700,
+.theme-dark .text-cyan-800 {
+  color: #22d3ee;
+}
+
 .theme-dark .border-blue-100,
 .theme-dark .border-emerald-100,
 .theme-dark .border-amber-100,
+.theme-dark .border-violet-100,
+.theme-dark .border-cyan-100,
 .theme-dark .border-red-100 {
   border-color: #334155;
 }
