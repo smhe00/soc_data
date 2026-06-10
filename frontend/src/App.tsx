@@ -262,7 +262,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       <div className="flex min-h-screen">
         <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white p-5 lg:block">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-slate-900 p-3 text-white">
+            <div className="rounded-2xl bg-indigo-600 p-3 text-white">
               <Layers3 size={24} />
             </div>
             <div>
@@ -280,7 +280,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                   key={tab.id}
                   onClick={() => setActive(tab.id)}
                   className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium transition ${
-                    selected ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-955"
+                    selected ? "bg-indigo-50 text-indigo-700 border border-indigo-100/30 font-semibold shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                   type="button"
                 >
@@ -360,7 +360,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                   <button
                     key={tab.id}
                     onClick={() => setActive(tab.id)}
-                    className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${active === tab.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+                    className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium ${active === tab.id ? "bg-indigo-50 text-indigo-700 border border-indigo-100/30 font-semibold shadow-sm" : "bg-slate-100 text-slate-700"}`}
                     type="button"
                   >
                     <Icon size={16} />

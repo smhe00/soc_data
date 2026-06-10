@@ -524,7 +524,7 @@ export function ImplementationView({ implOptions }: ImplementationViewProps): JS
         icon={Package}
         right={
           <button
-            className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex h-9 items-center rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             disabled={implementationLoading || implementationSaving || !selectedImplOptionId}
             onClick={saveImplementation}
             type="button"

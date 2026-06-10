@@ -71,7 +71,7 @@ export function ImportsView({
             <a className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={scopedTemplateUrl}>
               Download {selectedTeam} / {selectedImplOptionId} Template
             </a>
-            <label className={`cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 ${importing ? "opacity-60" : ""}`}>
+            <label className={`cursor-pointer rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 ${importing ? "opacity-60" : ""}`}>
               {importing ? "Importing..." : "Select .xlsx"}
               <input
                 accept=".xlsx"

@@ -211,3 +211,16 @@ body {
 .theme-dark .border-rose-300 {
   border-color: #64748b;
 }
+
+.theme-dark .bg-indigo-50 {
+  background-color: #1e293b;
+}
+
+.theme-dark .text-indigo-700 {
+  color: #818cf8;
+}
+
+.theme-dark .border-indigo-100\/30 {
+  border-color: #334155;
+}
+

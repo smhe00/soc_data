@@ -131,7 +131,7 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
     <div>
       <div
         className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-sm transition ${
-          active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+          active ? "bg-indigo-50 text-indigo-700 border border-indigo-100/30 font-semibold" : "text-slate-700 hover:bg-slate-100"
         }`}
         style={{ paddingLeft: `${8 + depth * 18}px` }}
       >
@@ -625,7 +625,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
         <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" type="button" onClick={addPartition}>Add Partition</button>
         <div className="flex items-center gap-3">
           {saveError && <span className="max-w-xl text-sm text-red-600">{saveError}</span>}
-          <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60" disabled={saving} type="button" onClick={() => void save()}>
+          <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60" disabled={saving} type="button" onClick={() => void save()}>
             {saving ? "Saving..." : "Save Mapping"}
           </button>
         </div>
