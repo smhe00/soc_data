@@ -274,10 +274,10 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedScenarioId, 
   const initCount = component.absolute_logical_instance_count || 1;
   const [logicalCount, setLogicalCount] = useState<number>(component.logical_instance_count);
   const [signalCount, setSignalCount] = useState<number>(Math.round((component.signal_count_total || 0) / initCount));
-  const [logicArea, setLogicArea] = useState<number>((component.logic_area || 0) / initCount);
-  const [sramArea, setSramArea] = useState<number>((component.sram_area || 0) / initCount);
-  const [blockArea, setBlockArea] = useState<number>((component.block_area || 0) / initCount);
-  const [power, setPower] = useState<number>((component.power || 0) / initCount);
+  const [logicArea, setLogicArea] = useState<number>(Number(((component.logic_area || 0) / initCount).toFixed(3)));
+  const [sramArea, setSramArea] = useState<number>(Number(((component.sram_area || 0) / initCount).toFixed(3)));
+  const [blockArea, setBlockArea] = useState<number>(Number(((component.block_area || 0) / initCount).toFixed(3)));
+  const [power, setPower] = useState<number>(Number(((component.power || 0) / initCount).toFixed(3)));
   const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -286,11 +286,15 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedScenarioId, 
     const absCount = component.absolute_logical_instance_count || 1;
     setLogicalCount(component.logical_instance_count);
     setSignalCount(Math.round((component.signal_count_total || 0) / absCount));
-    setLogicArea((component.logic_area || 0) / absCount);
-    setSramArea((component.sram_area || 0) / absCount);
-    setBlockArea((component.block_area || 0) / absCount);
-    setPower((component.power || 0) / absCount);
-    const normalizedPartitions = component.partitions.map((partition) => ({ ...partition, resource_category: partition.resource_category ?? "block" }));
+    setLogicArea(Number(((component.logic_area || 0) / absCount).toFixed(3)));
+    setSramArea(Number(((component.sram_area || 0) / absCount).toFixed(3)));
+    setBlockArea(Number(((component.block_area || 0) / absCount).toFixed(3)));
+    setPower(Number(((component.power || 0) / absCount).toFixed(3)));
+    const normalizedPartitions = component.partitions.map((partition) => ({
+      ...partition,
+      resource_category: partition.resource_category ?? "block",
+      content_share: Number(Number(partition.content_share || 0).toFixed(3))
+    }));
     const missingCategories = requiredPartitionCategories(component).filter((category) => !normalizedPartitions.some((partition) => partition.resource_category === category));
     setPartitions([
       ...normalizedPartitions,
