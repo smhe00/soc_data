@@ -277,6 +277,29 @@ class ComponentDetailUpdate(BaseModel):
     power: float | None = None
 
 
+class PowerObservationCreate(BaseModel):
+    project_id: str
+    impl_option_id: str
+    physical_mapping_id: str
+    application_scenario_id: str
+    operating_point_set_id: str
+    
+    scope_type: str
+    scope_id: str | None = None
+    scope_name: str
+    
+    use_case_name: str | None = None
+    time_window_name: str | None = None
+    statistic_type: str = "average"
+    power_type: str = "total"
+    power_value_w: float = 0.0
+    
+    development_stage: str | None = None
+    confidence: str | None = "draft"
+    is_additive: bool = True
+    note: str | None = None
+
+
 class ImplementationTierInput(BaseModel):
     id: str
     name: str
@@ -1907,6 +1930,75 @@ def get_power_summary(
             ],
             "observations": [o.dict() for o in observations],
         }
+
+
+@app.post("/api/power-observations")
+def create_power_observation(payload: PowerObservationCreate) -> PowerObservation:
+    import uuid
+    with Session(engine) as session:
+        # Validate that referenced objects exist
+        proj = session.get(Project, payload.project_id)
+        if not proj:
+            raise HTTPException(status_code=400, detail=f"Unknown project_id: {payload.project_id}")
+        
+        impl = session.get(ImplOption, payload.impl_option_id)
+        if not impl:
+            raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {payload.impl_option_id}")
+        
+        pm = session.get(PhysicalMapping, payload.physical_mapping_id)
+        if not pm:
+            raise HTTPException(status_code=400, detail=f"Unknown physical_mapping_id: {payload.physical_mapping_id}")
+        
+        scenario = session.get(ApplicationScenario, payload.application_scenario_id)
+        if not scenario:
+            raise HTTPException(status_code=400, detail=f"Unknown application_scenario_id: {payload.application_scenario_id}")
+        
+        op_set = session.get(OperatingPointSet, payload.operating_point_set_id)
+        if not op_set:
+            raise HTTPException(status_code=400, detail=f"Unknown operating_point_set_id: {payload.operating_point_set_id}")
+        
+        if payload.scope_type == "component" and payload.scope_id:
+            comp = session.get(LogicalComponent, payload.scope_id)
+            if not comp:
+                raise HTTPException(status_code=400, detail=f"Unknown scope_id (LogicalComponent): {payload.scope_id}")
+        
+        obs_id = f"PO_{uuid.uuid4().hex[:8].upper()}"
+        obs = PowerObservation(
+            id=obs_id,
+            project_id=payload.project_id,
+            impl_option_id=payload.impl_option_id,
+            physical_mapping_id=payload.physical_mapping_id,
+            application_scenario_id=payload.application_scenario_id,
+            operating_point_set_id=payload.operating_point_set_id,
+            scope_type=payload.scope_type,
+            scope_id=payload.scope_id,
+            scope_name=payload.scope_name,
+            use_case_name=payload.use_case_name,
+            time_window_name=payload.time_window_name,
+            statistic_type=payload.statistic_type,
+            power_type=payload.power_type,
+            power_value_w=payload.power_value_w,
+            development_stage=payload.development_stage,
+            source_type="web_ui",
+            confidence=payload.confidence or "draft",
+            is_additive=payload.is_additive,
+            note=payload.note
+        )
+        session.add(obs)
+        session.commit()
+        session.refresh(obs)
+        return obs
+
+
+@app.delete("/api/power-observations/{observation_id}")
+def delete_power_observation(observation_id: str) -> dict[str, Any]:
+    with Session(engine) as session:
+        obs = session.get(PowerObservation, observation_id)
+        if not obs:
+            raise HTTPException(status_code=404, detail=f"Unknown power observation: {observation_id}")
+        session.delete(obs)
+        session.commit()
+        return {"success": True, "deleted_id": observation_id}
 
 
 @app.get("/api/design-options")

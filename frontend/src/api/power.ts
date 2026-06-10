@@ -1,5 +1,5 @@
-import { apiGet } from "./client";
-import type { ApplicationScenario, PhysicalMapping, OperatingPointSet, PowerSummary } from "../types/power";
+import { apiGet, apiJson } from "./client";
+import type { ApplicationScenario, PhysicalMapping, OperatingPointSet, PowerSummary, PowerObservation } from "../types/power";
 
 export function getApplicationScenarios(): Promise<ApplicationScenario[]> {
   return apiGet<ApplicationScenario[]>("/api/application-scenarios");
@@ -39,3 +39,32 @@ export function getPowerSummary(filters: PowerSummaryFilters): Promise<PowerSumm
 
   return apiGet<PowerSummary>(`/api/power-summary?${params.toString()}`);
 }
+
+export interface PowerObservationInput {
+  project_id: string;
+  impl_option_id: string;
+  physical_mapping_id: string;
+  application_scenario_id: string;
+  operating_point_set_id: string;
+  scope_type: string;
+  scope_id?: string | null;
+  scope_name: string;
+  use_case_name?: string | null;
+  time_window_name?: string | null;
+  statistic_type: string;
+  power_type: string;
+  power_value_w: number;
+  development_stage?: string | null;
+  confidence?: string | null;
+  is_additive: boolean;
+  note?: string | null;
+}
+
+export function createPowerObservation(observation: PowerObservationInput): Promise<PowerObservation> {
+  return apiJson<PowerObservation>("/api/power-observations", "POST", observation);
+}
+
+export function deletePowerObservation(id: string): Promise<{ success: boolean; deleted_id: string }> {
+  return apiJson<{ success: boolean; deleted_id: string }>(`/api/power-observations/${id}`, "DELETE");
+}
+

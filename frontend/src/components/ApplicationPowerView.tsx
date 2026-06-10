@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Zap, Cpu, Sliders, Database, Activity, FileText, AlertTriangle, RefreshCw } from "lucide-react";
+import { Zap, Cpu, Sliders, Database, Activity, FileText, AlertTriangle, RefreshCw, Plus, Trash2 } from "lucide-react";
 import { Card, Badge, FieldLabel } from "./ui";
 import type { ImplOption } from "../types/impl_option";
 import {
@@ -7,6 +7,8 @@ import {
   getPhysicalMappings,
   getOperatingPointSets,
   getPowerSummary,
+  createPowerObservation,
+  deletePowerObservation,
 } from "../api/power";
 import type {
   ApplicationScenario,
@@ -15,6 +17,8 @@ import type {
   PowerSummary,
   PowerObservation,
 } from "../types/power";
+import { getComponents } from "../api/components";
+import type { BlockNode } from "../types/component";
 
 export interface ApplicationPowerViewProps {
   implOptions: ImplOption[];
@@ -40,6 +44,129 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
   const [summary, setSummary] = useState<PowerSummary | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Refresh trigger to reload summary
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+
+  // Components list for scope component dropdown
+  const [components, setComponents] = useState<BlockNode[]>([]);
+
+  // Add modal state
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [scopeType, setScopeType] = useState<string>("component");
+  const [scopeId, setScopeId] = useState<string>("");
+  const [scopeName, setScopeName] = useState<string>("");
+  const [useCaseName, setUseCaseName] = useState<string>("");
+  const [timeWindowNameInput, setTimeWindowNameInput] = useState<string>("");
+  const [powerValueW, setPowerValueW] = useState<string>("0.0");
+  const [formStatisticType, setFormStatisticType] = useState<string>("average");
+  const [formPowerType, setFormPowerType] = useState<string>("total");
+  const [formDevStage, setFormDevStage] = useState<string>("architecture_estimate");
+  const [formConfidence, setFormConfidence] = useState<string>("draft");
+  const [isAdditiveInput, setIsAdditiveInput] = useState<boolean>(true);
+  const [formNote, setFormNote] = useState<string>("");
+
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Load components when design option changes
+  useEffect(() => {
+    async function loadComponents() {
+      if (!selectedImplOptionId) return;
+      try {
+        const data = await getComponents(undefined, selectedImplOptionId);
+        setComponents(data);
+      } catch (err) {
+        console.error("Failed to load components:", err);
+      }
+    }
+    loadComponents();
+  }, [selectedImplOptionId]);
+
+  const handleDeleteObservation = async (obsId: string) => {
+    if (!window.confirm("确定要删除该条功耗观测记录吗？")) {
+      return;
+    }
+    try {
+      await deletePowerObservation(obsId);
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      alert(`删除失败: ${err?.message || err}`);
+    }
+  };
+
+  const handleAddObservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setSubmitting(true);
+
+    const activeImplOption = implOptions.find((o) => o.id === selectedImplOptionId);
+    const projectId = activeImplOption ? activeImplOption.project_id : "P001";
+
+    const valueNum = parseFloat(powerValueW);
+    if (isNaN(valueNum) || valueNum < 0) {
+      setFormError("功耗值必须是大于或等于 0 的数字");
+      setSubmitting(false);
+      return;
+    }
+
+    if (scopeType === "component" && !scopeId) {
+      setFormError("请选择一个逻辑模块");
+      setSubmitting(false);
+      return;
+    }
+
+    if (!scopeName.trim()) {
+      setFormError("范围名称不能为空");
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      await createPowerObservation({
+        project_id: projectId,
+        impl_option_id: selectedImplOptionId,
+        physical_mapping_id: selectedPhysicalMappingId,
+        application_scenario_id: selectedApplicationScenarioId,
+        operating_point_set_id: selectedOperatingPointSetId,
+        scope_type: scopeType,
+        scope_id: scopeType === "component" ? scopeId : null,
+        scope_name: scopeName,
+        use_case_name: useCaseName || null,
+        time_window_name: timeWindowNameInput || null,
+        statistic_type: formStatisticType,
+        power_type: formPowerType,
+        power_value_w: valueNum,
+        development_stage: formDevStage || null,
+        confidence: formConfidence || null,
+        is_additive: isAdditiveInput,
+        note: formNote || null,
+      });
+
+      // Reset form
+      setScopeType("component");
+      setScopeId("");
+      setScopeName("");
+      setUseCaseName("");
+      setTimeWindowNameInput("");
+      setPowerValueW("0.0");
+      setFormStatisticType("average");
+      setFormPowerType("total");
+      setFormDevStage("architecture_estimate");
+      setFormConfidence("draft");
+      setIsAdditiveInput(true);
+      setFormNote("");
+      setShowAddModal(false);
+
+      // Trigger refresh
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err: any) {
+      console.error(err);
+      setFormError(`创建功耗观测失败: ${err?.message || err}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // 1. Fetch static lists on mount
   useEffect(() => {
@@ -138,6 +265,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
     powerType,
     timeWindowName,
     developmentStage,
+    refreshTrigger,
   ]);
 
   const handleImplOptionChange = (id: string) => {
@@ -531,7 +659,21 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
           </div>
 
           {/* Region 5: Observations List Table */}
-          <Card title="功耗观测明细数据表 (Power Observations Table)" subtitle="SQLite 数据库中该场景工作状态下的原始功耗记录" icon={FileText}>
+          <Card
+            title="功耗观测明细数据表 (Power Observations Table)"
+            subtitle="SQLite 数据库中该场景工作状态下的原始功耗记录"
+            icon={FileText}
+            right={
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+              >
+                <Plus size={14} />
+                新建功耗观测
+              </button>
+            }
+          >
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-900">
                 <thead>
@@ -546,6 +688,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                     <th className="px-4 py-3">评估阶段</th>
                     <th className="px-4 py-3">可信度</th>
                     <th className="px-4 py-3">累加?</th>
+                    <th className="px-4 py-3 text-right">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -573,11 +716,21 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                           {obs.is_additive ? "Y" : "N"}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteObservation(obs.id)}
+                          className="text-slate-400 hover:text-red-600 transition p-1 rounded-md hover:bg-slate-100"
+                          title="删除观测记录"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {summary.observations.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">
+                      <td colSpan={11} className="px-4 py-8 text-center text-sm text-slate-500">
                         当前筛选条件下无任何功耗观测记录。
                       </td>
                     </tr>
@@ -592,6 +745,281 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
           <div className="text-sm text-slate-500">没有查找到符合条件的累加汇总。请检查设计选项和物理映射是否匹配。</div>
         </Card>
       )}
+
+      {/* Region 6: Add Power Observation Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl border border-slate-100 max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">新建功耗观测记录 (New Power Observation)</h3>
+                <p className="text-xs text-slate-500 mt-0.5">为特定工作状态、应用场景和物理映射添加测试/估算分量</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl font-medium p-1"
+              >
+                &times;
+              </button>
+            </div>
+
+            {formError && (
+              <div className="mb-4 rounded-lg bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700 flex items-start gap-2">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAddObservation} className="space-y-4 text-slate-700 text-sm">
+              {/* Context info (Read-only) */}
+              <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/60 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 font-medium">实现选项: </span>
+                  <span className="text-slate-800 font-semibold">{implOptions.find(o => o.id === selectedImplOptionId)?.name || selectedImplOptionId}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium">物理映射: </span>
+                  <span className="text-slate-800 font-semibold">{physicalMappings.find(m => m.id === selectedPhysicalMappingId)?.name || selectedPhysicalMappingId}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium">应用场景: </span>
+                  <span className="text-slate-800 font-semibold">{applicationScenarios.find(s => s.id === selectedApplicationScenarioId)?.name || selectedApplicationScenarioId}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium">工作点集: </span>
+                  <span className="text-slate-800 font-semibold">{operatingPointSets.find(op => op.id === selectedOperatingPointSetId)?.name || selectedOperatingPointSetId}</span>
+                </div>
+              </div>
+
+              {/* Form inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">范围类型 (Scope Type)</label>
+                  <select
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={scopeType}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setScopeType(newType);
+                      if (newType !== "component") {
+                        setScopeId("");
+                        setScopeName("");
+                      }
+                    }}
+                  >
+                    <option value="component">逻辑模块 (component)</option>
+                    <option value="shared_resource">共享资源 (shared_resource)</option>
+                    <option value="interaction">交互开销 (interaction)</option>
+                    <option value="power_rail">电源轨 (power_rail)</option>
+                    <option value="soc">SoC整体 (soc)</option>
+                    <option value="residual">未解释剩余 (residual)</option>
+                  </select>
+                </div>
+
+                {scopeType === "component" ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">选择逻辑模块 (Component)</label>
+                    <select
+                      className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      value={scopeId}
+                      onChange={(e) => {
+                        const cid = e.target.value;
+                        setScopeId(cid);
+                        const comp = components.find((c) => c.id === cid);
+                        if (comp) {
+                          setScopeName(comp.name);
+                        } else {
+                          setScopeName("");
+                        }
+                      }}
+                    >
+                      <option value="">-- 请选择模块 --</option>
+                      {components.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.id})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">范围名称 (Scope Name)</label>
+                    <input
+                      type="text"
+                      className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      placeholder="例如: NoC, VDD_GPU"
+                      value={scopeName}
+                      onChange={(e) => setScopeName(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {scopeType === "component" && scopeId && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">确定模块范围名称 (Scope Name)</label>
+                  <input
+                    type="text"
+                    className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 focus:outline-none"
+                    value={scopeName}
+                    readOnly
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">使用用例 (Use Case, 可选)</label>
+                  <input
+                    type="text"
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="例如: GPU_RENDER_BURST"
+                    value={useCaseName}
+                    onChange={(e) => setUseCaseName(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">时间窗口 (Time Window, 可选)</label>
+                  <input
+                    type="text"
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="例如: steady_state, burst"
+                    value={timeWindowNameInput}
+                    onChange={(e) => setTimeWindowNameInput(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">功耗数值 (Power Value, W)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 font-bold focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={powerValueW}
+                    onChange={(e) => setPowerValueW(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">功耗分量 (Power Type)</label>
+                  <select
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={formPowerType}
+                    onChange={(e) => setFormPowerType(e.target.value)}
+                  >
+                    <option value="total">总功耗 (total)</option>
+                    <option value="dynamic">动态功耗 (dynamic)</option>
+                    <option value="leakage">漏电功耗 (leakage)</option>
+                    <option value="clock">时钟功耗 (clock)</option>
+                    <option value="memory">内存功耗 (memory)</option>
+                    <option value="interconnect">互连功耗 (interconnect)</option>
+                    <option value="io">I/O 功耗 (io)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">统计方式 (Statistic)</label>
+                  <select
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={formStatisticType}
+                    onChange={(e) => setFormStatisticType(e.target.value)}
+                  >
+                    <option value="average">平均值 (average)</option>
+                    <option value="peak">峰值 (peak)</option>
+                    <option value="p95">P95 (p95)</option>
+                    <option value="p99">P99 (p99)</option>
+                    <option value="rms">有效值 (rms)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">评估阶段 (Dev Stage)</label>
+                  <select
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={formDevStage}
+                    onChange={(e) => setFormDevStage(e.target.value)}
+                  >
+                    <option value="architecture_estimate">架构估算</option>
+                    <option value="rtl_power">RTL仿真</option>
+                    <option value="gate_level_power">门级网表</option>
+                    <option value="post_pnr_power">PNR物理实现后</option>
+                    <option value="thermal_aware_power">热分析后</option>
+                    <option value="silicon_measurement">硅后实测</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">可信度 (Confidence)</label>
+                  <select
+                    className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={formConfidence}
+                    onChange={(e) => setFormConfidence(e.target.value)}
+                  >
+                    <option value="draft">草稿 (DRAFT)</option>
+                    <option value="review">待评审 (REVIEW)</option>
+                    <option value="approved">已批准 (APPROVED)</option>
+                    <option value="measured">硅后实测 (MEASURED)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 py-2 border-y border-slate-100">
+                <input
+                  type="checkbox"
+                  id="is-additive-checkbox"
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  checked={isAdditiveInput}
+                  onChange={(e) => setIsAdditiveInput(e.target.checked)}
+                />
+                <label htmlFor="is-additive-checkbox" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  参与功耗累加汇总 (Is Additive)?
+                </label>
+                <span className="text-xs text-slate-400 font-normal">
+                  （若选否，该项将作为非累加参考项，如 SoC 整体参考功耗）
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">备注/数据来源 (Note)</label>
+                <textarea
+                  className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  rows={2}
+                  placeholder="可记录数据来源文件、参考的测试报告或计算备注..."
+                  value={formNote}
+                  onChange={(e) => setFormNote(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                  disabled={submitting}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 transition"
+                  disabled={submitting}
+                >
+                  {submitting ? "正在提交..." : "提交保存"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
