@@ -7,7 +7,7 @@ import type { PhysicalPartition } from "../types/component";
 export interface TiersViewProps {
   tiers: TierInfo[];
   physicalPartitions: PhysicalPartition[];
-  selectedScenarioId: string;
+  selectedImplOptionId: string;
   loading: boolean;
   error: string | null;
 }
@@ -15,7 +15,7 @@ export interface TiersViewProps {
 export function TiersView({
   tiers,
   physicalPartitions,
-  selectedScenarioId,
+  selectedImplOptionId,
   loading,
   error
 }: TiersViewProps): JSX.Element {
@@ -24,7 +24,7 @@ export function TiersView({
 
   return (
     <div className="space-y-6">
-      <Card title="3D Stack Definition" subtitle={`Scenario ${selectedScenarioId}: tier definitions bound to this implementation scenario`} icon={Layers3}>
+      <Card title="3D Stack Definition" subtitle={`ImplOption ${selectedImplOptionId}: tier definitions bound to this implementation impl_option`} icon={Layers3}>
         <div className="grid gap-4 xl:grid-cols-3">
           {tiers.map((tier, index) => (
             <div key={tier.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -51,7 +51,7 @@ export function TiersView({
               </div>
             </div>
           ))}
-          {tiers.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No tier definitions for scenario {selectedScenarioId}.</div>}
+          {tiers.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No tier definitions for impl_option {selectedImplOptionId}.</div>}
         </div>
       </Card>
 
@@ -88,7 +88,7 @@ export function TiersView({
               {physicalPartitions.length === 0 && (
                 <tr>
                   <td className="px-4 py-5 text-sm text-slate-500" colSpan={7}>
-                    No physical partitions for scenario {selectedScenarioId}.
+                    No physical partitions for impl_option {selectedImplOptionId}.
                   </td>
                 </tr>
               )}

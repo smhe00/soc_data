@@ -19,7 +19,7 @@ export function Dashboard({ dashboard, loading, error }: DashboardProps): JSX.El
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="3DIC Option A 估算总面积" value={metrics.total_area} unit="mm²" icon={Package} hint="Scenario S2" />
+        <MetricCard label="3DIC Option A 估算总面积" value={metrics.total_area} unit="mm²" icon={Package} hint="ImplOption S2" />
         <MetricCard label="Peak场景总功耗估计" value={metrics.total_power} unit="W" icon={Gauge} hint="Draft" />
         <MetricCard label="逻辑层SRAM面积估计" value={metrics.total_sram_area} unit="mm²" icon={MemoryStick} hint="Metrics" />
         <MetricCard label="Physical Partition数量" value={metrics.partition_count} unit="rows" icon={SplitSquareVertical} hint="V7" />
@@ -69,7 +69,7 @@ export function Dashboard({ dashboard, loading, error }: DashboardProps): JSX.El
         <Card title="平台第一阶段范围" subtitle="先保证数据可信、结构稳定、可比较" icon={CheckCircle2}>
           <div className="space-y-3 text-sm text-slate-600">
             <div className="flex gap-2">
-              <CheckCircle2 size={18} className="text-emerald-600" />项目/版本/Scenario管理
+              <CheckCircle2 size={18} className="text-emerald-600" />项目/版本/ImplOption管理
             </div>
             <div className="flex gap-2">
               <CheckCircle2 size={18} className="text-emerald-600" />Block hierarchy和资源类型建模

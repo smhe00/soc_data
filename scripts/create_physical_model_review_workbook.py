@@ -20,8 +20,8 @@ SHEETS: dict[str, list[list[object]]] = {
         ["Sheet", "Meaning"],
         ["module_definitions", "Reusable RTL/IP/block master definitions."],
         ["logical_components", "Architecture-level logical hierarchy. Repeated use is represented by logical_instance_count."],
-        ["physical_partitions", "Minimal physical partition table from logical components to scenario/tier placement. resource_category splits logic, SRAM, and block/hard-macro content. Details live in metrics."],
-        ["metrics", "Unified metric table. Metrics can attach to logical_component, physical_partition, tier, or scenario."],
+        ["physical_partitions", "Minimal physical partition table from logical components to impl_option/tier placement. resource_category splits logic, SRAM, and block/hard-macro content. Details live in metrics."],
+        ["metrics", "Unified metric table. Metrics can attach to logical_component, physical_partition, tier, or impl_option."],
         ["metric_dictionary", "Allowed metric names, value types, units, categories, and applicable subject types."],
         ["coverage_checks", "Review helper showing whether physical partition rows close against logical counts and ratios."],
         [""],
@@ -45,12 +45,12 @@ SHEETS: dict[str, list[list[object]]] = {
         ["id", "name", "product_family", "generation", "owner", "phase"],
         ["P001", "Mobile SoC Gen-A", "Flagship Mobile SoC", "Gen-A", "Architecture Team", "Architecture Planning"],
     ],
-    "scenarios": [
-        ["id", "project_id", "name", "scenario_type", "process_combo", "status"],
+    "implOptions": [
+        ["id", "project_id", "name", "impl_type", "process_combo", "status"],
         ["S2", "P001", "3DIC Option A", "3 tiers W2W", "N5 + N7 + N7", "High"],
     ],
     "tiers": [
-        ["id", "scenario_id", "tier_index", "name", "process_id", "role", "orientation", "area_limit_mm2"],
+        ["id", "impl_option_id", "tier_index", "name", "process_id", "role", "orientation", "area_limit_mm2"],
         ["T0", "S2", 0, "Top Tier", "PN5", "High-performance logic", "Face-down", 28.2],
         ["T1", "S2", 1, "Middle Tier", "PN7", "Memory + medium logic", "Face-up / Face-to-face", 31.4],
         ["T2", "S2", 2, "Bottom Tier", "PN7", "IO / PHY / PDN / logic", "Backside PDN", 15.0],
@@ -65,7 +65,7 @@ SHEETS: dict[str, list[list[object]]] = {
         ["B5", "P001", "B0", "MD_DDR_PHY", "DDR_PHY", "phy", "phy_analog", "Memory IO", "SOC_TOP/DDR_PHY", 1, "Fixed bottom-tier PHY."],
     ],
     "physical_partitions": [
-        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "resource_category", "partition_type", "physical_instance_count", "content_share", "description"],
+        ["id", "impl_option_id", "logical_component_id", "tier_id", "partition_name", "resource_category", "partition_type", "physical_instance_count", "content_share", "description"],
         ["PP_NPU_MAC_ARRAY_logic_T0", "S2", "B30", "T0", "NPU_MAC_ARRAY_logic_T0", "logic", "full", 4, 1.00, "All four MAC logic copies are implemented on the top tier."],
         ["PP_NPU_MAC_ARRAY_block_T0", "S2", "B30", "T0", "NPU_MAC_ARRAY_block_T0", "block", "full", 4, 1.00, "All four MAC block-area copies are implemented on the top tier."],
         ["PP_NPU_SRAM_BANK_logic_T1", "S2", "B8", "T1", "NPU_SRAM_BANK_logic_T1", "logic", "full", 2, 1.00, "SRAM peripheral/control logic on the memory tier."],
@@ -76,7 +76,7 @@ SHEETS: dict[str, list[list[object]]] = {
         ["PP_DDR_PHY_block_T2", "S2", "B5", "T2", "DDR_PHY_block_T2", "block", "full", 1, 1.00, "Fixed PHY hard/block content on bottom tier."],
     ],
     "metrics": [
-        ["id", "scenario_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
+        ["id", "impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
         ["M_LOG_B30_SIGNALS", "S2", "logical_component", "B30", "signal_count_total", 44, "count", "logical", "number", "typical", "nominal", "draft", "Total logical signal count. Input/output/inout are intentionally not split in phase 1.", "2026-05-27"],
         ["M_LOG_B30_LOGIC_AREA", "S2", "logical_component", "B30", "logic_area", 10.6, "mm2", "logical_area", "number", "typical", "nominal", "draft", "Logic area estimate for all four MAC instances.", "2026-05-27"],
         ["M_LOG_B30_SRAM_AREA", "S2", "logical_component", "B30", "sram_area", 0.0, "mm2", "logical_area", "number", "typical", "nominal", "draft", "SRAM area estimate for all four MAC instances.", "2026-05-27"],
@@ -93,7 +93,7 @@ SHEETS: dict[str, list[list[object]]] = {
         ["M_PART_GPU_LOGIC_AREA_MID", "S2", "physical_partition", "PP_GPU_TOP_logic_T1_P2", "logic_area", 6.7, "mm2", "implementation_area", "number", "typical", "nominal", "draft", "Logic-side area for GPU middle-tier partition.", "2026-05-27"],
         ["M_PART_GPU_LOGIC_POWER", "S2", "physical_partition", "PP_GPU_TOP_logic_T0_P1", "power", 3.6, "W", "power", "number", "typical", "peak", "draft", "Power estimate for GPU logic partition.", "2026-05-27"],
         ["M_TIER_T0_POWER", "S2", "tier", "T0", "power", 7.6, "W", "power", "number", "typical", "peak", "draft", "Tier-level rollup or target.", "2026-05-27"],
-        ["M_SCENARIO_AREA", "S2", "scenario", "S2", "area", 74.6, "mm2", "physical", "number", "typical", "nominal", "draft", "Scenario-level summary estimate.", "2026-05-27"],
+        ["M_IMPL_OPTION_AREA", "S2", "impl_option", "S2", "area", 74.6, "mm2", "physical", "number", "typical", "nominal", "draft", "ImplOption-level summary estimate.", "2026-05-27"],
     ],
     "metric_dictionary": [
         ["metric_name", "value_type", "default_unit", "metric_category", "applies_to_subject_types", "description"],
@@ -101,8 +101,8 @@ SHEETS: dict[str, list[list[object]]] = {
         ["logic_area", "number", "mm2", "logical_area", "logical_component", "Logical module logic-only area estimate."],
         ["sram_area", "number", "mm2", "logical_area", "logical_component", "Logical module SRAM-only area estimate."],
         ["block_area", "number", "mm2", "logical_area", "logical_component", "Logical module total block area estimate, including early overhead."],
-        ["area", "number", "mm2", "physical", "tier,scenario", "Tier or scenario area estimate. Logical modules and physical partitions use logic_area/sram_area/block_area."],
-        ["power", "number", "W", "power", "logical_component,physical_partition,tier,scenario", "Power estimate."],
+        ["area", "number", "mm2", "physical", "tier,impl_option", "Tier or impl_option area estimate. Logical modules and physical partitions use logic_area/sram_area/block_area."],
+        ["power", "number", "W", "power", "logical_component,physical_partition,tier,impl_option", "Power estimate."],
         ["memoryMb", "number", "Mb", "memory", "logical_component,physical_partition", "Memory capacity."],
         ["shape_type", "text", "", "physical_shape", "physical_partition", "Optional early shape descriptor, not a required partition column."],
         ["width_mm", "number", "mm", "physical_shape", "physical_partition", "Optional width metric when floorplan detail becomes available."],
@@ -119,10 +119,10 @@ SHEETS: dict[str, list[list[object]]] = {
         ["Same die can still have different physical styles", "Use multiple partial rows with generated suffixes and put shape details in metrics."],
         ["One logical module is partitioned across dies", "B2 GPU_TOP logic maps to top and middle tiers with content_share 0.65 and 0.35."],
         ["Residual subsystem partition", "Parent residual/self area is derived from parent total metrics minus direct child metrics; no parent_residual component row is stored."],
-        ["Metrics avoid overlap", "The same metric_name can appear at logical_component, physical_partition, tier, or scenario level; subject_type defines meaning."],
+        ["Metrics avoid overlap", "The same metric_name can appear at logical_component, physical_partition, tier, or impl_option level; subject_type defines meaning."],
     ],
     "coverage_checks": [
-        ["scenario_id", "logical_component_id", "resource_category", "logical_name", "logical_instance_count", "equivalent_instances", "status", "note"],
+        ["impl_option_id", "logical_component_id", "resource_category", "logical_name", "logical_instance_count", "equivalent_instances", "status", "note"],
         ["S2", "B30", "logic", "NPU_MAC_ARRAY", 4, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A2)*(physical_partitions!$C$2:$C$100=B2)*(physical_partitions!$F$2:$F$100=C2)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E2=F2,"OK","CHECK")', "MAC logic closes to four copies."],
         ["S2", "B30", "block", "NPU_MAC_ARRAY", 4, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A3)*(physical_partitions!$C$2:$C$100=B3)*(physical_partitions!$F$2:$F$100=C3)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E3=F3,"OK","CHECK")', "MAC block content closes separately."],
         ["S2", "B8", "sram", "NPU_SRAM_BANK", 2, '=SUMPRODUCT((physical_partitions!$B$2:$B$100=A4)*(physical_partitions!$C$2:$C$100=B4)*(physical_partitions!$F$2:$F$100=C4)*physical_partitions!$H$2:$H$100*physical_partitions!$I$2:$I$100)', '=IF(E4=F4,"OK","CHECK")', "SRAM content closes to two copies."],
@@ -135,7 +135,7 @@ SHEETS: dict[str, list[list[object]]] = {
 VALIDATION_LISTS = {
     "resource_category": ["logic", "sram", "block"],
     "partition_type": ["full", "partial"],
-    "subject_type": ["logical_component", "physical_partition", "tier", "scenario"],
+    "subject_type": ["logical_component", "physical_partition", "tier", "impl_option"],
     "value_type": ["number", "text", "boolean"],
     "confidence": ["approved", "review", "draft"],
 }

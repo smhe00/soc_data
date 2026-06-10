@@ -55,7 +55,7 @@ interface PartitionMappingEditorProps {
   component: BlockNode;
   blocks: BlockNode[];
   tiers: TierInfo[];
-  selectedScenarioId: string;
+  selectedImplOptionId: string;
   selectedTeam: string | null;
   onSave: (
     component: BlockNode,
@@ -75,7 +75,7 @@ export interface HierarchyViewProps {
   blocks: BlockNode[];
   tree: TreeBlock[];
   tiers: TierInfo[];
-  selectedScenarioId: string;
+  selectedImplOptionId: string;
   selectedTeam: string;
   loading: boolean;
   error: string | null;
@@ -204,11 +204,11 @@ function preferredTierForCategory(category: PartitionResourceCategory, tiers: Ti
   return tiers.find((tier) => /logic|compute|top/.test(haystack(tier)))?.id ?? tiers[0]?.id ?? "T0";
 }
 
-function makeDefaultPartition(component: BlockNode, selectedScenarioId: string, logicalCount: number, tiers: TierInfo[], category: PartitionResourceCategory, suffix: number): PhysicalPartition {
+function makeDefaultPartition(component: BlockNode, selectedImplOptionId: string, logicalCount: number, tiers: TierInfo[], category: PartitionResourceCategory, suffix: number): PhysicalPartition {
   const tierId = preferredTierForCategory(category, tiers);
   return {
     id: "",
-    scenario_id: selectedScenarioId,
+    impl_option_id: selectedImplOptionId,
     logical_component_id: component.id,
     logical_component_name: component.name,
     tier_id: tierId,
@@ -258,7 +258,7 @@ function sortPartitionsForDisplay<T extends PhysicalPartition>(rows: T[]): T[] {
   });
 }
 
-function PartitionMappingEditor({ component, blocks, tiers, selectedScenarioId, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
+function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId, selectedTeam, onSave }: PartitionMappingEditorProps): JSX.Element {
   const parentAbsoluteCount = useMemo(() => {
     let curr = component.parent;
     let multiplier = 1;
@@ -298,10 +298,10 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedScenarioId, 
     const missingCategories = requiredPartitionCategories(component).filter((category) => !normalizedPartitions.some((partition) => partition.resource_category === category));
     setPartitions([
       ...normalizedPartitions,
-      ...missingCategories.map((category, index) => makeDefaultPartition(component, selectedScenarioId, component.logical_instance_count, tiers, category, normalizedPartitions.length + index + 1)),
+      ...missingCategories.map((category, index) => makeDefaultPartition(component, selectedImplOptionId, component.logical_instance_count, tiers, category, normalizedPartitions.length + index + 1)),
     ]);
     setSaveError(null);
-  }, [component, selectedScenarioId, tiers]);
+  }, [component, selectedImplOptionId, tiers]);
 
   function fixFormResiduals(): void {
     const count = logicalCount || 1;
@@ -385,7 +385,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedScenarioId, 
     const resourceCategory = liveRequiredCategories.find((category) => !partitions.some((partition) => partition.resource_category === category)) ?? partitionResourceCategories.find((category) => !partitions.some((partition) => partition.resource_category === category.id))?.id ?? "logic";
     setPartitions((rows) => [
       ...rows,
-      makeDefaultPartition(component, selectedScenarioId, logicalCount, tiers, resourceCategory, suffix),
+      makeDefaultPartition(component, selectedImplOptionId, logicalCount, tiers, resourceCategory, suffix),
     ]);
   }
 
@@ -638,7 +638,7 @@ export function HierarchyView({
   blocks,
   tree,
   tiers,
-  selectedScenarioId,
+  selectedImplOptionId,
   selectedTeam,
   loading,
   error,
@@ -965,7 +965,7 @@ export function HierarchyView({
           </div>
         </Card>
 
-        <PartitionMappingEditor component={selected} blocks={blocks} tiers={tiers} selectedScenarioId={selectedScenarioId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
+        <PartitionMappingEditor component={selected} blocks={blocks} tiers={tiers} selectedImplOptionId={selectedImplOptionId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
 
         <Card title="建模原则" subtitle="第一阶段需要先统一数据口径" icon={Settings2}>
           <div className="grid gap-4 md:grid-cols-3">

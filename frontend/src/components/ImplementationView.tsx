@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Layers3, SplitSquareVertical, Package, Gauge } from "lucide-react";
 import { Badge, Card, FieldLabel, TextInput, UnitNumberInput, SegmentedControl, StepperInput } from "./ui";
-import { getScenarioImplementation, updateScenarioImplementation, type ScenarioImplementationResponse } from "../api/scenarios";
-import type { Scenario } from "../types/scenario";
+import { getImplOptionDetail, updateImplOptionDetail, type ImplOptionDetailResponse } from "../api/impl_options";
+import type { ImplOption } from "../types/impl_option";
 
 export interface StackTierDefinition {
   id: string;
@@ -38,7 +38,7 @@ export interface PackageEscapeDefinition {
 export type DieSide = "Face" | "Back";
 
 export interface ImplementationViewProps {
-  scenarios: Scenario[];
+  implOptions: ImplOption[];
 }
 
 const defaultStackTiers: StackTierDefinition[] = [
@@ -184,7 +184,7 @@ export function implementationTypeFromApi(value: string): StackImplementationTyp
   return stackTypeOptions.includes(value as StackImplementationType) ? (value as StackImplementationType) : "Wafer-to-Wafer";
 }
 
-export function tiersFromImplementation(implementation: ScenarioImplementationResponse): StackTierDefinition[] {
+export function tiersFromImplementation(implementation: ImplOptionDetailResponse): StackTierDefinition[] {
   return implementation.tiers.map((tier, index) => ({
     id: tier.id,
     name: tier.name,
@@ -195,7 +195,7 @@ export function tiersFromImplementation(implementation: ScenarioImplementationRe
   }));
 }
 
-export function interfacesFromImplementation(implementation: ScenarioImplementationResponse): StackInterfaceDefinition[] {
+export function interfacesFromImplementation(implementation: ImplOptionDetailResponse): StackInterfaceDefinition[] {
   return normalizeInterfaces(implementation.interfaces.map((item) => ({
     id: item.id,
     fromTierId: item.from_tier_id,
@@ -333,8 +333,8 @@ export function StackCrossSection({
   );
 }
 
-export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.Element {
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string>("S2");
+export function ImplementationView({ implOptions }: ImplementationViewProps): JSX.Element {
+  const [selectedImplOptionId, setSelectedImplOptionId] = useState<string>("S2");
   const [stackType, setStackType] = useState<StackImplementationType>("Wafer-to-Wafer");
   const [tiers, setTiers] = useState<StackTierDefinition[]>(defaultStackTiers);
   const [interfaces, setInterfaces] = useState<StackInterfaceDefinition[]>(defaultStackInterfaces);
@@ -343,7 +343,7 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
   const [implementationSaving, setImplementationSaving] = useState(false);
   const [implementationMessage, setImplementationMessage] = useState<string | null>(null);
   const [implementationError, setImplementationError] = useState<string | null>(null);
-  const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? scenarios[0];
+  const selectedImplOption = implOptions.find((impl_option) => impl_option.id === selectedImplOptionId) ?? implOptions[0];
   const bottomRequiresPackageTsv = requiresPackageTsv(tiers, interfaces);
   const derivedBottomBumpSide = getDerivedBottomBumpSide(tiers, interfaces);
   const bottomTierId = tiers[tiers.length - 1]?.id ?? "BOTTOM";
@@ -370,12 +370,12 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
   useEffect(() => {
     let cancelled = false;
     async function loadImplementation(): Promise<void> {
-      if (!selectedScenarioId) return;
+      if (!selectedImplOptionId) return;
       setImplementationLoading(true);
       setImplementationError(null);
       setImplementationMessage(null);
       try {
-        const implementation = await getScenarioImplementation(selectedScenarioId);
+        const implementation = await getImplOptionDetail(selectedImplOptionId);
         if (cancelled) return;
         const loadedTiers = tiersFromImplementation(implementation);
         if (implementation.exists) {
@@ -404,18 +404,18 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
     return () => {
       cancelled = true;
     };
-  }, [selectedScenarioId]);
+  }, [selectedImplOptionId]);
 
-  const applyScenarioDefaults = (scenarioId: string): void => {
-    setSelectedScenarioId(scenarioId);
-    if (scenarioId === "S1") {
+  const applyImplOptionDefaults = (implOptionId: string): void => {
+    setSelectedImplOptionId(implOptionId);
+    if (implOptionId === "S1") {
       setStackType("Monolithic");
       setTiers([{ ...defaultStackTiers[0], id: "T1", name: "Single Die", role: "Monolithic SoC", process: "N3E", thicknessUm: 70 }]);
       setInterfaces([]);
       setPackageEscape(defaultPackageEscape);
       return;
     }
-    if (scenarioId === "S3") {
+    if (implOptionId === "S3") {
       setStackType("2.5D Interposer");
       setTiers([
         { ...defaultStackTiers[0], id: "T1", name: "Compute Die", role: "Advanced logic chiplet", process: "N4P", thicknessUm: 55 },
@@ -471,7 +471,7 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
     setImplementationError(null);
     setImplementationMessage(null);
     try {
-      const result = await updateScenarioImplementation(selectedScenarioId, {
+      const result = await updateImplOptionDetail(selectedImplOptionId, {
         implementation_type: stackType,
         status: "draft",
         tiers: tiers.map((tier) => ({
@@ -519,13 +519,13 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
   return (
     <div className="space-y-4">
       <Card
-        title="Scenario Implementation"
-        subtitle="Implementation form for one project scenario"
+        title="实现方案物理架构/配置"
+        subtitle="项目实现选项对应的封装与叠层配置"
         icon={Package}
         right={
           <button
             className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-            disabled={implementationLoading || implementationSaving || !selectedScenarioId}
+            disabled={implementationLoading || implementationSaving || !selectedImplOptionId}
             onClick={saveImplementation}
             type="button"
           >
@@ -534,16 +534,16 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
         }
       >
         <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_170px_110px_1fr]">
-          <FieldLabel htmlFor="implementation-scenario" label="Scenario">
+          <FieldLabel htmlFor="implementation-impl_option" label="实现选项">
             <select
-              id="implementation-scenario"
+              id="implementation-impl_option"
               className="h-9 rounded-lg border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-400 focus:bg-white focus:ring-2 focus:ring-slate-200"
-              onChange={(event) => applyScenarioDefaults(event.target.value)}
-              value={selectedScenario?.id ?? selectedScenarioId}
+              onChange={(event) => applyImplOptionDefaults(event.target.value)}
+              value={selectedImplOption?.id ?? selectedImplOptionId}
             >
-              {scenarios.map((scenario) => (
-                <option key={scenario.id} value={scenario.id}>
-                  {scenario.id} - {scenario.name}
+              {implOptions.map((impl_option) => (
+                <option key={impl_option.id} value={impl_option.id}>
+                  {impl_option.id} - {impl_option.name}
                 </option>
               ))}
             </select>
@@ -628,7 +628,7 @@ export function ImplementationView({ scenarios }: ImplementationViewProps): JSX.
         </div>
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           {interfaces.length === 0 ? (
-            <div className="bg-white px-4 py-5 text-sm text-slate-500">Single-layer implementation: no inter-layer interface is required for this scenario.</div>
+            <div className="bg-white px-4 py-5 text-sm text-slate-500">Single-layer implementation: no inter-layer interface is required for this impl_option.</div>
           ) : (
             <table className="w-[1120px] table-fixed text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">

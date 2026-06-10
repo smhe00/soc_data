@@ -17,7 +17,7 @@ def main() -> None:
     with TestClient(app) as client:
         endpoints = [
             "/api/projects",
-            "/api/scenarios",
+            "/api/impl-options",
             "/api/module-definitions",
             "/api/components",
             "/api/components/tree",
@@ -47,7 +47,7 @@ def main() -> None:
         detail_update = client.put(
             "/api/components/B_NPU_TENSOR/detail",
             json={
-                "scenario_id": "S2",
+                "impl_option_id": "S2",
                 "team": "AI Team",
                 "logical_instance_count": npu["logical_instance_count"],
                 "partitions": [

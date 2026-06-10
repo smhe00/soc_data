@@ -43,7 +43,7 @@ export interface TreeBlock extends BlockNode {
 
 export interface PhysicalPartition {
   id: string;
-  scenario_id: string;
+  impl_option_id: string;
   logical_component_id: string;
   logical_component_name: string;
   tier_id: string;

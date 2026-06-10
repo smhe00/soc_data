@@ -157,6 +157,13 @@ cd $env:PROJECT_ROOT
   - Added a Web form for editing logical component metrics (Logical Instances, Signal Count, Logic Area, SRAM Area, Block Area, Power) inside the details editor panel, which updates the DB metrics via the detail save endpoint.
   - Added quality checks and warnings for tier area limit exceedance after process scaling.
   - Updated the detail panel to clearly distinguish between Self/Residual mapping closure and Subtree mapping closure status.
+- Refactored Scenario to ImplOption (实现选项):
+  - Renamed all backend SQLModel classes (`Scenario` -> `ImplOption`, `ScenarioImplementation` -> `ImplOptionDetail`) and SQLite tables.
+  - Renamed columns and foreign keys from `scenario_id` to `impl_option_id` across all tables.
+  - Renamed REST APIs from `/api/scenarios` to `/api/impl-options`.
+  - Updated all frontend components, TypeScript typings, and API client routes.
+  - Regenerated the Excel import template and seeded the database under the new schema.
+  - Verified that all unit tests and builds compile and run successfully.
 
 ## Verified
 

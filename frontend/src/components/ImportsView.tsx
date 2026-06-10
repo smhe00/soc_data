@@ -16,7 +16,7 @@ export interface ImportsViewProps {
   importing: boolean;
   importResult: ImportResult | null;
   importError: string | null;
-  selectedScenarioId: string;
+  selectedImplOptionId: string;
   selectedTeam: string;
   onImportWorkbook: (file: File) => Promise<void>;
 }
@@ -52,11 +52,11 @@ export function ImportsView({
   importing,
   importResult,
   importError,
-  selectedScenarioId,
+  selectedImplOptionId,
   selectedTeam,
   onImportWorkbook,
 }: ImportsViewProps): JSX.Element {
-  const scopedTemplateUrl = importTemplateUrl(selectedTeam, selectedScenarioId);
+  const scopedTemplateUrl = importTemplateUrl(selectedTeam, selectedImplOptionId);
 
   return (
     <div className="space-y-6">
@@ -65,11 +65,11 @@ export function ImportsView({
           <Upload className="mx-auto text-slate-400" size={34} />
           <div className="mt-4 text-base font-semibold text-slate-900">Upload SoC Import Workbook</div>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-            Download the {selectedScenarioId} workbook for {selectedTeam}, edit logical_components / physical_partitions / metrics, then upload the .xlsx file. The backend validates references and team scope before upserting into SQLite.
+            Download the {selectedImplOptionId} workbook for {selectedTeam}, edit logical_components / physical_partitions / metrics, then upload the .xlsx file. The backend validates references and team scope before upserting into SQLite.
           </p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <a className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={scopedTemplateUrl}>
-              Download {selectedTeam} / {selectedScenarioId} Template
+              Download {selectedTeam} / {selectedImplOptionId} Template
             </a>
             <label className={`cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 ${importing ? "opacity-60" : ""}`}>
               {importing ? "Importing..." : "Select .xlsx"}

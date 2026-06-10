@@ -42,11 +42,12 @@ class Project(SQLModel, table=True):
     updated_at: str
 
 
-class Scenario(SQLModel, table=True):
+class ImplOption(SQLModel, table=True):
+    __tablename__ = "imploption"
     id: str = Field(primary_key=True)
     project_id: str = Field(foreign_key="project.id")
     name: str
-    scenario_type: str
+    impl_type: str
     process_combo: str
     description: str = ""
     status: str
@@ -98,7 +99,7 @@ class ProcessNode(SQLModel, table=True):
 
 class Tier(SQLModel, table=True):
     id: str = Field(primary_key=True)
-    scenario_id: str = Field(foreign_key="scenario.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
     tier_index: int
     name: str
     process_id: str = Field(foreign_key="processnode.id")
@@ -111,7 +112,7 @@ class Tier(SQLModel, table=True):
 
 class PhysicalPartition(SQLModel, table=True):
     id: str = Field(primary_key=True)
-    scenario_id: str = Field(foreign_key="scenario.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
     logical_component_id: str = Field(foreign_key="logicalcomponent.id")
     tier_id: str = Field(foreign_key="tier.id")
     partition_name: str
@@ -125,7 +126,7 @@ class PhysicalPartition(SQLModel, table=True):
 
 class Metric(SQLModel, table=True):
     id: str = Field(primary_key=True)
-    scenario_id: str = Field(foreign_key="scenario.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
     subject_type: str
     subject_id: str
     metric_name: str
@@ -143,7 +144,7 @@ class Metric(SQLModel, table=True):
 class ResponsibilityAssignment(SQLModel, table=True):
     id: str = Field(primary_key=True)
     project_id: str = Field(foreign_key="project.id")
-    scenario_id: str = Field(foreign_key="scenario.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
     user_id: str
     team_name: str
     logical_component_id: str = Field(foreign_key="logicalcomponent.id")
@@ -152,8 +153,9 @@ class ResponsibilityAssignment(SQLModel, table=True):
     can_write: bool = True
 
 
-class ScenarioImplementation(SQLModel, table=True):
-    scenario_id: str = Field(primary_key=True, foreign_key="scenario.id")
+class ImplOptionDetail(SQLModel, table=True):
+    __tablename__ = "imploptiondetail"
+    impl_option_id: str = Field(primary_key=True, foreign_key="imploption.id")
     implementation_type: str
     status: str = "draft"
     version: int = 1
@@ -162,7 +164,7 @@ class ScenarioImplementation(SQLModel, table=True):
 
 class ImplementationTier(SQLModel, table=True):
     id: str = Field(primary_key=True)
-    scenario_id: str = Field(foreign_key="scenario.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
     tier_id: str
     tier_index: int
     name: str
@@ -173,7 +175,7 @@ class ImplementationTier(SQLModel, table=True):
 
 class ImplementationInterface(SQLModel, table=True):
     id: str = Field(primary_key=True)
-    scenario_id: str = Field(foreign_key="scenario.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
     from_tier_id: str
     to_tier_id: str
     orientation: str
@@ -187,7 +189,7 @@ class ImplementationInterface(SQLModel, table=True):
 
 
 class ImplementationPackageEscape(SQLModel, table=True):
-    scenario_id: str = Field(primary_key=True, foreign_key="scenario.id")
+    impl_option_id: str = Field(primary_key=True, foreign_key="imploption.id")
     bottom_tier_id: str
     requires_tsv: bool = False
     pitch_um: float = 0
@@ -208,7 +210,7 @@ class PartitionInput(BaseModel):
 
 
 class ComponentDetailUpdate(BaseModel):
-    scenario_id: str = "S2"
+    impl_option_id: str = "S2"
     team: str | None = None
     logical_instance_count: int
     partitions: list[PartitionInput]
@@ -249,7 +251,7 @@ class ImplementationPackageEscapeInput(BaseModel):
     description: str = ""
 
 
-class ScenarioImplementationUpdate(BaseModel):
+class ImplOptionDetailUpdate(BaseModel):
     implementation_type: str
     status: str = "draft"
     tiers: list[ImplementationTierInput]
@@ -330,22 +332,23 @@ def number_or_zero(value: Any) -> float:
 
 def metric_id(row: dict[str, Any]) -> str:
     return (
-        f"{row['scenario_id']}-{row['subject_type']}-{row['subject_id']}-"
+        f"{row['impl_option_id']}-{row['subject_type']}-{row['subject_id']}-"
         f"{row['metric_name']}-{row['corner']}-{row['workload']}"
     )
 
 
 def seed_data() -> None:
+    create_db_and_tables()
     created = now_iso()
     with Session(engine) as session:
-        demo_scenarios = ["S1", "S2", "S3"]
-        session.exec(delete(Metric).where(Metric.scenario_id.in_(demo_scenarios)))
-        session.exec(delete(PhysicalPartition).where(PhysicalPartition.scenario_id.in_(demo_scenarios)))
-        session.exec(delete(Tier).where(Tier.scenario_id.in_(demo_scenarios)))
+        demo_impl_options = ["S1", "S2", "S3"]
+        session.exec(delete(Metric).where(Metric.impl_option_id.in_(demo_impl_options)))
+        session.exec(delete(PhysicalPartition).where(PhysicalPartition.impl_option_id.in_(demo_impl_options)))
+        session.exec(delete(Tier).where(Tier.impl_option_id.in_(demo_impl_options)))
         session.exec(delete(ResponsibilityAssignment).where(ResponsibilityAssignment.project_id == "P001"))
         session.exec(delete(LogicalComponent).where(LogicalComponent.project_id == "P001"))
         session.exec(delete(ModuleDefinition).where(ModuleDefinition.id.like("MD_%")))
-        session.exec(delete(Scenario).where(Scenario.id.in_(demo_scenarios)))
+        session.exec(delete(ImplOption).where(ImplOption.id.in_(demo_impl_options)))
         session.exec(delete(Project).where(Project.id.in_(["P001", "P002"])))
 
         projects = [
@@ -361,10 +364,10 @@ def seed_data() -> None:
                 updated_at=created,
             )
         ]
-        scenarios = [
-            Scenario(id="S1", project_id="P001", name="Monolithic N3E Baseline", scenario_type="1 die", process_combo="N3E monolithic", description="Single large advanced-node die used as a planning baseline.", status="Medium", created_at=created, updated_at=created),
-            Scenario(id="S2", project_id="P001", name="3DIC Performance Option", scenario_type="3 tiers W2W", process_combo="N3E logic + N5 SRAM/cache + N6 IO/analog", description="Compute logic on top tier, SRAM/cache and medium logic on middle tier, IO/PHY/always-on/analog on bottom tier.", status="High", created_at=created, updated_at=created),
-            Scenario(id="S3", project_id="P001", name="Cost-Optimized 2.5D Option", scenario_type="2 dies on interposer", process_combo="N4P application die + N6 IO/cache die", description="Lower-risk split with a main application die and a companion cache/IO die.", status="Medium", created_at=created, updated_at=created),
+        implOptions = [
+            ImplOption(id="S1", project_id="P001", name="Monolithic N3E Baseline", impl_type="1 die", process_combo="N3E monolithic", description="Single large advanced-node die used as a planning baseline.", status="Medium", created_at=created, updated_at=created),
+            ImplOption(id="S2", project_id="P001", name="3DIC Performance Option", impl_type="3 tiers W2W", process_combo="N3E logic + N5 SRAM/cache + N6 IO/analog", description="Compute logic on top tier, SRAM/cache and medium logic on middle tier, IO/PHY/always-on/analog on bottom tier.", status="High", created_at=created, updated_at=created),
+            ImplOption(id="S3", project_id="P001", name="Cost-Optimized 2.5D Option", impl_type="2 dies on interposer", process_combo="N4P application die + N6 IO/cache die", description="Lower-risk split with a main application die and a companion cache/IO die.", status="Medium", created_at=created, updated_at=created),
         ]
         process_nodes = [
             ProcessNode(id="PN3E", foundry="TSMC", node_name="N3E", logic_density_mtr_per_mm2=235.0, sram_density_mb_per_mm2=1.85, logic_area_scale=1.00, sram_area_scale=1.00, block_area_scale=1.00, voltage_nominal=0.70, cost_factor=1.9, maturity_level="Ramp", description="Advanced high-performance mobile logic process; base area reference for demo logical metrics."),
@@ -484,7 +487,7 @@ def seed_data() -> None:
             ResponsibilityAssignment(
                 id=f"RA_{team.upper().replace(' ', '_')}_{root}",
                 project_id="P001",
-                scenario_id="S2",
+                impl_option_id="S2",
                 user_id=user_id,
                 team_name=team,
                 logical_component_id=root,
@@ -495,9 +498,9 @@ def seed_data() -> None:
             for team, user_id, root in responsibility_roots
         ]
         tiers = [
-            Tier(id="T0", scenario_id="S2", tier_index=0, name="Compute Logic Tier", process_id="PN3E", role="CPU/GPU/NPU/ISP/media high-performance logic", orientation="Face-down", thickness_um=42, area_limit_mm2=300.0, description="Advanced logic tier with hot compute blocks and fine-pitch hybrid bonding."),
-            Tier(id="T1", scenario_id="S2", tier_index=1, name="SRAM + Cache Tier", process_id="PN5", role="Large SRAM/cache plus medium logic", orientation="Face-up / Face-to-face", thickness_um=48, area_limit_mm2=250.0, description="Cache/SRAM-heavy tier serving CPU/GPU/NPU and modem memories."),
-            Tier(id="T2", scenario_id="S2", tier_index=2, name="IO + Always-On Tier", process_id="PN6", role="LPDDR/PHY/IO/security/AON/analog-friendly logic", orientation="Backside PDN", thickness_um=60, area_limit_mm2=180.0, description="Mature-node companion tier for IO PHYs, PMU, RF digital, and low-power islands."),
+            Tier(id="T0", impl_option_id="S2", tier_index=0, name="Compute Logic Tier", process_id="PN3E", role="CPU/GPU/NPU/ISP/media high-performance logic", orientation="Face-down", thickness_um=42, area_limit_mm2=300.0, description="Advanced logic tier with hot compute blocks and fine-pitch hybrid bonding."),
+            Tier(id="T1", impl_option_id="S2", tier_index=1, name="SRAM + Cache Tier", process_id="PN5", role="Large SRAM/cache plus medium logic", orientation="Face-up / Face-to-face", thickness_um=48, area_limit_mm2=250.0, description="Cache/SRAM-heavy tier serving CPU/GPU/NPU and modem memories."),
+            Tier(id="T2", impl_option_id="S2", tier_index=2, name="IO + Always-On Tier", process_id="PN6", role="LPDDR/PHY/IO/security/AON/analog-friendly logic", orientation="Backside PDN", thickness_um=60, area_limit_mm2=180.0, description="Mature-node companion tier for IO PHYs, PMU, RF digital, and low-power islands."),
         ]
 
         logical_metric_values = {
@@ -618,7 +621,7 @@ def seed_data() -> None:
                     partition_name = canonical_partition_name(component_name, category, tier_id, partition_type, partial_index)
                     partition_rows.append((f"PP_{partition_name}", component_id, tier_id, partition_name, partition_type, category, count, share))
         partitions = [
-            PhysicalPartition(id=id, scenario_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, resource_category=category, physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {category} content of {logical_id} to {tier_id}.")
+            PhysicalPartition(id=id, impl_option_id="S2", logical_component_id=logical_id, tier_id=tier_id, partition_name=name, partition_type=ptype, resource_category=category, physical_instance_count=count, partition_ratio=1.0 if ptype == "full" else ratio, content_share=1.0 if ptype == "full" else ratio, description=f"{name} maps {category} content of {logical_id} to {tier_id}.")
             for id, logical_id, tier_id, name, ptype, category, count, ratio in partition_rows
         ]
         def category_area_for_seed(component_id: str, category: str) -> float:
@@ -659,22 +662,22 @@ def seed_data() -> None:
             metric("M_TIER_T0_UTIL", "S2", "tier", "T0", "utilization", 78, "%", "physical", "number", "typical", "nominal", "review", "Tier utilization target."),
             metric("M_TIER_T1_UTIL", "S2", "tier", "T1", "utilization", 71, "%", "physical", "number", "typical", "nominal", "review", "Tier utilization target."),
             metric("M_TIER_T2_UTIL", "S2", "tier", "T2", "utilization", 63, "%", "physical", "number", "typical", "nominal", "review", "Tier utilization target."),
-            metric("M_SCENARIO_S1_AREA", "S1", "scenario", "S1", "area", 182.0, "mm2", "physical", "number", "typical", "nominal", "review", "Monolithic N3E planning estimate including keepout and IO ring."),
-            metric("M_SCENARIO_S1_POWER", "S1", "scenario", "S1", "power", 49.5, "W", "power", "number", "typical", "peak", "review", "Monolithic peak workload power."),
-            metric("M_SCENARIO_S2_AREA", "S2", "scenario", "S2", "area", 119.0, "mm2", "physical", "number", "typical", "nominal", "review", "Projected exposed package footprint for the 3-tier option."),
-            metric("M_SCENARIO_S2_POWER", "S2", "scenario", "S2", "power", 45.3, "W", "power", "number", "typical", "peak", "review", "3DIC peak workload power with shorter memory paths."),
-            metric("M_SCENARIO_S3_AREA", "S3", "scenario", "S3", "area", 143.0, "mm2", "physical", "number", "typical", "nominal", "review", "2.5D option exposed package footprint estimate."),
-            metric("M_SCENARIO_S3_POWER", "S3", "scenario", "S3", "power", 47.0, "W", "power", "number", "typical", "peak", "review", "2.5D option peak workload power."),
+            metric("M_IMPL_OPTION_S1_AREA", "S1", "impl_option", "S1", "area", 182.0, "mm2", "physical", "number", "typical", "nominal", "review", "Monolithic N3E planning estimate including keepout and IO ring."),
+            metric("M_IMPL_OPTION_S1_POWER", "S1", "impl_option", "S1", "power", 49.5, "W", "power", "number", "typical", "peak", "review", "Monolithic peak workload power."),
+            metric("M_IMPL_OPTION_S2_AREA", "S2", "impl_option", "S2", "area", 119.0, "mm2", "physical", "number", "typical", "nominal", "review", "Projected exposed package footprint for the 3-tier option."),
+            metric("M_IMPL_OPTION_S2_POWER", "S2", "impl_option", "S2", "power", 45.3, "W", "power", "number", "typical", "peak", "review", "3DIC peak workload power with shorter memory paths."),
+            metric("M_IMPL_OPTION_S3_AREA", "S3", "impl_option", "S3", "area", 143.0, "mm2", "physical", "number", "typical", "nominal", "review", "2.5D option exposed package footprint estimate."),
+            metric("M_IMPL_OPTION_S3_POWER", "S3", "impl_option", "S3", "power", 47.0, "W", "power", "number", "typical", "peak", "review", "2.5D option peak workload power."),
         ])
 
-        for row in projects + scenarios + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities:
+        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities:
             session.merge(row)
         session.commit()
 
 
 def metric(
     id: str,
-    scenario_id: str,
+    impl_option_id: str,
     subject_type: str,
     subject_id: str,
     metric_name: str,
@@ -689,7 +692,7 @@ def metric(
 ) -> Metric:
     return Metric(
         id=id,
-        scenario_id=scenario_id,
+        impl_option_id=impl_option_id,
         subject_type=subject_type,
         subject_id=subject_id,
         metric_name=metric_name,
@@ -713,10 +716,10 @@ def on_startup() -> None:
         seed_data()
 
 
-def metrics_for(session: Session, scenario_id: str, subject_type: str, subject_id: str) -> dict[str, Metric]:
+def metrics_for(session: Session, impl_option_id: str, subject_type: str, subject_id: str) -> dict[str, Metric]:
     rows = session.exec(
         select(Metric).where(
-            Metric.scenario_id == scenario_id,
+            Metric.impl_option_id == impl_option_id,
             Metric.subject_type == subject_type,
             Metric.subject_id == subject_id,
         )
@@ -747,9 +750,9 @@ def canonical_partition_name(component_name: str, category: str, tier_id: str, p
     return f"{base_name}_P{partial_index}" if partition_type == "partial" else base_name
 
 
-def component_required_resource_categories(session: Session, component: LogicalComponent, scenario_id: str) -> set[str]:
-    metrics = metrics_for(session, scenario_id, "logical_component", component.id)
-    area_summary = logical_area_summary(session, component, scenario_id)
+def component_required_resource_categories(session: Session, component: LogicalComponent, impl_option_id: str) -> set[str]:
+    metrics = metrics_for(session, impl_option_id, "logical_component", component.id)
+    area_summary = logical_area_summary(session, component, impl_option_id)
     metric_names = {
         "logic": "residual_logic_area" if area_summary["has_children"] else "logic_area",
         "sram": "residual_sram_area" if area_summary["has_children"] else "sram_area",
@@ -767,7 +770,7 @@ def is_global_team(team: str | None) -> bool:
     return not team or team in {"Architecture Team", "All", "All Teams"}
 
 
-def allowed_component_ids_for_team(session: Session, team: str | None, scenario_id: str = "S2") -> set[str] | None:
+def allowed_component_ids_for_team(session: Session, team: str | None, impl_option_id: str = "S2") -> set[str] | None:
     if is_global_team(team):
         return None
 
@@ -775,7 +778,7 @@ def allowed_component_ids_for_team(session: Session, team: str | None, scenario_
     by_id = {component.id: component for component in components}
     assignments = session.exec(
         select(ResponsibilityAssignment).where(
-            ResponsibilityAssignment.scenario_id == scenario_id,
+            ResponsibilityAssignment.impl_option_id == impl_option_id,
             ResponsibilityAssignment.team_name == team,
             ResponsibilityAssignment.can_read == True,
         )
@@ -800,9 +803,9 @@ def allowed_component_ids_for_team(session: Session, team: str | None, scenario_
     return allowed
 
 
-def component_rows_for_team(session: Session, team: str | None, scenario_id: str = "S2") -> tuple[list[LogicalComponent], set[str] | None]:
+def component_rows_for_team(session: Session, team: str | None, impl_option_id: str = "S2") -> tuple[list[LogicalComponent], set[str] | None]:
     rows = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
-    allowed = allowed_component_ids_for_team(session, team, scenario_id)
+    allowed = allowed_component_ids_for_team(session, team, impl_option_id)
     if allowed is None:
         return rows, None
     return [row for row in rows if row.id in allowed], allowed
@@ -814,8 +817,8 @@ def scope_component_items(items: list[dict[str, Any]], allowed: set[str] | None)
     return [{**item, "parent": item["parent"] if item["parent"] in allowed else None} for item in items]
 
 
-def partition_ids_for_components(session: Session, scenario_id: str, component_ids: set[str]) -> set[str]:
-    rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+def partition_ids_for_components(session: Session, impl_option_id: str, component_ids: set[str]) -> set[str]:
+    rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()
     return {row.id for row in rows if row.logical_component_id in component_ids}
 
 
@@ -833,12 +836,12 @@ def absolute_logical_instance_count(session: Session, component: LogicalComponen
 
 def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, Any]:
     logical = session.get(LogicalComponent, partition.logical_component_id)
-    metrics = metrics_for(session, partition.scenario_id, "physical_partition", partition.id)
+    metrics = metrics_for(session, partition.impl_option_id, "physical_partition", partition.id)
     logical_count = logical.logical_instance_count if logical else 0
     content_share = normalized_content_share(partition.partition_type, partition.content_share)
     return {
         "id": partition.id,
-        "scenario_id": partition.scenario_id,
+        "impl_option_id": partition.impl_option_id,
         "logical_component_id": partition.logical_component_id,
         "logical_component_name": logical.name if logical else partition.logical_component_id,
         "tier_id": partition.tier_id,
@@ -858,8 +861,8 @@ def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, An
     }
 
 
-def logical_area_summary(session: Session, component: LogicalComponent, scenario_id: str) -> dict[str, Any]:
-    metrics = metrics_for(session, scenario_id, "logical_component", component.id)
+def logical_area_summary(session: Session, component: LogicalComponent, impl_option_id: str) -> dict[str, Any]:
+    metrics = metrics_for(session, impl_option_id, "logical_component", component.id)
     total = {
         "logic_area": metric_number(metrics, "logic_area"),
         "sram_area": metric_number(metrics, "sram_area"),
@@ -868,7 +871,7 @@ def logical_area_summary(session: Session, component: LogicalComponent, scenario
     child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component.id)).all()
     child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
     for child in child_rows:
-        child_metrics = metrics_for(session, scenario_id, "logical_component", child.id)
+        child_metrics = metrics_for(session, impl_option_id, "logical_component", child.id)
         for metric_name in child_sum:
             child_sum[metric_name] += metric_number(child_metrics, metric_name)
     residual = {metric_name: round(total[metric_name] - child_sum[metric_name], 4) for metric_name in total}
@@ -920,15 +923,15 @@ def partition_base_area_for_category(partition_row: dict[str, Any]) -> float:
     return partition_row["logic_area"] + partition_row["sram_area"] + partition_row["block_area"]
 
 
-def component_tier_area_distribution(session: Session, component: LogicalComponent, scenario_id: str) -> list[dict[str, Any]]:
+def component_tier_area_distribution(session: Session, component: LogicalComponent, impl_option_id: str) -> list[dict[str, Any]]:
     component_ids = descendant_component_ids(session, component.id)
     partitions = session.exec(
         select(PhysicalPartition).where(
-            PhysicalPartition.scenario_id == scenario_id,
+            PhysicalPartition.impl_option_id == impl_option_id,
             PhysicalPartition.logical_component_id.in_(component_ids),
         )
     ).all()
-    tiers = {tier.id: tier for tier in session.exec(select(Tier).where(Tier.scenario_id == scenario_id)).all()}
+    tiers = {tier.id: tier for tier in session.exec(select(Tier).where(Tier.impl_option_id == impl_option_id)).all()}
     processes = {process.id: process for process in session.exec(select(ProcessNode)).all()}
     rows_by_tier: dict[str, dict[str, Any]] = {}
 
@@ -981,11 +984,11 @@ def component_tier_area_distribution(session: Session, component: LogicalCompone
     ]
 
 
-def component_ui(session: Session, component: LogicalComponent, scenario_id: str = "S2") -> dict[str, Any]:
-    metrics = metrics_for(session, scenario_id, "logical_component", component.id)
+def component_ui(session: Session, component: LogicalComponent, impl_option_id: str = "S2") -> dict[str, Any]:
+    metrics = metrics_for(session, impl_option_id, "logical_component", component.id)
     partitions = session.exec(
         select(PhysicalPartition).where(
-            PhysicalPartition.scenario_id == scenario_id,
+            PhysicalPartition.impl_option_id == impl_option_id,
             PhysicalPartition.logical_component_id == component.id,
         )
     ).all()
@@ -1003,7 +1006,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
     block_area = metric_number(metrics, "block_area")
     if not block_area:
         block_area = sum(row["logic_area"] + row["sram_area"] + row["block_area"] for row in partition_rows)
-    area_summary = logical_area_summary(session, component, scenario_id)
+    area_summary = logical_area_summary(session, component, impl_option_id)
     
     # compute own_mapping_closed
     own_closed = True
@@ -1024,7 +1027,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
             
         equiv = sum(partition_equivalent_instances(p) for p in category_partitions)
         mapped_area = sum(
-            metric_number(metrics_for(session, scenario_id, "physical_partition", p.id), f"{category}_area")
+            metric_number(metrics_for(session, impl_option_id, "physical_partition", p.id), f"{category}_area")
             for p in category_partitions
         )
         
@@ -1037,14 +1040,14 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         subtree_closed = False
     else:
         def check_descendant_closed(c: LogicalComponent) -> bool:
-            c_metrics = metrics_for(session, scenario_id, "logical_component", c.id)
+            c_metrics = metrics_for(session, impl_option_id, "logical_component", c.id)
             c_partitions = session.exec(
                 select(PhysicalPartition).where(
-                    PhysicalPartition.scenario_id == scenario_id,
+                    PhysicalPartition.impl_option_id == impl_option_id,
                     PhysicalPartition.logical_component_id == c.id,
                 )
             ).all()
-            c_area_summary = logical_area_summary(session, c, scenario_id)
+            c_area_summary = logical_area_summary(session, c, impl_option_id)
             c_self_area = {
                 "logic": c_area_summary["residual_logic_area"] if c_area_summary["has_children"] else metric_number(c_metrics, "logic_area"),
                 "sram": c_area_summary["residual_sram_area"] if c_area_summary["has_children"] else metric_number(c_metrics, "sram_area"),
@@ -1060,7 +1063,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
                     continue
                 eq = sum(partition_equivalent_instances(p) for p in cat_parts)
                 ma = sum(
-                    metric_number(metrics_for(session, scenario_id, "physical_partition", p.id), f"{cat}_area")
+                    metric_number(metrics_for(session, impl_option_id, "physical_partition", p.id), f"{cat}_area")
                     for p in cat_parts
                 )
                 if abs(eq - c.logical_instance_count) > 0.001 or abs(ma - exp_area) > 0.01:
@@ -1103,7 +1106,7 @@ def component_ui(session: Session, component: LogicalComponent, scenario_id: str
         "tier": "/".join(tier_ids) if tier_ids else "-",
         "confidence": confidence,
         "partitions": partition_rows,
-        "tier_area_distribution": component_tier_area_distribution(session, component, scenario_id),
+        "tier_area_distribution": component_tier_area_distribution(session, component, impl_option_id),
         "description": component.description,
         "own_mapping_closed": own_closed,
         "subtree_mapping_closed": subtree_closed,
@@ -1115,38 +1118,38 @@ def build_component_tree(items: list[dict[str, Any]], parent: str | None = None)
     return [{**item, "children": build_component_tree(items, item["id"])} for item in items if item["parent"] == parent]
 
 
-def scenario_ui(session: Session, scenario: Scenario) -> dict[str, Any]:
-    metrics = metrics_for(session, scenario.id, "scenario", scenario.id)
+def impl_option_ui(session: Session, impl_option: ImplOption) -> dict[str, Any]:
+    metrics = metrics_for(session, impl_option.id, "impl_option", impl_option.id)
     area = metric_number(metrics, "area")
     power = metric_number(metrics, "power")
     return {
-        "id": scenario.id,
-        "project_id": scenario.project_id,
-        "name": scenario.name,
-        "process": scenario.process_combo,
-        "process_combo": scenario.process_combo,
-        "die": scenario.scenario_type,
-        "scenario_type": scenario.scenario_type,
+        "id": impl_option.id,
+        "project_id": impl_option.project_id,
+        "name": impl_option.name,
+        "process": impl_option.process_combo,
+        "process_combo": impl_option.process_combo,
+        "die": impl_option.impl_type,
+        "impl_type": impl_option.impl_type,
         "area": area,
         "power": power,
-        "risk": scenario.status,
-        "cost": "High" if scenario.id == "S2" else "Medium",
-        "thermal": "High" if scenario.id == "S2" else "Medium",
-        "description": scenario.description,
-        "status": scenario.status,
-        "created_at": scenario.created_at,
-        "updated_at": scenario.updated_at,
+        "risk": impl_option.status,
+        "cost": "High" if impl_option.id == "S2" else "Medium",
+        "thermal": "High" if impl_option.id == "S2" else "Medium",
+        "description": impl_option.description,
+        "status": impl_option.status,
+        "created_at": impl_option.created_at,
+        "updated_at": impl_option.updated_at,
     }
 
 
-def implementation_ui(session: Session, scenario_id: str) -> dict[str, Any]:
-    implementation = session.get(ScenarioImplementation, scenario_id)
-    tiers = session.exec(select(ImplementationTier).where(ImplementationTier.scenario_id == scenario_id).order_by(ImplementationTier.tier_index)).all()
-    interfaces = session.exec(select(ImplementationInterface).where(ImplementationInterface.scenario_id == scenario_id)).all()
-    package_escape = session.get(ImplementationPackageEscape, scenario_id)
+def impl_option_detail_ui(session: Session, impl_option_id: str) -> dict[str, Any]:
+    implementation = session.get(ImplOptionDetail, impl_option_id)
+    tiers = session.exec(select(ImplementationTier).where(ImplementationTier.impl_option_id == impl_option_id).order_by(ImplementationTier.tier_index)).all()
+    interfaces = session.exec(select(ImplementationInterface).where(ImplementationInterface.impl_option_id == impl_option_id)).all()
+    package_escape = session.get(ImplementationPackageEscape, impl_option_id)
     return {
         "exists": implementation is not None,
-        "scenario_id": scenario_id,
+        "impl_option_id": impl_option_id,
         "implementation_type": implementation.implementation_type if implementation else "",
         "status": implementation.status if implementation else "draft",
         "version": implementation.version if implementation else 0,
@@ -1168,11 +1171,11 @@ def implementation_ui(session: Session, scenario_id: str) -> dict[str, Any]:
                 "role": tier.role,
                 "thickness_um": tier.thickness_um,
             }
-            for tier in session.exec(select(Tier).where(Tier.scenario_id == scenario_id).order_by(Tier.tier_index)).all()
+            for tier in session.exec(select(Tier).where(Tier.impl_option_id == impl_option_id).order_by(Tier.tier_index)).all()
         ],
         "interfaces": [
             {
-                "id": row.id.removeprefix(f"{scenario_id}:"),
+                "id": row.id.removeprefix(f"{impl_option_id}:"),
                 "from_tier_id": row.from_tier_id,
                 "to_tier_id": row.to_tier_id,
                 "orientation": row.orientation,
@@ -1196,7 +1199,7 @@ def implementation_ui(session: Session, scenario_id: str) -> dict[str, Any]:
     }
 
 
-def implementation_impact_errors(session: Session, scenario_id: str, payload: ScenarioImplementationUpdate) -> list[str]:
+def impl_option_detail_impact_errors(session: Session, impl_option_id: str, payload: ImplOptionDetailUpdate) -> list[str]:
     errors: list[str] = []
     new_tier_ids = [tier.id for tier in payload.tiers]
     if not new_tier_ids:
@@ -1204,7 +1207,7 @@ def implementation_impact_errors(session: Session, scenario_id: str, payload: Sc
     if len(new_tier_ids) != len(set(new_tier_ids)):
         errors.append("Tier ids must be unique within an implementation.")
 
-    partition_rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+    partition_rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()
     partition_usage: dict[str, int] = {}
     for row in partition_rows:
         partition_usage[row.tier_id] = partition_usage.get(row.tier_id, 0) + 1
@@ -1213,7 +1216,7 @@ def implementation_impact_errors(session: Session, scenario_id: str, payload: Sc
     for tier_id in sorted(tier_id for tier_id in partition_usage if tier_id not in new_tier_set):
         errors.append(f"Tier {tier_id} is used by {partition_usage[tier_id]} physical partitions and cannot be removed or renamed.")
 
-    existing_tiers = session.exec(select(ImplementationTier).where(ImplementationTier.scenario_id == scenario_id)).all()
+    existing_tiers = session.exec(select(ImplementationTier).where(ImplementationTier.impl_option_id == impl_option_id)).all()
     existing_index = {row.tier_id: row.tier_index for row in existing_tiers}
     for index, tier_id in enumerate(new_tier_ids):
         if tier_id in partition_usage and tier_id in existing_index and existing_index[tier_id] != index:
@@ -1246,11 +1249,11 @@ def make_quality_issue(
     }
 
 
-def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:
+def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
-    components, allowed_component_ids = component_rows_for_team(session, team, scenario_id)
-    partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
-    metrics = session.exec(select(Metric).where(Metric.scenario_id == scenario_id)).all()
+    components, allowed_component_ids = component_rows_for_team(session, team, impl_option_id)
+    partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()
+    metrics = session.exec(select(Metric).where(Metric.impl_option_id == impl_option_id)).all()
     if allowed_component_ids is not None:
         partitions = [row for row in partitions if row.logical_component_id in allowed_component_ids]
         allowed_partition_ids = {row.id for row in partitions}
@@ -1474,8 +1477,8 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
     valid_subject_ids = {
         "logical_component": {row.id for row in components},
         "physical_partition": {row.id for row in partitions},
-        "tier": {row.id for row in session.exec(select(Tier).where(Tier.scenario_id == scenario_id)).all()},
-        "scenario": {scenario_id},
+        "tier": {row.id for row in session.exec(select(Tier).where(Tier.impl_option_id == impl_option_id)).all()},
+        "impl_option": {impl_option_id},
     }
     for row in metrics:
         if row.subject_id not in valid_subject_ids.get(row.subject_type, set()):
@@ -1505,9 +1508,9 @@ def quality_issues_for(session: Session, scenario_id: str = "S2", team: str | No
                 )
 
     # Check tier area limits after process scaling
-    tiers_in_scenario = session.exec(select(Tier).where(Tier.scenario_id == scenario_id)).all()
+    tiers_in_impl_option = session.exec(select(Tier).where(Tier.impl_option_id == impl_option_id)).all()
     processes = {p.id: p for p in session.exec(select(ProcessNode)).all()}
-    for tier in tiers_in_scenario:
+    for tier in tiers_in_impl_option:
         process = processes.get(tier.process_id)
         tier_partitions = [p for p in partitions if p.tier_id == tier.id]
         total_scaled_area = 0.0
@@ -1544,53 +1547,53 @@ def get_projects() -> list[Project]:
         return list(session.exec(select(Project)).all())
 
 
-@app.get("/api/scenarios")
-def get_scenarios() -> list[dict[str, Any]]:
+@app.get("/api/impl-options")
+def get_implOptions() -> list[dict[str, Any]]:
     with Session(engine) as session:
-        return [scenario_ui(session, scenario) for scenario in session.exec(select(Scenario)).all()]
+        return [impl_option_ui(session, impl_option) for impl_option in session.exec(select(ImplOption)).all()]
 
 
-@app.get("/api/scenarios/{scenario_id}/implementation")
-def get_scenario_implementation(scenario_id: str) -> dict[str, Any]:
+@app.get("/api/impl-options/{impl_option_id}/detail")
+def get_impl_option_detail(impl_option_id: str) -> dict[str, Any]:
     with Session(engine) as session:
-        scenario = session.get(Scenario, scenario_id)
-        if not scenario:
-            raise HTTPException(status_code=404, detail=f"Unknown scenario_id: {scenario_id}")
-        return implementation_ui(session, scenario_id)
+        impl_option = session.get(ImplOption, impl_option_id)
+        if not impl_option:
+            raise HTTPException(status_code=404, detail=f"Unknown impl_option_id: {impl_option_id}")
+        return impl_option_detail_ui(session, impl_option_id)
 
 
-@app.put("/api/scenarios/{scenario_id}/implementation")
-def update_scenario_implementation(scenario_id: str, payload: ScenarioImplementationUpdate) -> dict[str, Any]:
+@app.put("/api/impl-options/{impl_option_id}/detail")
+def update_impl_option_detail(impl_option_id: str, payload: ImplOptionDetailUpdate) -> dict[str, Any]:
     with Session(engine) as session:
-        scenario = session.get(Scenario, scenario_id)
-        if not scenario:
-            raise HTTPException(status_code=404, detail=f"Unknown scenario_id: {scenario_id}")
+        impl_option = session.get(ImplOption, impl_option_id)
+        if not impl_option:
+            raise HTTPException(status_code=404, detail=f"Unknown impl_option_id: {impl_option_id}")
 
-        errors = implementation_impact_errors(session, scenario_id, payload)
+        errors = impl_option_detail_impact_errors(session, impl_option_id, payload)
         if errors:
             raise HTTPException(status_code=409, detail={"errors": errors})
 
-        previous = session.get(ScenarioImplementation, scenario_id)
+        previous = session.get(ImplOptionDetail, impl_option_id)
         session.merge(
-            ScenarioImplementation(
-                scenario_id=scenario_id,
+            ImplOptionDetail(
+                impl_option_id=impl_option_id,
                 implementation_type=payload.implementation_type,
                 status=payload.status,
                 version=(previous.version + 1) if previous else 1,
                 updated_at=now_iso(),
             )
         )
-        session.exec(delete(ImplementationTier).where(ImplementationTier.scenario_id == scenario_id))
-        session.exec(delete(ImplementationInterface).where(ImplementationInterface.scenario_id == scenario_id))
-        existing_escape = session.get(ImplementationPackageEscape, scenario_id)
+        session.exec(delete(ImplementationTier).where(ImplementationTier.impl_option_id == impl_option_id))
+        session.exec(delete(ImplementationInterface).where(ImplementationInterface.impl_option_id == impl_option_id))
+        existing_escape = session.get(ImplementationPackageEscape, impl_option_id)
         if existing_escape:
             session.delete(existing_escape)
 
         for index, tier in enumerate(payload.tiers):
             session.add(
                 ImplementationTier(
-                    id=f"{scenario_id}:{tier.id}",
-                    scenario_id=scenario_id,
+                    id=f"{impl_option_id}:{tier.id}",
+                    impl_option_id=impl_option_id,
                     tier_id=tier.id,
                     tier_index=index,
                     name=tier.name,
@@ -1602,8 +1605,8 @@ def update_scenario_implementation(scenario_id: str, payload: ScenarioImplementa
         for row in payload.interfaces:
             session.add(
                 ImplementationInterface(
-                    id=f"{scenario_id}:{row.id}",
-                    scenario_id=scenario_id,
+                    id=f"{impl_option_id}:{row.id}",
+                    impl_option_id=impl_option_id,
                     from_tier_id=row.from_tier_id,
                     to_tier_id=row.to_tier_id,
                     orientation=row.orientation,
@@ -1618,7 +1621,7 @@ def update_scenario_implementation(scenario_id: str, payload: ScenarioImplementa
             )
         session.add(
             ImplementationPackageEscape(
-                scenario_id=scenario_id,
+                impl_option_id=impl_option_id,
                 bottom_tier_id=payload.package_escape.bottom_tier_id,
                 requires_tsv=payload.package_escape.requires_tsv,
                 pitch_um=payload.package_escape.pitch_um,
@@ -1627,7 +1630,7 @@ def update_scenario_implementation(scenario_id: str, payload: ScenarioImplementa
             )
         )
         session.commit()
-        return {"implementation": implementation_ui(session, scenario_id), "impact": {"blocked": False, "errors": []}}
+        return {"implementation": impl_option_detail_ui(session, impl_option_id), "impact": {"blocked": False, "errors": []}}
 
 
 @app.get("/api/module-definitions")
@@ -1637,41 +1640,41 @@ def get_module_definitions() -> list[ModuleDefinition]:
 
 
 @app.get("/api/components")
-def get_components(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
+def get_components(impl_option_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
     with Session(engine) as session:
-        rows, allowed = component_rows_for_team(session, team, scenario_id)
-        return scope_component_items([component_ui(session, row, scenario_id) for row in rows], allowed)
+        rows, allowed = component_rows_for_team(session, team, impl_option_id)
+        return scope_component_items([component_ui(session, row, impl_option_id) for row in rows], allowed)
 
 
 @app.get("/api/components/tree")
-def get_component_tree(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
+def get_component_tree(impl_option_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
     with Session(engine) as session:
-        rows, allowed = component_rows_for_team(session, team, scenario_id)
-        return build_component_tree(scope_component_items([component_ui(session, row, scenario_id) for row in rows], allowed))
+        rows, allowed = component_rows_for_team(session, team, impl_option_id)
+        return build_component_tree(scope_component_items([component_ui(session, row, impl_option_id) for row in rows], allowed))
 
 
 @app.get("/api/physical-partitions")
-def get_physical_partitions(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
+def get_physical_partitions(impl_option_id: str = "S2", team: str | None = None) -> list[dict[str, Any]]:
     with Session(engine) as session:
-        allowed = allowed_component_ids_for_team(session, team, scenario_id)
-        rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+        allowed = allowed_component_ids_for_team(session, team, impl_option_id)
+        rows = session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()
         if allowed is not None:
             rows = [row for row in rows if row.logical_component_id in allowed]
         return [partition_ui(session, row) for row in rows]
 
 
 
-def recalculate_component_partitions(session: Session, scenario_id: str, component_id: str):
+def recalculate_component_partitions(session: Session, impl_option_id: str, component_id: str):
     partitions = session.exec(
         select(PhysicalPartition).where(
-            PhysicalPartition.scenario_id == scenario_id,
+            PhysicalPartition.impl_option_id == impl_option_id,
             PhysicalPartition.logical_component_id == component_id,
         )
     ).all()
     if not partitions:
         return
 
-    logical_metrics = metrics_for(session, scenario_id, "logical_component", component_id)
+    logical_metrics = metrics_for(session, impl_option_id, "logical_component", component_id)
     current_logic_area = metric_number(logical_metrics, "logic_area")
     current_sram_area = metric_number(logical_metrics, "sram_area")
     current_block_area = metric_number(logical_metrics, "block_area")
@@ -1680,7 +1683,7 @@ def recalculate_component_partitions(session: Session, scenario_id: str, compone
     child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component_id)).all()
     child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
     for child in child_rows:
-        child_metrics = metrics_for(session, scenario_id, "logical_component", child.id)
+        child_metrics = metrics_for(session, impl_option_id, "logical_component", child.id)
         for m_name in child_sum:
             child_sum[m_name] += metric_number(child_metrics, m_name)
 
@@ -1738,7 +1741,7 @@ def recalculate_component_partitions(session: Session, scenario_id: str, compone
                 else:
                     new_metric = Metric(
                         id=metric_id,
-                        scenario_id=scenario_id,
+                        impl_option_id=impl_option_id,
                         subject_type="physical_partition",
                         subject_id=p.id,
                         metric_name=name,
@@ -1762,14 +1765,14 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         if not component:
             raise HTTPException(status_code=404, detail=f"Unknown logical component: {component_id}")
 
-        allowed = allowed_component_ids_for_team(session, payload.team, payload.scenario_id)
+        allowed = allowed_component_ids_for_team(session, payload.team, payload.impl_option_id)
         if allowed is not None and component_id not in allowed:
             raise HTTPException(status_code=403, detail=f"{component_id} is outside team scope {payload.team}")
 
-        scenario = session.get(Scenario, payload.scenario_id)
-        if not scenario:
-            raise HTTPException(status_code=400, detail=f"Unknown scenario_id: {payload.scenario_id}")
-        tier_ids = {row.id for row in session.exec(select(Tier).where(Tier.scenario_id == payload.scenario_id)).all()}
+        impl_option = session.get(ImplOption, payload.impl_option_id)
+        if not impl_option:
+            raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {payload.impl_option_id}")
+        tier_ids = {row.id for row in session.exec(select(Tier).where(Tier.impl_option_id == payload.impl_option_id)).all()}
         if payload.logical_instance_count < 0:
             raise HTTPException(status_code=400, detail="logical_instance_count must be non-negative")
 
@@ -1791,7 +1794,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 raise HTTPException(status_code=400, detail=f"Duplicate generated partition id: {partition_id}")
             seen_partition_ids.add(partition_id)
             if partition.tier_id not in tier_ids:
-                raise HTTPException(status_code=400, detail=f"Unknown tier_id for scenario {payload.scenario_id}: {partition.tier_id}")
+                raise HTTPException(status_code=400, detail=f"Unknown tier_id for impl_option {payload.impl_option_id}: {partition.tier_id}")
             if partition.partition_type not in ALLOWED_PARTITION_TYPES:
                 raise HTTPException(status_code=400, detail=f"Unsupported partition_type: {partition.partition_type}")
             if category not in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
@@ -1827,7 +1830,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 else:
                     new_metric = Metric(
                         id=metric_id,
-                        scenario_id=payload.scenario_id,
+                        impl_option_id=payload.impl_option_id,
                         subject_type="logical_component",
                         subject_id=component_id,
                         metric_name=name,
@@ -1845,7 +1848,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
 
         existing = session.exec(
             select(PhysicalPartition).where(
-                PhysicalPartition.scenario_id == payload.scenario_id,
+                PhysicalPartition.impl_option_id == payload.impl_option_id,
                 PhysicalPartition.logical_component_id == component_id,
             )
         ).all()
@@ -1853,7 +1856,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
             if partition.id not in seen_partition_ids:
                 session.exec(
                     delete(Metric).where(
-                        Metric.scenario_id == payload.scenario_id,
+                        Metric.impl_option_id == payload.impl_option_id,
                         Metric.subject_type == "physical_partition",
                         Metric.subject_id == partition.id,
                     )
@@ -1864,7 +1867,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
             content_share = normalized_content_share(partition.partition_type, partition.content_share if partition.content_share is not None else partition.partition_ratio)
             row = PhysicalPartition(
                 id=partition_id,
-                scenario_id=payload.scenario_id,
+                impl_option_id=payload.impl_option_id,
                 logical_component_id=component_id,
                 tier_id=partition.tier_id,
                 partition_name=partition_name,
@@ -1878,7 +1881,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
             session.merge(row)
 
         # Recalculate physical partition metrics to maintain data consistency
-        logical_metrics = metrics_for(session, payload.scenario_id, "logical_component", component_id)
+        logical_metrics = metrics_for(session, payload.impl_option_id, "logical_component", component_id)
         current_logic_area = payload.logic_area if payload.logic_area is not None else metric_number(logical_metrics, "logic_area")
         current_sram_area = payload.sram_area if payload.sram_area is not None else metric_number(logical_metrics, "sram_area")
         current_block_area = payload.block_area if payload.block_area is not None else metric_number(logical_metrics, "block_area")
@@ -1887,7 +1890,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component_id)).all()
         child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
         for child in child_rows:
-            child_metrics = metrics_for(session, payload.scenario_id, "logical_component", child.id)
+            child_metrics = metrics_for(session, payload.impl_option_id, "logical_component", child.id)
             for m_name in child_sum:
                 child_sum[m_name] += metric_number(child_metrics, m_name)
 
@@ -1945,7 +1948,7 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                     else:
                         new_metric = Metric(
                             id=metric_id,
-                            scenario_id=payload.scenario_id,
+                            impl_option_id=payload.impl_option_id,
                             subject_type="physical_partition",
                             subject_id=p_id,
                             metric_name=name,
@@ -1962,25 +1965,25 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                         session.add(new_metric)
 
         if component.parent_id:
-            recalculate_component_partitions(session, payload.scenario_id, component.parent_id)
+            recalculate_component_partitions(session, payload.impl_option_id, component.parent_id)
 
         session.commit()
         session.refresh(component)
         return {
-            "component": component_ui(session, component, payload.scenario_id),
-            "quality_issues": quality_issues_for(session, payload.scenario_id, payload.team),
+            "component": component_ui(session, component, payload.impl_option_id),
+            "quality_issues": quality_issues_for(session, payload.impl_option_id, payload.team),
         }
 
 
 @app.get("/api/tiers")
-def get_tiers(scenario_id: str = "S2") -> list[dict[str, Any]]:
+def get_tiers(impl_option_id: str = "S2") -> list[dict[str, Any]]:
     with Session(engine) as session:
-        tiers = session.exec(select(Tier).where(Tier.scenario_id == scenario_id).order_by(Tier.tier_index)).all()
+        tiers = session.exec(select(Tier).where(Tier.impl_option_id == impl_option_id).order_by(Tier.tier_index)).all()
         process_nodes = {node.id: node for node in session.exec(select(ProcessNode)).all()}
         return [
             {
                 "id": tier.id,
-                "scenario_id": tier.scenario_id,
+                "impl_option_id": tier.impl_option_id,
                 "tier_index": tier.tier_index,
                 "name": tier.name,
                 "process_id": tier.process_id,
@@ -1990,8 +1993,8 @@ def get_tiers(scenario_id: str = "S2") -> list[dict[str, Any]]:
                 "thickness_um": tier.thickness_um,
                 "area": tier.area_limit_mm2,
                 "area_limit_mm2": tier.area_limit_mm2,
-                "power": metric_number(metrics_for(session, scenario_id, "tier", tier.id), "power"),
-                "utilization": metric_number(metrics_for(session, scenario_id, "tier", tier.id), "utilization"),
+                "power": metric_number(metrics_for(session, impl_option_id, "tier", tier.id), "power"),
+                "utilization": metric_number(metrics_for(session, impl_option_id, "tier", tier.id), "utilization"),
                 "interconnect": "HB < 1um" if tier.id == "T0" else "HB + TSV" if tier.id == "T1" else "TSV < 5um",
                 "description": tier.description,
             }
@@ -2000,21 +2003,21 @@ def get_tiers(scenario_id: str = "S2") -> list[dict[str, Any]]:
 
 
 @app.get("/api/metrics")
-def get_metrics(scenario_id: str | None = None, team: str | None = None) -> list[Metric]:
+def get_metrics(impl_option_id: str | None = None, team: str | None = None) -> list[Metric]:
     with Session(engine) as session:
         statement = select(Metric)
-        if scenario_id:
-            statement = statement.where(Metric.scenario_id == scenario_id)
+        if impl_option_id:
+            statement = statement.where(Metric.impl_option_id == impl_option_id)
         rows = list(session.exec(statement).all())
         if is_global_team(team):
             return rows
-        scoped_scenario_id = scenario_id or "S2"
-        allowed_component_ids = allowed_component_ids_for_team(session, team, scoped_scenario_id) or set()
-        allowed_partition_ids = partition_ids_for_components(session, scoped_scenario_id, allowed_component_ids)
+        scoped_impl_option_id = impl_option_id or "S2"
+        allowed_component_ids = allowed_component_ids_for_team(session, team, scoped_impl_option_id) or set()
+        allowed_partition_ids = partition_ids_for_components(session, scoped_impl_option_id, allowed_component_ids)
         return [
             row
             for row in rows
-            if row.scenario_id == scoped_scenario_id
+            if row.impl_option_id == scoped_impl_option_id
             and (
                 (row.subject_type == "logical_component" and row.subject_id in allowed_component_ids)
                 or (row.subject_type == "physical_partition" and row.subject_id in allowed_partition_ids)
@@ -2023,16 +2026,16 @@ def get_metrics(scenario_id: str | None = None, team: str | None = None) -> list
 
 
 @app.get("/api/quality/issues")
-def get_quality_issues(scenario_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:
+def get_quality_issues(impl_option_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:
     with Session(engine) as session:
-        return quality_issues_for(session, scenario_id, team)
+        return quality_issues_for(session, impl_option_id, team)
 
 
 @app.get("/api/responsibilities/teams")
-def get_responsibility_teams(scenario_id: str = "S2") -> list[str]:
+def get_responsibility_teams(impl_option_id: str = "S2") -> list[str]:
     with Session(engine) as session:
         assignments = session.exec(
-            select(ResponsibilityAssignment).where(ResponsibilityAssignment.scenario_id == scenario_id)
+            select(ResponsibilityAssignment).where(ResponsibilityAssignment.impl_option_id == impl_option_id)
         ).all()
         teams = {assignment.team_name for assignment in assignments}
         teams.update(row.owner_team for row in session.exec(select(LogicalComponent)).all() if row.owner_team)
@@ -2040,13 +2043,13 @@ def get_responsibility_teams(scenario_id: str = "S2") -> list[str]:
 
 
 @app.get("/api/dashboard")
-def get_dashboard(scenario_id: str = "S2") -> dict[str, Any]:
+def get_dashboard(impl_option_id: str = "S2") -> dict[str, Any]:
     with Session(engine) as session:
-        scenarios = [scenario_ui(session, row) for row in session.exec(select(Scenario)).all()]
+        implOptions = [impl_option_ui(session, row) for row in session.exec(select(ImplOption)).all()]
         component_rows = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
-        components = [component_ui(session, row, scenario_id) for row in component_rows]
-        partitions = [partition_ui(session, row) for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()]
-        target = next((item for item in scenarios if item["id"] == scenario_id), scenarios[0])
+        components = [component_ui(session, row, impl_option_id) for row in component_rows]
+        partitions = [partition_ui(session, row) for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()]
+        target = next((item for item in implOptions if item["id"] == impl_option_id), implOptions[0])
         parent_ids = {row.parent_id for row in component_rows if row.parent_id}
         leaf_ids = {row.id for row in component_rows if row.id not in parent_ids}
         leaf_components = [item for item in components if item["id"] in leaf_ids]
@@ -2062,7 +2065,7 @@ def get_dashboard(scenario_id: str = "S2") -> dict[str, Any]:
                 resource_area["Logic + mixed"] += item["block_area"]
         total = sum(resource_area.values()) or 1
         return {
-            "target_scenario": target,
+            "target_impl_option": target,
             "metrics": {
                 "total_area": target["area"],
                 "total_power": target["power"],
@@ -2075,7 +2078,7 @@ def get_dashboard(scenario_id: str = "S2") -> dict[str, Any]:
                 for (label, value), tone in zip(resource_area.items(), ["bg-slate-900", "bg-slate-500", "bg-slate-300"])
             ],
             "projects": list(session.exec(select(Project)).all()),
-            "scenarios": scenarios,
+            "implOptions": implOptions,
         }
 
 
@@ -2090,15 +2093,15 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
         ["id", "name", "product_family", "generation", "owner", "phase"],
         {"id", "name", "product_family", "generation", "owner", "phase"},
     ),
-    "scenarios": (
-        Scenario,
-        ["id", "project_id", "name", "scenario_type", "process_combo", "status"],
-        {"id", "project_id", "name", "scenario_type", "process_combo", "status"},
+    "implOptions": (
+        ImplOption,
+        ["id", "project_id", "name", "impl_type", "process_combo", "status"],
+        {"id", "project_id", "name", "impl_type", "process_combo", "status"},
     ),
     "tiers": (
         Tier,
-        ["id", "scenario_id", "tier_index", "name", "process_id", "role", "orientation", "area_limit_mm2"],
-        {"id", "scenario_id", "tier_index", "name", "process_id", "role"},
+        ["id", "impl_option_id", "tier_index", "name", "process_id", "role", "orientation", "area_limit_mm2"],
+        {"id", "impl_option_id", "tier_index", "name", "process_id", "role"},
     ),
     "logical_components": (
         LogicalComponent,
@@ -2107,17 +2110,17 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
     ),
     "physical_partitions": (
         PhysicalPartition,
-        ["id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "resource_category", "partition_type", "physical_instance_count", "content_share", "description"],
-        {"id", "scenario_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count"},
+        ["id", "impl_option_id", "logical_component_id", "tier_id", "partition_name", "resource_category", "partition_type", "physical_instance_count", "content_share", "description"],
+        {"id", "impl_option_id", "logical_component_id", "tier_id", "partition_name", "partition_type", "physical_instance_count"},
     ),
     "metrics": (
         Metric,
-        ["id", "scenario_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
-        {"scenario_id", "subject_type", "subject_id", "metric_name", "metric_value", "value_type", "corner", "workload", "confidence"},
+        ["id", "impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
+        {"impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "value_type", "corner", "workload", "confidence"},
     ),
 }
 
-ALLOWED_SUBJECT_TYPES = {"logical_component", "physical_partition", "tier", "scenario"}
+ALLOWED_SUBJECT_TYPES = {"logical_component", "physical_partition", "tier", "impl_option"}
 ALLOWED_VALUE_TYPES = {"number", "text", "boolean"}
 ALLOWED_CONFIDENCE = {"approved", "review", "draft"}
 ALLOWED_PARTITION_TYPES = {"full", "partial"}
@@ -2165,7 +2168,7 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
         row.setdefault("description", "")
         row["created_at"] = row.get("created_at") or created
         row["updated_at"] = row.get("updated_at") or created
-    for row in all_rows["scenarios"]:
+    for row in all_rows["implOptions"]:
         row.setdefault("description", "")
         row["created_at"] = row.get("created_at") or created
         row["updated_at"] = row.get("updated_at") or created
@@ -2201,16 +2204,16 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
     existing_refs = existing_refs or {}
     project_ids = {row["id"] for row in all_rows["projects"]} | existing_refs.get("projects", set())
     module_definition_ids = {row["id"] for row in all_rows["module_definitions"]} | existing_refs.get("module_definitions", set())
-    scenario_ids = {row["id"] for row in all_rows["scenarios"]} | existing_refs.get("scenarios", set())
+    impl_option_ids = {row["id"] for row in all_rows["implOptions"]} | existing_refs.get("implOptions", set())
     tier_ids = {row["id"] for row in all_rows["tiers"]} | existing_refs.get("tiers", set())
-    tier_scenario_ids = {row["id"]: row["scenario_id"] for row in all_rows["tiers"]}
-    tier_scenario_ids.update(existing_refs.get("tier_scenarios", {}))
+    tier_impl_option_ids = {row["id"]: row["impl_option_id"] for row in all_rows["tiers"]}
+    tier_impl_option_ids.update(existing_refs.get("tier_implOptions", {}))
     component_ids = {row["id"] for row in all_rows["logical_components"]} | existing_refs.get("logical_components", set())
     partition_ids = {row["id"] for row in all_rows["physical_partitions"]} | existing_refs.get("physical_partitions", set())
 
-    for row in all_rows["scenarios"]:
+    for row in all_rows["implOptions"]:
         if row["project_id"] not in project_ids:
-            errors.append(f"scenario {row['id']} references missing project_id {row['project_id']}")
+            errors.append(f"impl_option {row['id']} references missing project_id {row['project_id']}")
     for row in all_rows["logical_components"]:
         if row["instance_type"] == "parent_residual":
             errors.append(f"logical_component {row['id']} uses parent_residual; residual/self area is computed from parent total metrics minus child metrics")
@@ -2221,17 +2224,17 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
         if row.get("module_definition_id") and row["module_definition_id"] not in module_definition_ids:
             errors.append(f"logical_component {row['id']} references missing module_definition_id {row['module_definition_id']}")
     for row in all_rows["tiers"]:
-        if row["scenario_id"] not in scenario_ids:
-            errors.append(f"tier {row['id']} references missing scenario_id {row['scenario_id']}")
+        if row["impl_option_id"] not in impl_option_ids:
+            errors.append(f"tier {row['id']} references missing impl_option_id {row['impl_option_id']}")
     for row in all_rows["physical_partitions"]:
-        if row["scenario_id"] not in scenario_ids:
-            errors.append(f"physical_partition {row['id']} references missing scenario_id {row['scenario_id']}")
+        if row["impl_option_id"] not in impl_option_ids:
+            errors.append(f"physical_partition {row['id']} references missing impl_option_id {row['impl_option_id']}")
         if row["logical_component_id"] not in component_ids:
             errors.append(f"physical_partition {row['id']} references missing logical_component_id {row['logical_component_id']}")
         if row["tier_id"] not in tier_ids:
             errors.append(f"physical_partition {row['id']} references missing tier_id {row['tier_id']}")
-        elif tier_scenario_ids.get(row["tier_id"]) != row["scenario_id"]:
-            errors.append(f"physical_partition {row['id']} tier_id {row['tier_id']} belongs to scenario {tier_scenario_ids.get(row['tier_id'])}, not {row['scenario_id']}")
+        elif tier_impl_option_ids.get(row["tier_id"]) != row["impl_option_id"]:
+            errors.append(f"physical_partition {row['id']} tier_id {row['tier_id']} belongs to impl_option {tier_impl_option_ids.get(row['tier_id'])}, not {row['impl_option_id']}")
         if row["partition_type"] not in ALLOWED_PARTITION_TYPES:
             errors.append(f"physical_partition {row['id']} uses unsupported partition_type {row['partition_type']}")
         if row["resource_category"] not in ALLOWED_PARTITION_RESOURCE_CATEGORIES:
@@ -2241,8 +2244,8 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
         if row["content_share"] < 0:
             errors.append(f"physical_partition {row['id']} has negative content_share")
     for row in all_rows["metrics"]:
-        if row["scenario_id"] not in scenario_ids:
-            errors.append(f"metric {row['id']} references missing scenario_id {row['scenario_id']}")
+        if row["impl_option_id"] not in impl_option_ids:
+            errors.append(f"metric {row['id']} references missing impl_option_id {row['impl_option_id']}")
         if row["subject_type"] not in ALLOWED_SUBJECT_TYPES:
             errors.append(f"metric {row['id']} uses unsupported subject_type {row['subject_type']}")
         if row["subject_type"] == "logical_component" and row["subject_id"] not in component_ids:
@@ -2251,8 +2254,8 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
             errors.append(f"metric {row['id']} references missing physical_partition subject_id {row['subject_id']}")
         if row["subject_type"] == "tier" and row["subject_id"] not in tier_ids:
             errors.append(f"metric {row['id']} references missing tier subject_id {row['subject_id']}")
-        if row["subject_type"] == "scenario" and row["subject_id"] not in scenario_ids:
-            errors.append(f"metric {row['id']} references missing scenario subject_id {row['subject_id']}")
+        if row["subject_type"] == "impl_option" and row["subject_id"] not in impl_option_ids:
+            errors.append(f"metric {row['id']} references missing impl_option subject_id {row['subject_id']}")
         if row["value_type"] not in ALLOWED_VALUE_TYPES:
             errors.append(f"metric {row['id']} uses unsupported value_type {row['value_type']}")
         if row["confidence"] not in ALLOWED_CONFIDENCE:
@@ -2270,24 +2273,24 @@ def existing_reference_ids(session: Session) -> dict[str, Any]:
     return {
         "projects": {row.id for row in session.exec(select(Project)).all()},
         "module_definitions": {row.id for row in session.exec(select(ModuleDefinition)).all()},
-        "scenarios": {row.id for row in session.exec(select(Scenario)).all()},
+        "implOptions": {row.id for row in session.exec(select(ImplOption)).all()},
         "tiers": {row.id for row in tiers},
-        "tier_scenarios": {row.id: row.scenario_id for row in tiers},
+        "tier_implOptions": {row.id: row.impl_option_id for row in tiers},
         "logical_components": {row.id for row in session.exec(select(LogicalComponent)).all()},
         "physical_partitions": {row.id for row in session.exec(select(PhysicalPartition)).all()},
     }
 
 
-def validate_team_import_scope(all_rows: dict[str, list[dict[str, Any]]], session: Session, team: str | None, scenario_id: str = "S2") -> list[str]:
+def validate_team_import_scope(all_rows: dict[str, list[dict[str, Any]]], session: Session, team: str | None, impl_option_id: str = "S2") -> list[str]:
     if is_global_team(team):
         return []
 
     errors: list[str] = []
-    allowed_component_ids = allowed_component_ids_for_team(session, team, scenario_id) or set()
+    allowed_component_ids = allowed_component_ids_for_team(session, team, impl_option_id) or set()
     if not allowed_component_ids:
-        return [f"team {team} has no assigned component scope in scenario {scenario_id}"]
+        return [f"team {team} has no assigned component scope in impl_option {impl_option_id}"]
 
-    existing_partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+    existing_partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()
     allowed_partition_ids = {row.id for row in existing_partitions if row.logical_component_id in allowed_component_ids}
     workbook_partition_ids = {row["id"] for row in all_rows["physical_partitions"] if row["logical_component_id"] in allowed_component_ids}
     allowed_partition_ids |= workbook_partition_ids
@@ -2313,19 +2316,19 @@ def validate_team_import_scope(all_rows: dict[str, list[dict[str, Any]]], sessio
                     errors.append(f"logical_component {row['id']} cannot change structural field {field} in a team workbook")
 
     for row in all_rows["physical_partitions"]:
-        if row["scenario_id"] != scenario_id:
-            errors.append(f"physical_partition {row['id']} uses scenario_id {row['scenario_id']}, expected {scenario_id}")
+        if row["impl_option_id"] != impl_option_id:
+            errors.append(f"physical_partition {row['id']} uses impl_option_id {row['impl_option_id']}, expected {impl_option_id}")
         if row["logical_component_id"] not in allowed_component_ids:
             errors.append(f"physical_partition {row['id']} maps outside team scope {team}")
 
     for row in all_rows["metrics"]:
-        if row["scenario_id"] != scenario_id:
-            errors.append(f"metric {row['id']} uses scenario_id {row['scenario_id']}, expected {scenario_id}")
+        if row["impl_option_id"] != impl_option_id:
+            errors.append(f"metric {row['id']} uses impl_option_id {row['impl_option_id']}, expected {impl_option_id}")
         if row["subject_type"] == "logical_component" and row["subject_id"] not in allowed_component_ids:
             errors.append(f"metric {row['id']} references logical_component outside team scope {team}")
         elif row["subject_type"] == "physical_partition" and row["subject_id"] not in allowed_partition_ids:
             errors.append(f"metric {row['id']} references physical_partition outside team scope {team}")
-        elif row["subject_type"] in {"tier", "scenario"}:
+        elif row["subject_type"] in {"tier", "impl_option"}:
             errors.append(f"metric {row['id']} uses shared subject_type {row['subject_type']}; team workbooks may only update logical_component or physical_partition metrics")
 
     return errors
@@ -2384,8 +2387,8 @@ def write_import_sheet(workbook: Workbook, sheet_name: str, columns: list[str], 
             validation.add(f"{column_letter}2:{column_letter}500")
 
 
-def build_team_import_workbook(session: Session, team: str, scenario_id: str = "S2") -> str:
-    allowed_component_ids = allowed_component_ids_for_team(session, team, scenario_id)
+def build_team_import_workbook(session: Session, team: str, impl_option_id: str = "S2") -> str:
+    allowed_component_ids = allowed_component_ids_for_team(session, team, impl_option_id)
     if allowed_component_ids is None:
         raise HTTPException(status_code=400, detail="Team template is only generated for scoped teams. Use the full template for Architecture Team.")
     if not allowed_component_ids:
@@ -2398,7 +2401,7 @@ def build_team_import_workbook(session: Session, team: str, scenario_id: str = "
     scope_sheet = workbook.create_sheet("responsibility_scope")
     scope_sheet.append(["field", "value"])
     scope_sheet.append(["team", team])
-    scope_sheet.append(["scenario_id", scenario_id])
+    scope_sheet.append(["impl_option_id", impl_option_id])
     scope_sheet.append(["editable_sheets", "logical_components, physical_partitions, metrics"])
     scope_sheet.append(["rule", "Do not edit rows outside this workbook. Shared reference sheets are context only."])
     for cell in scope_sheet[1]:
@@ -2408,8 +2411,8 @@ def build_team_import_workbook(session: Session, team: str, scenario_id: str = "
     scope_sheet.column_dimensions["B"].width = 90
 
     projects = [row_dict(row, IMPORT_SHEETS["projects"][1]) for row in session.exec(select(Project)).all()]
-    scenarios = [row_dict(row, IMPORT_SHEETS["scenarios"][1]) for row in session.exec(select(Scenario)).all()]
-    tiers = [row_dict(row, IMPORT_SHEETS["tiers"][1]) for row in session.exec(select(Tier).where(Tier.scenario_id == scenario_id).order_by(Tier.tier_index)).all()]
+    implOptions = [row_dict(row, IMPORT_SHEETS["implOptions"][1]) for row in session.exec(select(ImplOption)).all()]
+    tiers = [row_dict(row, IMPORT_SHEETS["tiers"][1]) for row in session.exec(select(Tier).where(Tier.impl_option_id == impl_option_id).order_by(Tier.tier_index)).all()]
 
     components = session.exec(select(LogicalComponent).order_by(LogicalComponent.hierarchy_path)).all()
     scoped_components = [row for row in components if row.id in allowed_component_ids]
@@ -2423,7 +2426,7 @@ def build_team_import_workbook(session: Session, team: str, scenario_id: str = "
 
     partitions = [
         row
-        for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.scenario_id == scenario_id)).all()
+        for row in session.exec(select(PhysicalPartition).where(PhysicalPartition.impl_option_id == impl_option_id)).all()
         if row.logical_component_id in allowed_component_ids
     ]
     physical_partitions = [row_dict(row, IMPORT_SHEETS["physical_partitions"][1]) for row in partitions]
@@ -2431,7 +2434,7 @@ def build_team_import_workbook(session: Session, team: str, scenario_id: str = "
 
     metrics = [
         row
-        for row in session.exec(select(Metric).where(Metric.scenario_id == scenario_id)).all()
+        for row in session.exec(select(Metric).where(Metric.impl_option_id == impl_option_id)).all()
         if (row.subject_type == "logical_component" and row.subject_id in allowed_component_ids)
         or (row.subject_type == "physical_partition" and row.subject_id in partition_ids)
     ]
@@ -2440,7 +2443,7 @@ def build_team_import_workbook(session: Session, team: str, scenario_id: str = "
     sheet_rows = {
         "module_definitions": module_definitions,
         "projects": projects,
-        "scenarios": scenarios,
+        "implOptions": implOptions,
         "tiers": tiers,
         "logical_components": logical_components,
         "physical_partitions": physical_partitions,
@@ -2457,7 +2460,7 @@ def build_team_import_workbook(session: Session, team: str, scenario_id: str = "
 
 
 @app.post("/api/import/excel")
-async def import_excel(file: UploadFile = File(...), team: str | None = None, scenario_id: str = "S2") -> dict[str, Any]:
+async def import_excel(file: UploadFile = File(...), team: str | None = None, impl_option_id: str = "S2") -> dict[str, Any]:
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Only .xlsx files are supported.")
 
@@ -2474,7 +2477,7 @@ async def import_excel(file: UploadFile = File(...), team: str | None = None, sc
     with Session(engine) as session:
         existing_refs = existing_reference_ids(session) if not is_global_team(team) else None
         errors = validate_import_rows(all_rows, existing_refs)
-        errors.extend(validate_team_import_scope(all_rows, session, team, scenario_id))
+        errors.extend(validate_team_import_scope(all_rows, session, team, impl_option_id))
         if errors:
             raise HTTPException(status_code=400, detail={"errors": errors})
 
@@ -2493,16 +2496,16 @@ async def import_excel(file: UploadFile = File(...), team: str | None = None, sc
 
 
 @app.get("/api/import/template")
-def get_import_template(background_tasks: BackgroundTasks, team: str | None = None, scenario_id: str = "S2") -> FileResponse:
+def get_import_template(background_tasks: BackgroundTasks, team: str | None = None, impl_option_id: str = "S2") -> FileResponse:
     if not is_global_team(team):
         with Session(engine) as session:
-            path = build_team_import_workbook(session, team or "", scenario_id)
+            path = build_team_import_workbook(session, team or "", impl_option_id)
         background_tasks.add_task(os.remove, path)
         safe_team = (team or "team").lower().replace(" ", "_")
         return FileResponse(
             path,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=f"soc_team_import_{safe_team}_{scenario_id}.xlsx",
+            filename=f"soc_team_import_{safe_team}_{impl_option_id}.xlsx",
         )
 
     if not TEMPLATE_PATH.exists():

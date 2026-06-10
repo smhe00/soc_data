@@ -1,6 +1,6 @@
 export interface TierInfo {
   id: string;
-  scenario_id: string;
+  impl_option_id: string;
   tier_index: number;
   name: string;
   process_id: string;

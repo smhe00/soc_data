@@ -1,5 +1,5 @@
 import type { ConfidenceLevel } from "../../types/component";
-import type { RiskLevel } from "../../types/scenario";
+import type { RiskLevel } from "../../types/impl_option";
 import type { BadgeTone } from "./Badge";
 
 export type SeverityLevel = "High" | "Medium" | "Low";

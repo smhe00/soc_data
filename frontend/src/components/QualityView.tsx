@@ -32,7 +32,7 @@ export function QualityView({ qualityIssues, loading, error }: QualityViewProps)
         <div className="space-y-3">
           {qualityIssues.length === 0 && (
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-800">
-              No open quality issues for the selected demo scenario. Equivalent instance coverage and numeric metrics are closed.
+              No open quality issues for the selected demo impl_option. Equivalent instance coverage and numeric metrics are closed.
             </div>
           )}
           {qualityIssues.map((issue) => (

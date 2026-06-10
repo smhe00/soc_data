@@ -15,9 +15,9 @@ const schemaTables: SchemaTable[] = [
     fields: "project_id, family, name, owner, phase, created_at",
   },
   {
-    table: "scenario",
+    table: "impl_option",
     purpose: "2D/3DIC/降本/性能方案管理",
-    fields: "scenario_id, project_id, name, process_combo, status",
+    fields: "impl_option_id, project_id, name, process_combo, status",
   },
   {
     table: "module_definition",
@@ -37,7 +37,7 @@ const schemaTables: SchemaTable[] = [
   {
     table: "tier",
     purpose: "3D stack中每层die/tier定义",
-    fields: "tier_id, scenario_id, process_id, tier_index, role, thickness",
+    fields: "tier_id, impl_option_id, process_id, tier_index, role, thickness",
   },
   {
     table: "physical_partition",
@@ -46,7 +46,7 @@ const schemaTables: SchemaTable[] = [
   },
   {
     table: "metric",
-    purpose: "统一指标表，挂到logical/partition/tier/scenario",
+    purpose: "统一指标表，挂到logical/partition/tier/impl_option",
     fields: "id, subject_type, subject_id, metric_name, metric_value, value_type",
   },
   {

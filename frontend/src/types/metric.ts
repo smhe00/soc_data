@@ -1,9 +1,9 @@
 import type { Project } from "./project";
-import type { Scenario } from "./scenario";
+import type { ImplOption } from "./impl_option";
 
 export interface ComponentMetric {
   id: string;
-  scenario_id: string;
+  impl_option_id: string;
   subject_type: string;
   subject_id: string;
   metric_name: string;
@@ -19,7 +19,7 @@ export interface ComponentMetric {
 }
 
 export interface DashboardData {
-  target_scenario: Scenario;
+  target_impl_option: ImplOption;
   metrics: {
     total_area: number;
     total_power: number;
@@ -33,5 +33,5 @@ export interface DashboardData {
     tone: string;
   }>;
   projects: Project[];
-  scenarios: Scenario[];
+  implOptions: ImplOption[];
 }

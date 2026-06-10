@@ -18,12 +18,12 @@ import { uploadImportWorkbook, type ImportResult } from "./api/imports";
 import { getDashboard } from "./api/metrics";
 import { getQualityIssues, type QualityIssue } from "./api/quality";
 import { getResponsibilityTeams } from "./api/responsibilities";
-import { getScenarios } from "./api/scenarios";
+import { getImplOptions } from "./api/impl_options";
 import { getTiers } from "./api/tiers";
 
 import type { DashboardData } from "./types/metric";
 import type { BlockNode, TreeBlock, PhysicalPartition } from "./types/component";
-import type { Scenario } from "./types/scenario";
+import type { ImplOption } from "./types/impl_option";
 import type { TierInfo } from "./types/tier";
 
 import { Badge } from "./components/ui";
@@ -68,19 +68,19 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [blocks, setBlocks] = useState<BlockNode[]>([]);
   const [tree, setTree] = useState<TreeBlock[]>([]);
-  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [implOptions, setImplOptions] = useState<ImplOption[]>([]);
   const [tiers, setTiers] = useState<TierInfo[]>([]);
   const [physicalPartitions, setPhysicalPartitions] = useState<PhysicalPartition[]>([]);
   const [qualityIssues, setQualityIssues] = useState<QualityIssue[]>([]);
   const [teams, setTeams] = useState<string[]>(["Architecture Team"]);
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string>("S2");
+  const [selectedImplOptionId, setSelectedImplOptionId] = useState<string>("S2");
   const [selectedTeam, setSelectedTeam] = useState<string>("Architecture Team");
 
-  // Keep track of base lookup data (scenarios list, teams list)
+  // Keep track of base lookup data (implOptions list, teams list)
   const [loadedBase, setLoadedBase] = useState<boolean>(false);
 
   // Keep track of which specific data categories have been successfully loaded
-  // for the current selectedTeam and selectedScenarioId
+  // for the current selectedTeam and selectedImplOptionId
   const [loadedCategories, setLoadedCategories] = useState<{
     dashboard: boolean;
     hierarchy: boolean;
@@ -100,19 +100,19 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [importError, setImportError] = useState<string | null>(null);
 
   const activeTab = tabs.find((tab) => tab.id === active) ?? tabs[0];
-  const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId);
+  const selectedImplOption = implOptions.find((impl_option) => impl_option.id === selectedImplOptionId);
 
   useEffect(() => {
     window.localStorage.setItem("soc-theme", theme);
   }, [theme]);
 
   useEffect(() => {
-    if (scenarios.length > 0 && !scenarios.some((scenario) => scenario.id === selectedScenarioId)) {
-      setSelectedScenarioId(scenarios[0].id);
+    if (implOptions.length > 0 && !implOptions.some((impl_option) => impl_option.id === selectedImplOptionId)) {
+      setSelectedImplOptionId(implOptions[0].id);
     }
-  }, [scenarios, selectedScenarioId]);
+  }, [implOptions, selectedImplOptionId]);
 
-  // Whenever the scenario or team changes, invalidate the cache for all categories,
+  // Whenever the impl_option or team changes, invalidate the cache for all categories,
   // so they will reload fresh when that tab is visited.
   useEffect(() => {
     setLoadedCategories({
@@ -121,13 +121,13 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       tiers: false,
       quality: false,
     });
-  }, [selectedTeam, selectedScenarioId]);
+  }, [selectedTeam, selectedImplOptionId]);
 
   // Load the active tab data
   const loadActiveTabData = async (
     activeTab: TabId,
     team: string,
-    scenarioId: string,
+    implOptionId: string,
     forceReload: boolean = false
   ) => {
     try {
@@ -136,11 +136,11 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
 
       // 1. Ensure base lookup data is loaded
       if (!loadedBase || forceReload) {
-        const [scenariosData, teamsData] = await Promise.all([
-          getScenarios(),
-          getResponsibilityTeams(scenarioId),
+        const [implOptionsData, teamsData] = await Promise.all([
+          getImplOptions(),
+          getResponsibilityTeams(implOptionId),
         ]);
-        setScenarios(scenariosData);
+        setImplOptions(implOptionsData);
         setTeams(teamsData);
         setLoadedBase(true);
       }
@@ -148,16 +148,16 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       // 2. Load tab-specific data
       if (activeTab === "dashboard") {
         if (!loadedCategories.dashboard || forceReload) {
-          const dashboardData = await getDashboard(scenarioId);
+          const dashboardData = await getDashboard(implOptionId);
           setDashboard(dashboardData);
           setLoadedCategories(prev => ({ ...prev, dashboard: true }));
         }
       } else if (activeTab === "hierarchy") {
         if (!loadedCategories.hierarchy || forceReload) {
           const [componentData, treeData, tierData] = await Promise.all([
-            getComponents(team, scenarioId),
-            getComponentTree(team, scenarioId),
-            getTiers(scenarioId),
+            getComponents(team, implOptionId),
+            getComponentTree(team, implOptionId),
+            getTiers(implOptionId),
           ]);
           setBlocks(componentData);
           setTree(treeData);
@@ -167,8 +167,8 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       } else if (activeTab === "tiers") {
         if (!loadedCategories.tiers || forceReload) {
           const [tierData, partitionData] = await Promise.all([
-            getTiers(scenarioId),
-            getPhysicalPartitions(team, scenarioId),
+            getTiers(implOptionId),
+            getPhysicalPartitions(team, implOptionId),
           ]);
           setTiers(tierData);
           setPhysicalPartitions(partitionData);
@@ -176,7 +176,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         }
       } else if (activeTab === "quality") {
         if (!loadedCategories.quality || forceReload) {
-          const qualityIssueData = await getQualityIssues(team, scenarioId);
+          const qualityIssueData = await getQualityIssues(team, implOptionId);
           setQualityIssues(qualityIssueData);
           setLoadedCategories(prev => ({ ...prev, quality: true }));
         }
@@ -190,14 +190,14 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   };
 
   useEffect(() => {
-    void loadActiveTabData(active, selectedTeam, selectedScenarioId);
-  }, [active, selectedTeam, selectedScenarioId]);
+    void loadActiveTabData(active, selectedTeam, selectedImplOptionId);
+  }, [active, selectedTeam, selectedImplOptionId]);
 
   async function handleImportWorkbook(file: File): Promise<void> {
     try {
       setImporting(true);
       setImportError(null);
-      const result = await uploadImportWorkbook(file, selectedTeam, selectedScenarioId);
+      const result = await uploadImportWorkbook(file, selectedTeam, selectedImplOptionId);
       setImportResult(result);
       
       // Invalidate cache and reload current active tab
@@ -207,7 +207,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         tiers: false,
         quality: false,
       });
-      await loadActiveTabData(active, selectedTeam, selectedScenarioId, true);
+      await loadActiveTabData(active, selectedTeam, selectedImplOptionId, true);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Unknown import error");
     } finally {
@@ -228,7 +228,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     }
   ): Promise<void> {
     await updateComponentDetail(component.id, {
-      scenario_id: selectedScenarioId,
+      impl_option_id: selectedImplOptionId,
       team: selectedTeam,
       logical_instance_count: logicalInstanceCount,
       partitions: partitions.map((partition) => ({
@@ -251,7 +251,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       tiers: false,
       quality: false,
     });
-    await loadActiveTabData(active, selectedTeam, selectedScenarioId, true);
+    await loadActiveTabData(active, selectedTeam, selectedImplOptionId, true);
   }
 
   return (
@@ -328,19 +328,19 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                   ))}
                 </select>
                 <select
-                  aria-label="Scenario scope"
+                  aria-label="ImplOption scope"
                   className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none transition hover:bg-white focus:border-slate-400"
                   onChange={(event) => {
-                    setSelectedScenarioId(event.target.value);
+                    setSelectedImplOptionId(event.target.value);
                     setImportResult(null);
                     setImportError(null);
                   }}
-                  title={selectedScenario?.name ?? selectedScenarioId}
-                  value={selectedScenarioId}
+                  title={selectedImplOption?.name ?? selectedImplOptionId}
+                  value={selectedImplOptionId}
                 >
-                  {scenarios.map((scenario) => (
-                    <option key={scenario.id} value={scenario.id}>
-                      {scenario.id} - {scenario.name}
+                  {implOptions.map((impl_option) => (
+                    <option key={impl_option.id} value={impl_option.id}>
+                      {impl_option.id} - {impl_option.name}
                     </option>
                   ))}
                 </select>
@@ -374,22 +374,22 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               blocks={blocks}
               tree={tree}
               tiers={tiers}
-              selectedScenarioId={selectedScenarioId}
+              selectedImplOptionId={selectedImplOptionId}
               selectedTeam={selectedTeam}
               loading={loading}
               error={error}
               onSaveComponentDetail={handleSaveComponentDetail}
             />
           )}
-          {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} selectedScenarioId={selectedScenarioId} loading={loading} error={error} />}
-          {active === "implementation" && <ImplementationView scenarios={scenarios} />}
-          {active === "compare" && <CompareView scenarios={scenarios} loading={loading} error={error} />}
+          {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} selectedImplOptionId={selectedImplOptionId} loading={loading} error={error} />}
+          {active === "implementation" && <ImplementationView implOptions={implOptions} />}
+          {active === "compare" && <CompareView implOptions={implOptions} loading={loading} error={error} />}
           {active === "imports" && (
             <ImportsView
               importing={importing}
               importResult={importResult}
               importError={importError}
-              selectedScenarioId={selectedScenarioId}
+              selectedImplOptionId={selectedImplOptionId}
               selectedTeam={selectedTeam}
               onImportWorkbook={handleImportWorkbook}
             />

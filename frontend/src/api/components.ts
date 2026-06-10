@@ -2,28 +2,28 @@ import { apiGet, apiJson } from "./client";
 import type { BlockNode, PhysicalPartition, TreeBlock } from "../types/component";
 import type { QualityIssue } from "./quality";
 
-function scopedQuery(path: string, team?: string, scenarioId?: string): string {
+function scopedQuery(path: string, team?: string, implOptionId?: string): string {
   const params = new URLSearchParams();
   if (team) params.set("team", team);
-  if (scenarioId) params.set("scenario_id", scenarioId);
+  if (implOptionId) params.set("impl_option_id", implOptionId);
   const query = params.toString();
   return query ? `${path}?${query}` : path;
 }
 
-export function getComponents(team?: string, scenarioId?: string): Promise<BlockNode[]> {
-  return apiGet<BlockNode[]>(scopedQuery("/api/components", team, scenarioId));
+export function getComponents(team?: string, implOptionId?: string): Promise<BlockNode[]> {
+  return apiGet<BlockNode[]>(scopedQuery("/api/components", team, implOptionId));
 }
 
-export function getComponentTree(team?: string, scenarioId?: string): Promise<TreeBlock[]> {
-  return apiGet<TreeBlock[]>(scopedQuery("/api/components/tree", team, scenarioId));
+export function getComponentTree(team?: string, implOptionId?: string): Promise<TreeBlock[]> {
+  return apiGet<TreeBlock[]>(scopedQuery("/api/components/tree", team, implOptionId));
 }
 
-export function getPhysicalPartitions(team?: string, scenarioId?: string): Promise<PhysicalPartition[]> {
-  return apiGet<PhysicalPartition[]>(scopedQuery("/api/physical-partitions", team, scenarioId));
+export function getPhysicalPartitions(team?: string, implOptionId?: string): Promise<PhysicalPartition[]> {
+  return apiGet<PhysicalPartition[]>(scopedQuery("/api/physical-partitions", team, implOptionId));
 }
 
 export interface ComponentDetailUpdate {
-  scenario_id: string;
+  impl_option_id: string;
   team?: string;
   logical_instance_count: number;
   partitions: Array<{

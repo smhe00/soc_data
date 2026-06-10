@@ -1,13 +1,13 @@
 export type RiskLevel = "Low" | "Medium" | "High";
 
-export interface Scenario {
+export interface ImplOption {
   id: string;
   project_id: string;
   name: string;
   process: string;
   process_combo: string;
   die: string;
-  scenario_type: string;
+  impl_type: string;
   area: number;
   power: number;
   risk: RiskLevel;
