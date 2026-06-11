@@ -102,6 +102,40 @@ Open:
 http://localhost:5173/
 ```
 
+## One-Command LAN / Server Deploy
+
+The frontend automatically uses the same hostname as the page for API calls on port `8000`.
+For example, opening `http://192.168.1.100:5173` makes the browser call
+`http://192.168.1.100:8000`. No per-machine `.env` file is required unless you want to override this behavior.
+
+Windows PowerShell:
+
+```powershell
+cd $env:PROJECT_ROOT
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy_windows.ps1
+```
+
+Use `-Pull` to update from Git first, or `-Preview` to serve the production build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy_windows.ps1 -Pull -Preview
+```
+
+Linux server:
+
+```sh
+cd ~/apps/soc
+bash scripts/deploy_linux.sh
+```
+
+Use `PULL=true` to update from Git first:
+
+```sh
+PULL=true bash scripts/deploy_linux.sh
+```
+
+For LAN or public access, make sure the host firewall/security group allows TCP `5173` and `8000`.
+
 ## V7 Data Model
 
 Core tables:
