@@ -83,6 +83,72 @@ export interface PowerSummary {
   observations: PowerObservation[];
 }
 
+export interface ModulePowerUseCase {
+  id: string;
+  project_id: string;
+  impl_option_id: string;
+  physical_mapping_id: string;
+  component_id: string;
+  component_name: string;
+  use_case_name: string;
+  operating_point_set_id: string;
+  operating_point_set_name: string;
+  power_value_w: number;
+  confidence: string | null;
+  note: string | null;
+}
+
+export interface ApplicationScenarioSelection {
+  id: string;
+  project_id: string;
+  impl_option_id: string;
+  physical_mapping_id: string;
+  application_scenario_id: string;
+  component_id: string;
+  component_name: string;
+  use_case_name: string;
+  operating_point_set_id: string;
+  included: boolean;
+  note: string;
+}
+
+export interface ApplicationPowerSummary {
+  filters: {
+    impl_option_id: string;
+    physical_mapping_id: string;
+    application_scenario_id: string;
+  };
+  total_additive_power_w: number;
+  non_additive_reference_power_w: number | null;
+  residual_power_w: number | null;
+  selected_count: number;
+  missing_count: number;
+  selections: Array<{
+    id: string;
+    component_id: string;
+    component_name: string;
+    use_case_name: string;
+    operating_point_set_id: string;
+    included: boolean;
+    power_value_w: number | null;
+    confidence: string | null;
+    note: string;
+  }>;
+  hierarchy_rollups: Array<{
+    parent_component_id: string;
+    parent_component_name: string;
+    parent_included: boolean;
+    parent_power_value_w: number | null;
+    assigned_child_count: number;
+    missing_child_count: number;
+    child_sum_power_w: number;
+    residual_power_w: number | null;
+    status: "closed" | "residual" | "over_specified" | "incomplete";
+    covered_descendant_ids: string[];
+  }>;
+  by_component: Record<string, number>;
+}
+
 export interface ApplicationScenario {
   id: string;
   project_id: string;

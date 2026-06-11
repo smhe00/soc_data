@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import os
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
@@ -253,6 +254,21 @@ class PowerObservation(SQLModel, table=True):
     note: str | None = None
 
 
+class ApplicationScenarioSelection(SQLModel, table=True):
+    __tablename__ = "applicationscenarioselection"
+    id: str = Field(primary_key=True)
+    project_id: str = Field(foreign_key="project.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
+    physical_mapping_id: str = Field(foreign_key="physicalmapping.id")
+    application_scenario_id: str = Field(foreign_key="applicationscenario.id")
+    component_id: str = Field(foreign_key="logicalcomponent.id")
+    component_name: str
+    use_case_name: str = "Default"
+    operating_point_set_id: str = Field(foreign_key="operatingpointset.id")
+    included: bool = True
+    note: str = ""
+
+
 class PartitionInput(BaseModel):
     id: str
     tier_id: str
@@ -281,23 +297,61 @@ class PowerObservationCreate(BaseModel):
     project_id: str
     impl_option_id: str
     physical_mapping_id: str
-    application_scenario_id: str
+    application_scenario_id: str = "AS_default"
     operating_point_set_id: str
     
-    scope_type: str
+    scope_type: str = "component"
     scope_id: str | None = None
     scope_name: str
     
     use_case_name: str | None = None
-    time_window_name: str | None = None
-    statistic_type: str = "average"
-    power_type: str = "total"
     power_value_w: float = 0.0
     
-    development_stage: str | None = None
+    time_window_name: str | None = "steady_state"
+    statistic_type: str = "average"
+    power_type: str = "total"
+    development_stage: str | None = "architecture_estimate"
     confidence: str | None = "draft"
     is_additive: bool = True
     note: str | None = None
+
+
+class ModulePowerUseCaseInput(BaseModel):
+    project_id: str
+    impl_option_id: str
+    physical_mapping_id: str
+    component_id: str
+    component_name: str
+    use_case_name: str = "Default"
+    operating_point_set_id: str | None = None
+    operating_point_set_name: str | None = None
+    power_value_w: float
+    confidence: str | None = "draft"
+    note: str | None = None
+
+
+class ApplicationScenarioInput(BaseModel):
+    project_id: str
+    name: str
+    category: str = "Custom"
+    description: str | None = ""
+
+
+class ApplicationScenarioSelectionInput(BaseModel):
+    component_id: str
+    component_name: str
+    use_case_name: str = "Default"
+    operating_point_set_id: str
+    included: bool = True
+    note: str | None = None
+
+
+class ApplicationScenarioCompositionUpdate(BaseModel):
+    project_id: str
+    impl_option_id: str
+    physical_mapping_id: str
+    application_scenario_id: str
+    selections: list[ApplicationScenarioSelectionInput]
 
 
 class ImplementationTierInput(BaseModel):
@@ -429,6 +483,7 @@ def seed_data() -> None:
         session.exec(delete(ModuleDefinition).where(ModuleDefinition.id.like("MD_%")))
         session.exec(delete(ImplOption).where(ImplOption.id.in_(demo_impl_options)))
         session.exec(delete(Project).where(Project.id.in_(["P001", "P002"])))
+        session.exec(delete(ApplicationScenarioSelection))
         session.exec(delete(PowerObservation))
         session.exec(delete(OperatingPointSet))
         session.exec(delete(PhysicalMapping))
@@ -754,6 +809,7 @@ def seed_data() -> None:
         ])
 
         app_scenarios = [
+            ApplicationScenario(id="AS_MODULE_LIBRARY", project_id="P001", name="Module Use Case Library", category="Internal", description="Internal library bucket for module use case/Profile power values. Application scenarios select from these rows."),
             ApplicationScenario(id="AS_CAMERA_4K60", project_id="P001", name="Camera 4K60 Recording", category="Multimedia", description="Continuous 4K 60FPS video recording using ISP, VPU, and NPU for denoise."),
             ApplicationScenario(id="AS_GAMING_SUSTAINED", project_id="P001", name="Mobile Gaming Sustained", category="Gaming", description="Sustained gaming workload stressing CPU cluster and GPU shader cores."),
             ApplicationScenario(id="AS_AI_BURST", project_id="P001", name="AI Photo Enhancement Burst", category="AI", description="Short bursty AI photo enhancement processing using NPU tensor cores."),
@@ -765,6 +821,7 @@ def seed_data() -> None:
         ]
         
         op_point_sets = [
+            OperatingPointSet(id="OP_DEFAULT", project_id="P001", name="Default", description="Default module Profile. Available to every module; it belongs to a module only after a saved module power value uses it.", op_json="{}"),
             OperatingPointSet(id="OP_CAMERA_PERF", project_id="P001", name="Camera_Perf_OP_Set", description="Performance operating points calibrated for 4K video capture.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.75, "frequency_mhz": 1800}, "GPU_TOP": {"voltage_v": 0.60, "frequency_mhz": 350}, "NPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 1000}}'),
             OperatingPointSet(id="OP_GAMING_SUSTAINED", project_id="P001", name="Gaming_Sustained_OP_Set", description="Sustained thermal-limit operating points for gaming.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.80, "frequency_mhz": 2200}, "GPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 600}, "NPU_TOP": {"voltage_v": 0.60, "frequency_mhz": 400}}'),
             OperatingPointSet(id="OP_AI_BURST", project_id="P001", name="AI_Burst_OP_Set", description="Peak performance burst operating points for short AI runs.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.90, "frequency_mhz": 3000}, "GPU_TOP": {"voltage_v": 0.85, "frequency_mhz": 900}, "NPU_TOP": {"voltage_v": 0.80, "frequency_mhz": 1500}}'),
@@ -916,8 +973,57 @@ def seed_data() -> None:
                 development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
             ),
         ]
+
+        def safe_key(value: str | None) -> str:
+            return (value or "Default").replace(" ", "_").replace("/", "_").replace("-", "_").upper()
+
+        module_power_obs_by_key: dict[tuple[str, str, str, str, str], PowerObservation] = {}
+        scenario_selections: list[ApplicationScenarioSelection] = []
+        for obs in power_obs:
+            if obs.scope_type != "component" or not obs.scope_id:
+                continue
+            use_case = obs.use_case_name or "Default"
+            key = (obs.impl_option_id, obs.physical_mapping_id, obs.scope_id, use_case, obs.operating_point_set_id)
+            if key not in module_power_obs_by_key:
+                module_power_obs_by_key[key] = PowerObservation(
+                    id=f"PUC_{safe_key(obs.impl_option_id)}_{safe_key(obs.physical_mapping_id)}_{safe_key(obs.scope_id)}_{safe_key(use_case)}_{safe_key(obs.operating_point_set_id)}",
+                    project_id=obs.project_id,
+                    impl_option_id=obs.impl_option_id,
+                    physical_mapping_id=obs.physical_mapping_id,
+                    application_scenario_id="AS_MODULE_LIBRARY",
+                    operating_point_set_id=obs.operating_point_set_id,
+                    scope_type="component",
+                    scope_id=obs.scope_id,
+                    scope_name=obs.scope_name,
+                    use_case_name=use_case,
+                    time_window_name="steady_state",
+                    statistic_type="average",
+                    power_type="total",
+                    power_value_w=obs.power_value_w,
+                    development_stage="architecture_estimate",
+                    source_type="module_usecase_seed",
+                    confidence=obs.confidence,
+                    is_additive=True,
+                    note=f"Module use case/Profile power value derived from seed observation {obs.id}.",
+                )
+            scenario_selections.append(
+                ApplicationScenarioSelection(
+                    id=f"ASC_{safe_key(obs.application_scenario_id)}_{safe_key(obs.scope_id)}_{safe_key(use_case)}_{safe_key(obs.operating_point_set_id)}",
+                    project_id=obs.project_id,
+                    impl_option_id=obs.impl_option_id,
+                    physical_mapping_id=obs.physical_mapping_id,
+                    application_scenario_id=obs.application_scenario_id,
+                    component_id=obs.scope_id,
+                    component_name=obs.scope_name,
+                    use_case_name=use_case,
+                    operating_point_set_id=obs.operating_point_set_id,
+                    included=True,
+                    note="Seed scenario composition selection.",
+                )
+            )
+        module_power_obs = list(module_power_obs_by_key.values())
         
-        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities + app_scenarios + phys_mappings + op_point_sets + power_obs:
+        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities + app_scenarios + phys_mappings + op_point_sets + power_obs + module_power_obs + scenario_selections:
             session.merge(row)
         session.commit()
 
@@ -1791,7 +1897,93 @@ def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str |
 @app.get("/api/application-scenarios")
 def get_application_scenarios() -> list[ApplicationScenario]:
     with Session(engine) as session:
-        return list(session.exec(select(ApplicationScenario)).all())
+        return list(session.exec(select(ApplicationScenario).where(ApplicationScenario.id != "AS_MODULE_LIBRARY")).all())
+
+
+@app.post("/api/application-scenarios")
+def create_application_scenario(payload: ApplicationScenarioInput) -> ApplicationScenario:
+    with Session(engine) as session:
+        if not session.get(Project, payload.project_id):
+            raise HTTPException(status_code=400, detail=f"Unknown project_id: {payload.project_id}")
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Application scenario name is required.")
+        base_id = f"AS_{safe_power_id_part(name)}"
+        scenario_id = base_id
+        index = 2
+        while session.get(ApplicationScenario, scenario_id):
+            scenario_id = f"{base_id}_{index}"
+            index += 1
+        row = ApplicationScenario(
+            id=scenario_id,
+            project_id=payload.project_id,
+            name=name,
+            category=(payload.category or "Custom").strip() or "Custom",
+            description=payload.description or "",
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return row
+
+
+@app.put("/api/application-scenarios/{scenario_id}")
+def update_application_scenario(scenario_id: str, payload: ApplicationScenarioInput) -> ApplicationScenario:
+    if scenario_id == "AS_MODULE_LIBRARY":
+        raise HTTPException(status_code=400, detail="Internal module library scenario cannot be edited.")
+    with Session(engine) as session:
+        row = session.get(ApplicationScenario, scenario_id)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Application scenario not found: {scenario_id}")
+        if not session.get(Project, payload.project_id):
+            raise HTTPException(status_code=400, detail=f"Unknown project_id: {payload.project_id}")
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Application scenario name is required.")
+        row.project_id = payload.project_id
+        row.name = name
+        row.category = (payload.category or "Custom").strip() or "Custom"
+        row.description = payload.description or ""
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return row
+
+
+@app.delete("/api/application-scenarios/{scenario_id}")
+def delete_application_scenario(scenario_id: str) -> dict[str, Any]:
+    if scenario_id == "AS_MODULE_LIBRARY":
+        raise HTTPException(status_code=400, detail="Internal module library scenario cannot be deleted.")
+    with Session(engine) as session:
+        row = session.get(ApplicationScenario, scenario_id)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Application scenario not found: {scenario_id}")
+        selections = list(
+            session.exec(
+                select(ApplicationScenarioSelection).where(
+                    ApplicationScenarioSelection.application_scenario_id == scenario_id,
+                )
+            ).all()
+        )
+        observations = list(
+            session.exec(
+                select(PowerObservation).where(
+                    PowerObservation.application_scenario_id == scenario_id,
+                )
+            ).all()
+        )
+        for selection in selections:
+            session.delete(selection)
+        for observation in observations:
+            session.delete(observation)
+        session.delete(row)
+        session.commit()
+        return {
+            "success": True,
+            "deleted_id": scenario_id,
+            "deleted_selection_count": len(selections),
+            "deleted_observation_count": len(observations),
+        }
 
 
 @app.get("/api/physical-mappings")
@@ -1807,6 +1999,476 @@ def get_physical_mappings(impl_option_id: str | None = None) -> list[PhysicalMap
 def get_operating_point_sets() -> list[OperatingPointSet]:
     with Session(engine) as session:
         return list(session.exec(select(OperatingPointSet)).all())
+
+
+def safe_power_id_part(value: str | None) -> str:
+    return (value or "Default").replace(" ", "_").replace("/", "_").replace("-", "_").replace(".", "_").upper()
+
+
+def profile_id_from_name(name: str | None) -> str:
+    cleaned = (name or "Default").strip() or "Default"
+    if cleaned.lower() == "default":
+        return "OP_DEFAULT"
+    return f"OP_{safe_power_id_part(cleaned)}"
+
+
+def module_power_observation_id(impl_option_id: str, physical_mapping_id: str, component_id: str, use_case_name: str, operating_point_set_id: str) -> str:
+    return (
+        f"PUC_{safe_power_id_part(impl_option_id)}_{safe_power_id_part(physical_mapping_id)}_"
+        f"{safe_power_id_part(component_id)}_{safe_power_id_part(use_case_name)}_{safe_power_id_part(operating_point_set_id)}"
+    )
+
+
+def app_selection_id(application_scenario_id: str, component_id: str, use_case_name: str, operating_point_set_id: str) -> str:
+    return (
+        f"ASC_{safe_power_id_part(application_scenario_id)}_{safe_power_id_part(component_id)}_"
+        f"{safe_power_id_part(use_case_name)}_{safe_power_id_part(operating_point_set_id)}"
+    )
+
+
+def validate_power_context(
+    session: Session,
+    project_id: str,
+    impl_option_id: str,
+    physical_mapping_id: str,
+    application_scenario_id: str | None = None,
+    operating_point_set_id: str | None = None,
+    component_id: str | None = None,
+) -> None:
+    if not session.get(Project, project_id):
+        raise HTTPException(status_code=400, detail=f"Unknown project_id: {project_id}")
+    if not session.get(ImplOption, impl_option_id):
+        raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {impl_option_id}")
+    mapping = session.get(PhysicalMapping, physical_mapping_id)
+    if not mapping:
+        raise HTTPException(status_code=400, detail=f"Unknown physical_mapping_id: {physical_mapping_id}")
+    if mapping.impl_option_id != impl_option_id:
+        raise HTTPException(status_code=400, detail=f"physical_mapping_id {physical_mapping_id} does not belong to impl_option_id {impl_option_id}")
+    if application_scenario_id and not session.get(ApplicationScenario, application_scenario_id):
+        raise HTTPException(status_code=400, detail=f"Unknown application_scenario_id: {application_scenario_id}")
+    if operating_point_set_id and not session.get(OperatingPointSet, operating_point_set_id):
+        raise HTTPException(status_code=400, detail=f"Unknown operating_point_set_id: {operating_point_set_id}")
+    if component_id and not session.get(LogicalComponent, component_id):
+        raise HTTPException(status_code=400, detail=f"Unknown component_id: {component_id}")
+
+
+def module_power_rows(session: Session, impl_option_id: str, physical_mapping_id: str) -> list[PowerObservation]:
+    return list(
+        session.exec(
+            select(PowerObservation).where(
+                PowerObservation.impl_option_id == impl_option_id,
+                PowerObservation.physical_mapping_id == physical_mapping_id,
+                PowerObservation.application_scenario_id == "AS_MODULE_LIBRARY",
+                PowerObservation.scope_type == "component",
+            )
+        ).all()
+    )
+
+
+@app.get("/api/module-power-usecases")
+def get_module_power_usecases(impl_option_id: str, physical_mapping_id: str) -> list[dict[str, Any]]:
+    with Session(engine) as session:
+        rows = module_power_rows(session, impl_option_id, physical_mapping_id)
+        op_names = {row.id: row.name for row in session.exec(select(OperatingPointSet)).all()}
+        return [
+            {
+                "id": row.id,
+                "project_id": row.project_id,
+                "impl_option_id": row.impl_option_id,
+                "physical_mapping_id": row.physical_mapping_id,
+                "component_id": row.scope_id,
+                "component_name": row.scope_name,
+                "use_case_name": row.use_case_name or "Default",
+                "operating_point_set_id": row.operating_point_set_id,
+                "operating_point_set_name": op_names.get(row.operating_point_set_id, row.operating_point_set_id),
+                "power_value_w": row.power_value_w,
+                "confidence": row.confidence,
+                "note": row.note,
+            }
+            for row in rows
+        ]
+
+
+@app.post("/api/module-power-usecases")
+def upsert_module_power_usecase(payload: ModulePowerUseCaseInput) -> dict[str, Any]:
+    with Session(engine) as session:
+        validate_power_context(
+            session,
+            payload.project_id,
+            payload.impl_option_id,
+            payload.physical_mapping_id,
+            component_id=payload.component_id,
+        )
+        if payload.power_value_w < 0:
+            raise HTTPException(status_code=400, detail="power_value_w must be >= 0")
+        use_case_name = payload.use_case_name.strip() or "Default"
+        op_name = (payload.operating_point_set_name or "").strip()
+        op_id = (payload.operating_point_set_id or "").strip() or profile_id_from_name(op_name)
+        if not op_id:
+            op_id = "OP_DEFAULT"
+        if op_id == "OP_DEFAULT":
+            op_name = "Default"
+        elif not op_name:
+            op_name = op_id.removeprefix("OP_").replace("_", " ").title()
+        if not session.get(OperatingPointSet, op_id):
+            session.add(
+                OperatingPointSet(
+                    id=op_id,
+                    project_id=payload.project_id,
+                    name=op_name,
+                    description=f"Module Profile created from the application power editor for {payload.component_name}.",
+                    op_json="{}",
+                )
+            )
+        row = PowerObservation(
+            id=module_power_observation_id(payload.impl_option_id, payload.physical_mapping_id, payload.component_id, use_case_name, op_id),
+            project_id=payload.project_id,
+            impl_option_id=payload.impl_option_id,
+            physical_mapping_id=payload.physical_mapping_id,
+            application_scenario_id="AS_MODULE_LIBRARY",
+            operating_point_set_id=op_id,
+            scope_type="component",
+            scope_id=payload.component_id,
+            scope_name=payload.component_name,
+            use_case_name=use_case_name,
+            time_window_name="steady_state",
+            statistic_type="average",
+            power_type="total",
+            power_value_w=payload.power_value_w,
+            development_stage="architecture_estimate",
+            source_type="web_ui",
+            confidence=payload.confidence or "draft",
+            is_additive=True,
+            note=payload.note,
+        )
+        session.merge(row)
+        session.commit()
+        return get_module_power_usecases(payload.impl_option_id, payload.physical_mapping_id)[0] if False else {
+            "id": row.id,
+            "project_id": row.project_id,
+            "impl_option_id": row.impl_option_id,
+            "physical_mapping_id": row.physical_mapping_id,
+            "component_id": row.scope_id,
+            "component_name": row.scope_name,
+            "use_case_name": row.use_case_name or "Default",
+            "operating_point_set_id": row.operating_point_set_id,
+            "operating_point_set_name": op_name,
+            "power_value_w": row.power_value_w,
+            "confidence": row.confidence,
+            "note": row.note,
+        }
+
+
+@app.delete("/api/module-power-usecases/{usecase_id}")
+def delete_module_power_usecase(usecase_id: str) -> dict[str, Any]:
+    with Session(engine) as session:
+        row = session.get(PowerObservation, usecase_id)
+        if not row or row.application_scenario_id != "AS_MODULE_LIBRARY" or row.scope_type != "component":
+            raise HTTPException(status_code=404, detail=f"Module power use case not found: {usecase_id}")
+        matching_selections = list(
+            session.exec(
+                select(ApplicationScenarioSelection).where(
+                    ApplicationScenarioSelection.impl_option_id == row.impl_option_id,
+                    ApplicationScenarioSelection.physical_mapping_id == row.physical_mapping_id,
+                    ApplicationScenarioSelection.component_id == row.scope_id,
+                    ApplicationScenarioSelection.use_case_name == (row.use_case_name or "Default"),
+                    ApplicationScenarioSelection.operating_point_set_id == row.operating_point_set_id,
+                )
+            ).all()
+        )
+        for selection in matching_selections:
+            session.delete(selection)
+        session.delete(row)
+        session.commit()
+        return {
+            "success": True,
+            "deleted_id": usecase_id,
+            "deleted_selection_count": len(matching_selections),
+        }
+
+
+@app.get("/api/application-scenario-composition")
+def get_application_scenario_composition(impl_option_id: str, physical_mapping_id: str, application_scenario_id: str) -> list[ApplicationScenarioSelection]:
+    with Session(engine) as session:
+        return list(
+            session.exec(
+                select(ApplicationScenarioSelection).where(
+                    ApplicationScenarioSelection.impl_option_id == impl_option_id,
+                    ApplicationScenarioSelection.physical_mapping_id == physical_mapping_id,
+                    ApplicationScenarioSelection.application_scenario_id == application_scenario_id,
+                )
+            ).all()
+        )
+
+
+POWER_ROLLUP_ABS_TOLERANCE_W = 0.001
+POWER_ROLLUP_REL_TOLERANCE = 0.01
+
+
+def power_rollup_tolerance(parent_power: float | None, child_sum: float) -> float:
+    baseline = max(abs(parent_power or 0.0), abs(child_sum), 0.0)
+    return max(POWER_ROLLUP_ABS_TOLERANCE_W, baseline * POWER_ROLLUP_REL_TOLERANCE)
+
+
+def component_hierarchy_maps(session: Session) -> tuple[dict[str, LogicalComponent], dict[str, str | None], dict[str, list[str]], dict[str, set[str]], dict[str, set[str]]]:
+    components = list(session.exec(select(LogicalComponent)).all())
+    by_id = {row.id: row for row in components}
+    parent_by_id = {row.id: row.parent_id for row in components}
+    children_by_parent: dict[str, list[str]] = {}
+    for row in components:
+        if row.parent_id:
+            children_by_parent.setdefault(row.parent_id, []).append(row.id)
+
+    ancestors_by_id: dict[str, set[str]] = {}
+    for component_id, parent_id in parent_by_id.items():
+        ancestors: set[str] = set()
+        current = parent_id
+        while current:
+            ancestors.add(current)
+            current = parent_by_id.get(current)
+        ancestors_by_id[component_id] = ancestors
+
+    descendants_by_id: dict[str, set[str]] = {}
+
+    def descendants(component_id: str) -> set[str]:
+        if component_id in descendants_by_id:
+            return descendants_by_id[component_id]
+        result: set[str] = set()
+        for child_id in children_by_parent.get(component_id, []):
+            result.add(child_id)
+            result.update(descendants(child_id))
+        descendants_by_id[component_id] = result
+        return result
+
+    for component_id in by_id:
+        descendants(component_id)
+
+    return by_id, parent_by_id, children_by_parent, ancestors_by_id, descendants_by_id
+
+
+def selection_power(selection: ApplicationScenarioSelection, library: dict[tuple[str | None, str, str], PowerObservation]) -> float | None:
+    observation = library.get((selection.component_id, selection.use_case_name or "Default", selection.operating_point_set_id))
+    return observation.power_value_w if observation else None
+
+
+def validate_active_power_hierarchy(
+    selections: list[ApplicationScenarioSelection],
+    ancestors_by_id: dict[str, set[str]],
+) -> None:
+    active_ids = {row.component_id for row in selections if row.included}
+    for row in selections:
+        if not row.included:
+            continue
+        active_ancestors = sorted(ancestors_by_id.get(row.component_id, set()) & active_ids)
+        if active_ancestors:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Power composition double-count risk: {row.component_name} and ancestor {active_ancestors[0]} are both included.",
+            )
+
+
+def build_power_hierarchy_rollups(
+    session: Session,
+    selections: list[ApplicationScenarioSelection],
+    library: dict[tuple[str | None, str, str], PowerObservation],
+) -> list[dict[str, Any]]:
+    components_by_id, _parent_by_id, children_by_parent, _ancestors_by_id, descendants_by_id = component_hierarchy_maps(session)
+    selection_by_component = {row.component_id: row for row in selections}
+    rollups: list[dict[str, Any]] = []
+    for parent_id, child_ids in children_by_parent.items():
+        parent_selection = selection_by_component.get(parent_id)
+        child_selections = [selection_by_component[child_id] for child_id in child_ids if child_id in selection_by_component]
+        if not parent_selection and not child_selections:
+            continue
+        parent_power = selection_power(parent_selection, library) if parent_selection else None
+        child_sum = 0.0
+        missing_child_count = 0
+        assigned_child_count = 0
+        for child_selection in child_selections:
+            assigned_child_count += 1
+            child_power = selection_power(child_selection, library)
+            if child_power is None:
+                missing_child_count += 1
+            else:
+                child_sum += child_power
+
+        residual = None
+        status = "incomplete"
+        if parent_power is None:
+            status = "incomplete"
+        else:
+            residual = round(parent_power - child_sum, 4)
+            tolerance = power_rollup_tolerance(parent_power, child_sum)
+            if missing_child_count > 0:
+                status = "incomplete"
+            elif child_sum - parent_power > tolerance:
+                status = "over_specified"
+            elif abs(parent_power - child_sum) <= tolerance:
+                status = "closed"
+            else:
+                status = "residual"
+
+        parent = components_by_id.get(parent_id)
+        rollups.append(
+            {
+                "parent_component_id": parent_id,
+                "parent_component_name": parent.name if parent else parent_id,
+                "parent_included": bool(parent_selection.included) if parent_selection else False,
+                "parent_power_value_w": parent_power,
+                "assigned_child_count": assigned_child_count,
+                "missing_child_count": missing_child_count,
+                "child_sum_power_w": round(child_sum, 4),
+                "residual_power_w": residual,
+                "status": status,
+                "covered_descendant_ids": sorted(descendants_by_id.get(parent_id, set())),
+            }
+        )
+    return rollups
+
+
+def validate_power_rollups(rollups: list[dict[str, Any]]) -> None:
+    for rollup in rollups:
+        if rollup["parent_included"] and rollup["status"] == "over_specified":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Power roll-up over-specified for {rollup['parent_component_name']}: "
+                    f"children sum {rollup['child_sum_power_w']:.4f} W exceeds parent inclusive "
+                    f"{rollup['parent_power_value_w']:.4f} W."
+                ),
+            )
+
+
+@app.put("/api/application-scenario-composition")
+def update_application_scenario_composition(payload: ApplicationScenarioCompositionUpdate) -> dict[str, Any]:
+    with Session(engine) as session:
+        validate_power_context(
+            session,
+            payload.project_id,
+            payload.impl_option_id,
+            payload.physical_mapping_id,
+            application_scenario_id=payload.application_scenario_id,
+        )
+        existing = list(
+            session.exec(
+                select(ApplicationScenarioSelection).where(
+                    ApplicationScenarioSelection.impl_option_id == payload.impl_option_id,
+                    ApplicationScenarioSelection.physical_mapping_id == payload.physical_mapping_id,
+                    ApplicationScenarioSelection.application_scenario_id == payload.application_scenario_id,
+                )
+            ).all()
+        )
+        for row in existing:
+            session.delete(row)
+        pending_selections: list[ApplicationScenarioSelection] = []
+        library = {
+            (row.scope_id, row.use_case_name or "Default", row.operating_point_set_id): row
+            for row in module_power_rows(session, payload.impl_option_id, payload.physical_mapping_id)
+        }
+        _components_by_id, _parent_by_id, _children_by_parent, ancestors_by_id, _descendants_by_id = component_hierarchy_maps(session)
+        for item in payload.selections:
+            validate_power_context(
+                session,
+                payload.project_id,
+                payload.impl_option_id,
+                payload.physical_mapping_id,
+                application_scenario_id=payload.application_scenario_id,
+                operating_point_set_id=item.operating_point_set_id,
+                component_id=item.component_id,
+            )
+            use_case_name = item.use_case_name.strip() or "Default"
+            library_row = library.get((item.component_id, use_case_name, item.operating_point_set_id))
+            if item.included and not library_row:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{item.component_name} / {use_case_name} / {item.operating_point_set_id} has no saved module power value.",
+                )
+            pending_selections.append(
+                ApplicationScenarioSelection(
+                    id=app_selection_id(payload.application_scenario_id, item.component_id, use_case_name, item.operating_point_set_id),
+                    project_id=payload.project_id,
+                    impl_option_id=payload.impl_option_id,
+                    physical_mapping_id=payload.physical_mapping_id,
+                    application_scenario_id=payload.application_scenario_id,
+                    component_id=item.component_id,
+                    component_name=item.component_name,
+                    use_case_name=use_case_name,
+                    operating_point_set_id=item.operating_point_set_id,
+                    included=item.included,
+                    note=item.note or "",
+                )
+            )
+        validate_active_power_hierarchy(pending_selections, ancestors_by_id)
+        rollups = build_power_hierarchy_rollups(session, pending_selections, library)
+        validate_power_rollups(rollups)
+        for row in pending_selections:
+            session.add(row)
+        session.commit()
+        return {
+            "selections": get_application_scenario_composition(payload.impl_option_id, payload.physical_mapping_id, payload.application_scenario_id),
+            "summary": application_power_summary(session, payload.impl_option_id, payload.physical_mapping_id, payload.application_scenario_id),
+        }
+
+
+def application_power_summary(session: Session, impl_option_id: str, physical_mapping_id: str, application_scenario_id: str) -> dict[str, Any]:
+    selections = list(
+        session.exec(
+            select(ApplicationScenarioSelection).where(
+                ApplicationScenarioSelection.impl_option_id == impl_option_id,
+                ApplicationScenarioSelection.physical_mapping_id == physical_mapping_id,
+                ApplicationScenarioSelection.application_scenario_id == application_scenario_id,
+            )
+        ).all()
+    )
+    library = {
+        (row.scope_id, row.use_case_name or "Default", row.operating_point_set_id): row
+        for row in module_power_rows(session, impl_option_id, physical_mapping_id)
+    }
+    hierarchy_rollups = build_power_hierarchy_rollups(session, selections, library)
+    rows: list[dict[str, Any]] = []
+    total = 0.0
+    missing = 0
+    for selection in selections:
+        observation = library.get((selection.component_id, selection.use_case_name, selection.operating_point_set_id))
+        power = observation.power_value_w if observation else None
+        if selection.included and power is not None:
+            total += power
+        if selection.included and power is None:
+            missing += 1
+        rows.append(
+            {
+                "id": selection.id,
+                "component_id": selection.component_id,
+                "component_name": selection.component_name,
+                "use_case_name": selection.use_case_name,
+                "operating_point_set_id": selection.operating_point_set_id,
+                "included": selection.included,
+                "power_value_w": power,
+                "confidence": observation.confidence if observation else None,
+                "note": selection.note,
+            }
+        )
+    return {
+        "filters": {
+            "impl_option_id": impl_option_id,
+            "physical_mapping_id": physical_mapping_id,
+            "application_scenario_id": application_scenario_id,
+        },
+        "total_additive_power_w": round(total, 4),
+        "non_additive_reference_power_w": None,
+        "residual_power_w": None,
+        "selected_count": sum(1 for row in selections if row.included),
+        "missing_count": missing,
+        "selections": rows,
+        "hierarchy_rollups": hierarchy_rollups,
+        "by_component": {row["component_name"]: row["power_value_w"] for row in rows if row["included"] and row["power_value_w"] is not None},
+    }
+
+
+@app.get("/api/application-power-summary")
+def get_application_power_summary(impl_option_id: str, physical_mapping_id: str, application_scenario_id: str) -> dict[str, Any]:
+    with Session(engine) as session:
+        return application_power_summary(session, impl_option_id, physical_mapping_id, application_scenario_id)
 
 
 @app.get("/api/power-observations")
@@ -1936,31 +2598,17 @@ def get_power_summary(
 def create_power_observation(payload: PowerObservationCreate) -> PowerObservation:
     import uuid
     with Session(engine) as session:
-        # Validate that referenced objects exist
-        proj = session.get(Project, payload.project_id)
-        if not proj:
-            raise HTTPException(status_code=400, detail=f"Unknown project_id: {payload.project_id}")
-        
-        impl = session.get(ImplOption, payload.impl_option_id)
-        if not impl:
-            raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {payload.impl_option_id}")
-        
-        pm = session.get(PhysicalMapping, payload.physical_mapping_id)
-        if not pm:
-            raise HTTPException(status_code=400, detail=f"Unknown physical_mapping_id: {payload.physical_mapping_id}")
-        
-        scenario = session.get(ApplicationScenario, payload.application_scenario_id)
-        if not scenario:
-            raise HTTPException(status_code=400, detail=f"Unknown application_scenario_id: {payload.application_scenario_id}")
-        
-        op_set = session.get(OperatingPointSet, payload.operating_point_set_id)
-        if not op_set:
-            raise HTTPException(status_code=400, detail=f"Unknown operating_point_set_id: {payload.operating_point_set_id}")
-        
-        if payload.scope_type == "component" and payload.scope_id:
-            comp = session.get(LogicalComponent, payload.scope_id)
-            if not comp:
-                raise HTTPException(status_code=400, detail=f"Unknown scope_id (LogicalComponent): {payload.scope_id}")
+        validate_power_context(
+            session,
+            payload.project_id,
+            payload.impl_option_id,
+            payload.physical_mapping_id,
+            application_scenario_id=payload.application_scenario_id,
+            operating_point_set_id=payload.operating_point_set_id,
+            component_id=payload.scope_id if payload.scope_type == "component" else None,
+        )
+        if payload.power_value_w < 0:
+            raise HTTPException(status_code=400, detail="power_value_w must be >= 0")
         
         obs_id = f"PO_{uuid.uuid4().hex[:8].upper()}"
         obs = PowerObservation(
@@ -1984,6 +2632,44 @@ def create_power_observation(payload: PowerObservationCreate) -> PowerObservatio
             is_additive=payload.is_additive,
             note=payload.note
         )
+        session.add(obs)
+        session.commit()
+        session.refresh(obs)
+        return obs
+
+
+@app.put("/api/power-observations/{observation_id}")
+def update_power_observation(observation_id: str, payload: PowerObservationCreate) -> PowerObservation:
+    with Session(engine) as session:
+        obs = session.get(PowerObservation, observation_id)
+        if not obs:
+            raise HTTPException(status_code=404, detail=f"Unknown power observation: {observation_id}")
+        validate_power_context(
+            session,
+            payload.project_id,
+            payload.impl_option_id,
+            payload.physical_mapping_id,
+            application_scenario_id=payload.application_scenario_id,
+            operating_point_set_id=payload.operating_point_set_id,
+            component_id=payload.scope_id if payload.scope_type == "component" else None,
+        )
+        if payload.power_value_w < 0:
+            raise HTTPException(status_code=400, detail="power_value_w must be >= 0")
+        
+        # Update fields
+        obs.scope_type = payload.scope_type
+        obs.scope_id = payload.scope_id
+        obs.scope_name = payload.scope_name
+        obs.use_case_name = payload.use_case_name
+        obs.time_window_name = payload.time_window_name
+        obs.statistic_type = payload.statistic_type
+        obs.power_type = payload.power_type
+        obs.power_value_w = payload.power_value_w
+        obs.development_stage = payload.development_stage
+        obs.confidence = payload.confidence
+        obs.is_additive = payload.is_additive
+        obs.note = payload.note
+        
         session.add(obs)
         session.commit()
         session.refresh(obs)

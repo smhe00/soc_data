@@ -1,8 +1,44 @@
 import { apiGet, apiJson } from "./client";
-import type { ApplicationScenario, PhysicalMapping, OperatingPointSet, PowerSummary, PowerObservation } from "../types/power";
+import type {
+  ApplicationScenario,
+  PhysicalMapping,
+  OperatingPointSet,
+  PowerSummary,
+  PowerObservation,
+  ModulePowerUseCase,
+  ApplicationScenarioSelection,
+  ApplicationPowerSummary,
+} from "../types/power";
 
 export function getApplicationScenarios(): Promise<ApplicationScenario[]> {
   return apiGet<ApplicationScenario[]>("/api/application-scenarios");
+}
+
+export interface ApplicationScenarioInput {
+  project_id: string;
+  name: string;
+  category: string;
+  description?: string | null;
+}
+
+export function createApplicationScenario(payload: ApplicationScenarioInput): Promise<ApplicationScenario> {
+  return apiJson<ApplicationScenario>("/api/application-scenarios", "POST", payload);
+}
+
+export function updateApplicationScenario(id: string, payload: ApplicationScenarioInput): Promise<ApplicationScenario> {
+  return apiJson<ApplicationScenario>(`/api/application-scenarios/${encodeURIComponent(id)}`, "PUT", payload);
+}
+
+export function deleteApplicationScenario(id: string): Promise<{
+  success: boolean;
+  deleted_id: string;
+  deleted_selection_count: number;
+  deleted_observation_count: number;
+}> {
+  return apiJson<{ success: boolean; deleted_id: string; deleted_selection_count: number; deleted_observation_count: number }>(
+    `/api/application-scenarios/${encodeURIComponent(id)}`,
+    "DELETE",
+  );
 }
 
 export function getPhysicalMappings(implOptionId?: string): Promise<PhysicalMapping[]> {
@@ -12,6 +48,85 @@ export function getPhysicalMappings(implOptionId?: string): Promise<PhysicalMapp
 
 export function getOperatingPointSets(): Promise<OperatingPointSet[]> {
   return apiGet<OperatingPointSet[]>("/api/operating-point-sets");
+}
+
+export function getPowerObservations(implOptionId: string, physicalMappingId: string): Promise<PowerObservation[]> {
+  return apiGet<PowerObservation[]>(`/api/power-observations?impl_option_id=${encodeURIComponent(implOptionId)}&physical_mapping_id=${encodeURIComponent(physicalMappingId)}`);
+}
+
+export function getModulePowerUseCases(implOptionId: string, physicalMappingId: string): Promise<ModulePowerUseCase[]> {
+  const params = new URLSearchParams();
+  params.set("impl_option_id", implOptionId);
+  params.set("physical_mapping_id", physicalMappingId);
+  return apiGet<ModulePowerUseCase[]>(`/api/module-power-usecases?${params.toString()}`);
+}
+
+export interface ModulePowerUseCaseInput {
+  project_id: string;
+  impl_option_id: string;
+  physical_mapping_id: string;
+  component_id: string;
+  component_name: string;
+  use_case_name: string;
+  operating_point_set_id?: string | null;
+  operating_point_set_name?: string | null;
+  power_value_w: number;
+  confidence?: string | null;
+  note?: string | null;
+}
+
+export function upsertModulePowerUseCase(payload: ModulePowerUseCaseInput): Promise<ModulePowerUseCase> {
+  return apiJson<ModulePowerUseCase>("/api/module-power-usecases", "POST", payload);
+}
+
+export function deleteModulePowerUseCase(id: string): Promise<{ success: boolean; deleted_id: string; deleted_selection_count: number }> {
+  return apiJson<{ success: boolean; deleted_id: string; deleted_selection_count: number }>(`/api/module-power-usecases/${encodeURIComponent(id)}`, "DELETE");
+}
+
+export function getApplicationScenarioComposition(
+  implOptionId: string,
+  physicalMappingId: string,
+  applicationScenarioId: string,
+): Promise<ApplicationScenarioSelection[]> {
+  const params = new URLSearchParams();
+  params.set("impl_option_id", implOptionId);
+  params.set("physical_mapping_id", physicalMappingId);
+  params.set("application_scenario_id", applicationScenarioId);
+  return apiGet<ApplicationScenarioSelection[]>(`/api/application-scenario-composition?${params.toString()}`);
+}
+
+export interface ApplicationScenarioCompositionPayload {
+  project_id: string;
+  impl_option_id: string;
+  physical_mapping_id: string;
+  application_scenario_id: string;
+  selections: Array<{
+    component_id: string;
+    component_name: string;
+    use_case_name: string;
+    operating_point_set_id: string;
+    included: boolean;
+    note?: string | null;
+  }>;
+}
+
+export function updateApplicationScenarioComposition(payload: ApplicationScenarioCompositionPayload): Promise<{
+  selections: ApplicationScenarioSelection[];
+  summary: ApplicationPowerSummary;
+}> {
+  return apiJson<{ selections: ApplicationScenarioSelection[]; summary: ApplicationPowerSummary }>("/api/application-scenario-composition", "PUT", payload);
+}
+
+export function getApplicationPowerSummary(
+  implOptionId: string,
+  physicalMappingId: string,
+  applicationScenarioId: string,
+): Promise<ApplicationPowerSummary> {
+  const params = new URLSearchParams();
+  params.set("impl_option_id", implOptionId);
+  params.set("physical_mapping_id", physicalMappingId);
+  params.set("application_scenario_id", applicationScenarioId);
+  return apiGet<ApplicationPowerSummary>(`/api/application-power-summary?${params.toString()}`);
 }
 
 export interface PowerSummaryFilters {
@@ -68,3 +183,6 @@ export function deletePowerObservation(id: string): Promise<{ success: boolean; 
   return apiJson<{ success: boolean; deleted_id: string }>(`/api/power-observations/${id}`, "DELETE");
 }
 
+export function updatePowerObservation(id: string, observation: PowerObservationInput): Promise<PowerObservation> {
+  return apiJson<PowerObservation>(`/api/power-observations/${id}`, "PUT", observation);
+}

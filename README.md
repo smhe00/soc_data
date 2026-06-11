@@ -331,3 +331,18 @@ Each observation carries:
 - `development_stage`: `architecture_estimate`, `rtl_power`, `post_pnr_power`, `silicon_measurement`
 - `confidence`: `draft`, `review`, `approved`, `measured`
 
+### Current Application Power Semantics
+
+The current demo-stage Application Power page uses a simpler two-layer model:
+
+- Module use case library: each logical module can define one or more `use_case_name` values. `Default` is only a default name; it must have a real Profile and power value before it can be used.
+- Application scenario composition: an application scenario selects which module use case/Profile rows are included in the SoC scenario power.
+
+A unique module power value is identified by:
+
+```text
+impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
+```
+
+An application scenario total is the sum of the checked module use case/Profile rows. Tier, hard macro, power rail, and shared-resource breakdowns remain future extensions.
+

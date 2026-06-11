@@ -277,7 +277,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
   const [logicArea, setLogicArea] = useState<number>(Number(((component.logic_area || 0) / initCount).toFixed(3)));
   const [sramArea, setSramArea] = useState<number>(Number(((component.sram_area || 0) / initCount).toFixed(3)));
   const [blockArea, setBlockArea] = useState<number>(Number(((component.block_area || 0) / initCount).toFixed(3)));
-  const [power, setPower] = useState<number>(Number(((component.power || 0) / initCount).toFixed(3)));
+  const [powerMw, setPowerMw] = useState<number>(Number((((component.power || 0) / initCount) * 1000).toFixed(3)));
   const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
   const [saving, setSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -289,7 +289,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
     setLogicArea(Number(((component.logic_area || 0) / absCount).toFixed(3)));
     setSramArea(Number(((component.sram_area || 0) / absCount).toFixed(3)));
     setBlockArea(Number(((component.block_area || 0) / absCount).toFixed(3)));
-    setPower(Number(((component.power || 0) / absCount).toFixed(3)));
+    setPowerMw(Number((((component.power || 0) / absCount) * 1000).toFixed(3)));
     const normalizedPartitions = component.partitions.map((partition) => ({
       ...partition,
       resource_category: partition.resource_category ?? "block",
@@ -404,7 +404,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
           logic_area: logicArea * absoluteCount,
           sram_area: sramArea * absoluteCount,
           block_area: blockArea * absoluteCount,
-          power: power * absoluteCount,
+          power: (powerMw / 1000) * absoluteCount,
         }
       );
     } catch (err) {
@@ -495,18 +495,18 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
           )}
         </div>
         <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1">Power (per inst)</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">Power (per inst, mW)</label>
           <input
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
             type="number"
             step={0.01}
             min={0}
-            value={power}
-            onChange={(e) => setPower(Number(e.target.value))}
+            value={powerMw}
+            onChange={(e) => setPowerMw(Number(e.target.value))}
           />
           {logicalCount > 1 && (
             <div className="mt-1 text-[10px] text-slate-500 font-medium">
-              Total: {(power * logicalCount).toFixed(3)} W
+              Total: {(powerMw * logicalCount).toFixed(3)} mW
             </div>
           )}
         </div>

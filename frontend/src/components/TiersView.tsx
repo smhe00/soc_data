@@ -46,7 +46,7 @@ export function TiersView({
                 </div>
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Power</div>
-                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(tier.power)} W</div>
+                  <div className="mt-1 font-semibold text-slate-900">{formatNumber(tier.power * 1000)} mW</div>
                 </div>
               </div>
             </div>

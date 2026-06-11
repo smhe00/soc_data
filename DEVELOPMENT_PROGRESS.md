@@ -165,6 +165,14 @@ cd $env:PROJECT_ROOT
   - Regenerated the Excel import template and seeded the database under the new schema.
   - Verified that all unit tests and builds compile and run successfully.
 
+## Latest Application Power Rework
+
+- Separated module use case/Profile power values from application scenario composition.
+- Added `ApplicationScenarioSelection` persistence so a scenario explicitly selects module use cases.
+- Treats `Default` as a normal use case name that still requires a saved Profile and power value before it can be included.
+- Replaced the large mixed-purpose power page with a focused module hierarchy table for editing use cases and checking them into a scenario.
+- Added smoke checks for module power library, scenario composition, summary total, and invalid-reference rejection.
+
 ## Verified
 
 - `uv sync` completed successfully.

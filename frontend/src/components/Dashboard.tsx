@@ -20,7 +20,7 @@ export function Dashboard({ dashboard, loading, error }: DashboardProps): JSX.El
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="3DIC Option A 估算总面积" value={metrics.total_area} unit="mm²" icon={Package} hint="ImplOption S2" />
-        <MetricCard label="Peak场景总功耗估计" value={metrics.total_power} unit="W" icon={Gauge} hint="Draft" />
+        <MetricCard label="Peak场景总功耗估计" value={metrics.total_power !== null && metrics.total_power !== undefined ? metrics.total_power * 1000 : "-"} unit="mW" icon={Gauge} hint="Draft" />
         <MetricCard label="逻辑层SRAM面积估计" value={metrics.total_sram_area} unit="mm²" icon={MemoryStick} hint="Metrics" />
         <MetricCard label="Physical Partition数量" value={metrics.partition_count} unit="rows" icon={SplitSquareVertical} hint="V7" />
       </div>

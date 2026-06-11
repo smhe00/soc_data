@@ -35,8 +35,8 @@ export function CompareView({ implOptions, loading, error }: CompareViewProps): 
                 </div>
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Power</div>
-                  <div className="mt-1 text-xl font-semibold text-slate-900">{formatNumber(impl_option.power)}</div>
-                  <div className="text-xs text-slate-500">W</div>
+                  <div className="mt-1 text-xl font-semibold text-slate-900">{formatNumber(impl_option.power * 1000)}</div>
+                  <div className="text-xs text-slate-500">mW</div>
                 </div>
                 <div className="rounded-xl bg-white p-3">
                   <div className="text-xs text-slate-500">Thermal</div>

@@ -13,8 +13,8 @@ This repository is the Phase-1 MVP for a SoC cross-die / 3DIC architecture datab
 
 The latest demo seed models a realistic flagship mobile SoC:
 
-- 36 logical components.
-- 129 physical partitions.
+- 43 logical components.
+- 144 physical partitions.
 - 3 scenarios:
   - `S1`: monolithic N3E baseline.
   - `S2`: 3-tier W2W 3DIC performance option.
@@ -50,6 +50,14 @@ Area semantics:
 - `tier_area_distribution` reports process-scaled physical area per tier for the selected logical subtree.
 - The UI shows base-area closure in `Total Logic / SRAM / Block Area`.
 - The UI shows process-scaled tier allocation in `Physical Coverage`.
+
+Application power semantics:
+
+- The demo keeps power values on logical modules under the current `impl_option` and `physical_mapping`; it does not yet split power to tiers or hard macros.
+- A module use case power value is keyed by `impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id`.
+- Every module can use `Default` as a use case name, but `Default` is not usable in an application scenario until a real Profile and power value are saved.
+- An application scenario is a composition: it checks which module use case/Profile rows participate in the scenario.
+- Scenario total power is the sum of checked module use case/Profile rows.
 
 ## Important Files
 
@@ -117,12 +125,13 @@ Run `verify_import.py` and `check_phase1.py` sequentially, not in parallel. They
 `uv run python scripts\check_phase1.py` should report:
 
 ```text
-components: 36
-physical_partitions: 129
+components: 43
+physical_partitions: 144
 quality_issues: 0
 AI Team components: 4
 AI Team physical_partitions: 19
 AI Team imported metrics: 115
+camera_power_w: 6.4
 ```
 
 `uv run python scripts\verify_import.py` should report:
