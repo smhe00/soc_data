@@ -100,7 +100,7 @@ function rollupLabel(rollup: ApplicationPowerSummary["hierarchy_rollups"][number
   if (rollup.status === "closed") return "Closed";
   if (rollup.status === "over_specified") return `Over ${formatMw(Math.abs(rollup.residual_power_w || 0))}`;
   if (rollup.status === "incomplete") return "Incomplete";
-  return `Residual ${formatMw(rollup.residual_power_w)}`;
+  return `Unsplit ${formatMw(rollup.residual_power_w)}`;
 }
 
 function profileIdFromName(name: string): string {

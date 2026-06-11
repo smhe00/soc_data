@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 import json
 import os
 from pathlib import Path
@@ -393,9 +394,15 @@ class ImplOptionDetailUpdate(BaseModel):
 
 
 app = FastAPI(title="SoC Cross-Die Database API", version="0.2.0")
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -810,9 +817,13 @@ def seed_data() -> None:
 
         app_scenarios = [
             ApplicationScenario(id="AS_MODULE_LIBRARY", project_id="P001", name="Module Use Case Library", category="Internal", description="Internal library bucket for module use case/Profile power values. Application scenarios select from these rows."),
-            ApplicationScenario(id="AS_CAMERA_4K60", project_id="P001", name="Camera 4K60 Recording", category="Multimedia", description="Continuous 4K 60FPS video recording using ISP, VPU, and NPU for denoise."),
-            ApplicationScenario(id="AS_GAMING_SUSTAINED", project_id="P001", name="Mobile Gaming Sustained", category="Gaming", description="Sustained gaming workload stressing CPU cluster and GPU shader cores."),
-            ApplicationScenario(id="AS_AI_BURST", project_id="P001", name="AI Photo Enhancement Burst", category="AI", description="Short bursty AI photo enhancement processing using NPU tensor cores."),
+            ApplicationScenario(id="AS_STANDBY_AOD", project_id="P001", name="Standby Always-On Display", category="Everyday", description="Phone in pocket or on desk with AOD, sensor hub, modem paging, and minimal memory retention."),
+            ApplicationScenario(id="AS_UI_BROWSING", project_id="P001", name="Interactive UI + Web Browsing", category="Everyday", description="Foreground browser/social feed scrolling with display, modem, CPU bursts, light GPU composition, and memory traffic."),
+            ApplicationScenario(id="AS_VIDEO_PLAYBACK", project_id="P001", name="4K HDR Video Playback", category="Multimedia", description="Local or streaming 4K HDR playback using video decode, display pipeline, memory subsystem, and light CPU control."),
+            ApplicationScenario(id="AS_CAMERA_4K60", project_id="P001", name="Camera 4K60 Recording", category="Multimedia", description="Sustained 4K 60FPS recording with ISP, video encode, NPU denoise, display preview, IO, and memory traffic."),
+            ApplicationScenario(id="AS_GAMING_SUSTAINED", project_id="P001", name="3D Gaming Sustained", category="Gaming", description="Thermal-sustained 3D gaming with GPU rendering, CPU game threads, display refresh, memory bandwidth, and fabric traffic."),
+            ApplicationScenario(id="AS_AI_BURST", project_id="P001", name="AI Photo Enhancement Burst", category="AI", description="Short burst of local AI photo enhancement using NPU tensor compute, CPU dispatch, ISP preprocessing, and memory movement."),
+            ApplicationScenario(id="AS_5G_VIDEO_CALL", project_id="P001", name="5G Video Call", category="Connectivity", description="Two-way video call with 5G modem, camera pipeline, video codec, display, CPU control, and IO activity."),
         ]
         
         phys_mappings = [
@@ -822,206 +833,144 @@ def seed_data() -> None:
         
         op_point_sets = [
             OperatingPointSet(id="OP_DEFAULT", project_id="P001", name="Default", description="Default module Profile. Available to every module; it belongs to a module only after a saved module power value uses it.", op_json="{}"),
-            OperatingPointSet(id="OP_CAMERA_PERF", project_id="P001", name="Camera_Perf_OP_Set", description="Performance operating points calibrated for 4K video capture.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.75, "frequency_mhz": 1800}, "GPU_TOP": {"voltage_v": 0.60, "frequency_mhz": 350}, "NPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 1000}}'),
-            OperatingPointSet(id="OP_GAMING_SUSTAINED", project_id="P001", name="Gaming_Sustained_OP_Set", description="Sustained thermal-limit operating points for gaming.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.80, "frequency_mhz": 2200}, "GPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 600}, "NPU_TOP": {"voltage_v": 0.60, "frequency_mhz": 400}}'),
-            OperatingPointSet(id="OP_AI_BURST", project_id="P001", name="AI_Burst_OP_Set", description="Peak performance burst operating points for short AI runs.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.90, "frequency_mhz": 3000}, "GPU_TOP": {"voltage_v": 0.85, "frequency_mhz": 900}, "NPU_TOP": {"voltage_v": 0.80, "frequency_mhz": 1500}}'),
+            OperatingPointSet(id="OP_STANDBY_AOD", project_id="P001", name="Standby_AOD", description="Low-voltage always-on state for AOD and sensor/modem paging.", op_json='{"SOC_TOP": {"mode": "retention"}, "AON_PMU_SENSOR_HUB": {"voltage_v": 0.55, "frequency_mhz": 26}, "DISPLAY_TOP": {"refresh_hz": 1}}'),
+            OperatingPointSet(id="OP_UI_BALANCED", project_id="P001", name="UI_Balanced", description="Balanced interactive profile for browsing and app UI.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.72, "frequency_mhz": 1800}, "GPU_TOP": {"voltage_v": 0.62, "frequency_mhz": 350}, "DISPLAY_TOP": {"refresh_hz": 120}}'),
+            OperatingPointSet(id="OP_VIDEO_PLAYBACK", project_id="P001", name="Video_Playback", description="Media playback profile with video decoder and display active.", op_json='{"MEDIA_TOP": {"voltage_v": 0.68, "frequency_mhz": 600}, "DISPLAY_TOP": {"refresh_hz": 60}, "CPU_CLUSTER": {"frequency_mhz": 900}}'),
+            OperatingPointSet(id="OP_CAMERA_4K60", project_id="P001", name="Camera_4K60", description="Camera capture profile calibrated for sustained 4K60 recording.", op_json='{"ISP_TOP": {"voltage_v": 0.72, "frequency_mhz": 900}, "VIDEO_ENCODER": {"frequency_mhz": 700}, "NPU_TOP": {"voltage_v": 0.70, "frequency_mhz": 1000}}'),
+            OperatingPointSet(id="OP_GAMING_SUSTAINED", project_id="P001", name="Gaming_Sustained", description="Sustained thermal-limit operating points for gaming.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.80, "frequency_mhz": 2200}, "GPU_TOP": {"voltage_v": 0.72, "frequency_mhz": 650}, "DISPLAY_TOP": {"refresh_hz": 120}}'),
+            OperatingPointSet(id="OP_AI_BURST", project_id="P001", name="AI_Burst", description="Peak performance burst operating points for short local AI runs.", op_json='{"CPU_CLUSTER": {"voltage_v": 0.86, "frequency_mhz": 2600}, "NPU_TOP": {"voltage_v": 0.82, "frequency_mhz": 1500}, "MEMORY_SUBSYSTEM": {"bandwidth_gbps": 90}}'),
+            OperatingPointSet(id="OP_5G_VIDEO_CALL", project_id="P001", name="5G_Video_Call", description="Connectivity and media profile for uplink/downlink video call.", op_json='{"5G_MODEM_TOP": {"mode": "sub6_active"}, "ISP_TOP": {"frequency_mhz": 550}, "VIDEO_ENCODER": {"frequency_mhz": 450}, "DISPLAY_TOP": {"refresh_hz": 60}}'),
         ]
-        
-        power_obs = [
-            PowerObservation(
-                id="PO_CAM_ISP", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="component", scope_id="B_ISP", scope_name="ISP_TOP",
-                use_case_name="ISP_4K60_PIPELINE", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=1.4,
-                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_NPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="component", scope_id="B_NPU", scope_name="NPU_TOP",
-                use_case_name="NPU_AI_DENOISE", time_window_name="burst",
-                statistic_type="average", power_type="total", power_value_w=1.8,
-                development_stage="rtl_power", source_type="manual_seed", confidence="review", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_GPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="component", scope_id="B_GPU", scope_name="GPU_TOP",
-                use_case_name="GPU_PREVIEW_RENDER", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=0.8,
-                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_CPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="component", scope_id="B_CPU", scope_name="CPU_CLUSTER",
-                use_case_name="CPU_APP_CONTROL", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=0.6,
-                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_VPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="component", scope_id="B_VIDEO", scope_name="VPU_TOP",
-                use_case_name="VPU_DECODE_ENCODE", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=1.1,
-                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_DDR_PHY", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="component", scope_id="B_DDR_PHY", scope_name="DDR_PHY",
-                use_case_name="DDR_PHY_INTERFACE", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=0.7,
-                development_stage="rtl_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_NOC", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="shared_resource", scope_id=None, scope_name="NoC",
-                use_case_name="SYSTEM_FABRIC", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=0.45,
-                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_INTERACT", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="interaction", scope_id=None, scope_name="NPU_TO_DDR_TRAFFIC",
-                use_case_name="MEMORY_TRAFFIC", time_window_name="burst",
-                statistic_type="average", power_type="total", power_value_w=0.25,
-                development_stage="architecture_estimate", source_type="manual_seed", confidence="review", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_CAM_VDD_NPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="power_rail", scope_id=None, scope_name="VDD_NPU",
-                use_case_name="NPU_RAIL_TOTAL", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=2.7,
-                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
-            ),
-            PowerObservation(
-                id="PO_CAM_SOC_TOTAL", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_CAMERA_4K60", operating_point_set_id="OP_CAMERA_PERF",
-                scope_type="soc", scope_id=None, scope_name="SOC_TOTAL",
-                use_case_name="SOC_ACTIVE_POWER", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=8.1,
-                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=False
-            ),
-            PowerObservation(
-                id="PO_GAME_CPU", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
-                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
-                scope_type="component", scope_id="B_CPU", scope_name="CPU_CLUSTER",
-                use_case_name="CPU_GAMING_THREADS", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=1.8,
-                development_stage="post_pnr_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_GAME_GPU", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
-                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
-                scope_type="component", scope_id="B_GPU", scope_name="GPU_TOP",
-                use_case_name="GPU_3D_RENDER", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=3.2,
-                development_stage="post_pnr_power", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_GAME_NOC", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
-                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
-                scope_type="shared_resource", scope_id=None, scope_name="NoC",
-                use_case_name="SYSTEM_FABRIC", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=0.6,
-                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_GAME_SOC_TOTAL", project_id="P001", impl_option_id="S1", physical_mapping_id="PM_2D_BASE",
-                application_scenario_id="AS_GAMING_SUSTAINED", operating_point_set_id="OP_GAMING_SUSTAINED",
-                scope_type="soc", scope_id=None, scope_name="SOC_TOTAL",
-                use_case_name="SOC_ACTIVE_POWER", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=6.2,
-                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
-            ),
-            PowerObservation(
-                id="PO_AI_NPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
-                scope_type="component", scope_id="B_NPU", scope_name="NPU_TOP",
-                use_case_name="NPU_TENSOR_RUN", time_window_name="burst",
-                statistic_type="average", power_type="total", power_value_w=4.5,
-                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_AI_CPU", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
-                scope_type="component", scope_id="B_CPU", scope_name="CPU_CLUSTER",
-                use_case_name="CPU_DISPATCH", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=1.2,
-                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_AI_NOC", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
-                scope_type="shared_resource", scope_id=None, scope_name="NoC",
-                use_case_name="SYSTEM_FABRIC", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=0.8,
-                development_stage="architecture_estimate", source_type="manual_seed", confidence="approved", is_additive=True
-            ),
-            PowerObservation(
-                id="PO_AI_SOC_TOTAL", project_id="P001", impl_option_id="S2", physical_mapping_id="PM_3DIC_A",
-                application_scenario_id="AS_AI_BURST", operating_point_set_id="OP_AI_BURST",
-                scope_type="soc", scope_id=None, scope_name="SOC_TOTAL",
-                use_case_name="SOC_ACTIVE_POWER", time_window_name="steady_state",
-                statistic_type="average", power_type="total", power_value_w=7.0,
-                development_stage="silicon_measurement", source_type="manual_seed", confidence="measured", is_additive=False
-            ),
-        ]
-
         def safe_key(value: str | None) -> str:
             return (value or "Default").replace(" ", "_").replace("/", "_").replace("-", "_").upper()
 
-        module_power_obs_by_key: dict[tuple[str, str, str, str, str], PowerObservation] = {}
-        scenario_selections: list[ApplicationScenarioSelection] = []
-        for obs in power_obs:
-            if obs.scope_type != "component" or not obs.scope_id:
-                continue
-            use_case = obs.use_case_name or "Default"
-            key = (obs.impl_option_id, obs.physical_mapping_id, obs.scope_id, use_case, obs.operating_point_set_id)
-            if key not in module_power_obs_by_key:
-                module_power_obs_by_key[key] = PowerObservation(
-                    id=f"PUC_{safe_key(obs.impl_option_id)}_{safe_key(obs.physical_mapping_id)}_{safe_key(obs.scope_id)}_{safe_key(use_case)}_{safe_key(obs.operating_point_set_id)}",
-                    project_id=obs.project_id,
-                    impl_option_id=obs.impl_option_id,
-                    physical_mapping_id=obs.physical_mapping_id,
-                    application_scenario_id="AS_MODULE_LIBRARY",
-                    operating_point_set_id=obs.operating_point_set_id,
-                    scope_type="component",
-                    scope_id=obs.scope_id,
-                    scope_name=obs.scope_name,
-                    use_case_name=use_case,
-                    time_window_name="steady_state",
-                    statistic_type="average",
-                    power_type="total",
-                    power_value_w=obs.power_value_w,
-                    development_stage="architecture_estimate",
-                    source_type="module_usecase_seed",
-                    confidence=obs.confidence,
-                    is_additive=True,
-                    note=f"Module use case/Profile power value derived from seed observation {obs.id}.",
-                )
-            scenario_selections.append(
-                ApplicationScenarioSelection(
-                    id=f"ASC_{safe_key(obs.application_scenario_id)}_{safe_key(obs.scope_id)}_{safe_key(use_case)}_{safe_key(obs.operating_point_set_id)}",
-                    project_id=obs.project_id,
-                    impl_option_id=obs.impl_option_id,
-                    physical_mapping_id=obs.physical_mapping_id,
-                    application_scenario_id=obs.application_scenario_id,
-                    component_id=obs.scope_id,
-                    component_name=obs.scope_name,
-                    use_case_name=use_case,
-                    operating_point_set_id=obs.operating_point_set_id,
-                    included=True,
-                    note="Seed scenario composition selection.",
-                )
+        module_usecase_specs = [
+            ("B0", "AOD_System_Total", "OP_STANDBY_AOD", 0.145, "review"),
+            ("B_PMU", "AOD_SensorHub", "OP_STANDBY_AOD", 0.038, "approved"),
+            ("B_DISPLAY", "AOD_1Hz_Panel", "OP_STANDBY_AOD", 0.045, "approved"),
+            ("B_MODEM", "Modem_Paging", "OP_STANDBY_AOD", 0.024, "review"),
+            ("B_MEM", "Memory_Retention", "OP_STANDBY_AOD", 0.018, "review"),
+            ("B_SEC", "Secure_Heartbeat", "OP_STANDBY_AOD", 0.006, "review"),
+            ("B_IO", "LowSpeed_IO_Idle", "OP_STANDBY_AOD", 0.010, "review"),
+
+            ("B0", "UI_Browsing_Total", "OP_UI_BALANCED", 2.65, "review"),
+            ("B_CPU", "UI_App_Bursts", "OP_UI_BALANCED", 0.78, "approved"),
+            ("B_GPU", "UI_Composition", "OP_UI_BALANCED", 0.34, "approved"),
+            ("B_DISPLAY", "Display_120Hz_UI", "OP_UI_BALANCED", 0.48, "approved"),
+            ("B_MODEM", "Web_Data_Bursty", "OP_UI_BALANCED", 0.26, "review"),
+            ("B_MEM", "Browser_Memory_Traffic", "OP_UI_BALANCED", 0.32, "review"),
+            ("B_NOC", "Interactive_Fabric", "OP_UI_BALANCED", 0.18, "review"),
+            ("B_IO", "Storage_And_MIPI_Active", "OP_UI_BALANCED", 0.11, "review"),
+            ("B_PMU", "Active_Power_Control", "OP_UI_BALANCED", 0.055, "review"),
+            ("B_SEC", "TLS_Crypto_Assist", "OP_UI_BALANCED", 0.035, "review"),
+
+            ("B0", "Video_Playback_Total", "OP_VIDEO_PLAYBACK", 1.95, "approved"),
+            ("B_MEDIA", "Video_Decode_4K_HDR", "OP_VIDEO_PLAYBACK", 0.58, "approved"),
+            ("B_DISPLAY", "HDR_Display_60Hz", "OP_VIDEO_PLAYBACK", 0.56, "approved"),
+            ("B_CPU", "Playback_Control", "OP_VIDEO_PLAYBACK", 0.18, "approved"),
+            ("B_GPU", "Video_Overlay_Composition", "OP_VIDEO_PLAYBACK", 0.08, "review"),
+            ("B_MEM", "Video_Buffer_Traffic", "OP_VIDEO_PLAYBACK", 0.28, "review"),
+            ("B_NOC", "Media_Fabric", "OP_VIDEO_PLAYBACK", 0.13, "review"),
+            ("B_IO", "Display_PHY_Active", "OP_VIDEO_PLAYBACK", 0.09, "review"),
+            ("B_PMU", "Playback_Power_Control", "OP_VIDEO_PLAYBACK", 0.045, "review"),
+
+            ("B0", "Camera_4K60_Total", "OP_CAMERA_4K60", 5.35, "review"),
+            ("B_ISP", "ISP_4K60_TriplePipe", "OP_CAMERA_4K60", 1.20, "approved"),
+            ("B_MEDIA", "Video_Encode_4K60", "OP_CAMERA_4K60", 0.78, "approved"),
+            ("B_NPU", "NPU_Denoise_HDR", "OP_CAMERA_4K60", 0.90, "review"),
+            ("B_CPU", "Camera_App_Control", "OP_CAMERA_4K60", 0.45, "approved"),
+            ("B_GPU", "Preview_Composition", "OP_CAMERA_4K60", 0.25, "review"),
+            ("B_DISPLAY", "Camera_Preview_Display", "OP_CAMERA_4K60", 0.28, "approved"),
+            ("B_MEM", "Camera_Frame_Buffer", "OP_CAMERA_4K60", 0.58, "review"),
+            ("B_NOC", "Camera_Fabric_Traffic", "OP_CAMERA_4K60", 0.32, "review"),
+            ("B_IO", "MIPI_CSI_DPHY_Active", "OP_CAMERA_4K60", 0.46, "review"),
+            ("B_PMU", "Camera_Power_Control", "OP_CAMERA_4K60", 0.075, "review"),
+
+            ("B0", "Gaming_Sustained_Total", "OP_GAMING_SUSTAINED", 6.95, "review"),
+            ("B_GPU", "GPU_3D_Render_120Hz", "OP_GAMING_SUSTAINED", 3.25, "approved"),
+            ("B_CPU", "CPU_Game_Threads", "OP_GAMING_SUSTAINED", 1.35, "approved"),
+            ("B_DISPLAY", "Gaming_Display_120Hz", "OP_GAMING_SUSTAINED", 0.58, "approved"),
+            ("B_MEM", "Gaming_Memory_Bandwidth", "OP_GAMING_SUSTAINED", 0.72, "review"),
+            ("B_NOC", "Gaming_Fabric", "OP_GAMING_SUSTAINED", 0.46, "review"),
+            ("B_NPU", "Game_AI_Assist_Light", "OP_GAMING_SUSTAINED", 0.16, "review"),
+            ("B_IO", "Touch_Audio_IO", "OP_GAMING_SUSTAINED", 0.15, "review"),
+            ("B_PMU", "Thermal_Power_Control", "OP_GAMING_SUSTAINED", 0.085, "review"),
+            ("B_SEC", "Game_Security_Services", "OP_GAMING_SUSTAINED", 0.025, "review"),
+
+            ("B0", "AI_Photo_Burst_Total", "OP_AI_BURST", 6.35, "measured"),
+            ("B_NPU", "NPU_Photo_Enhance", "OP_AI_BURST", 3.75, "measured"),
+            ("B_CPU", "AI_Dispatch_PrePost", "OP_AI_BURST", 0.82, "approved"),
+            ("B_GPU", "AI_Preview_Composition", "OP_AI_BURST", 0.25, "review"),
+            ("B_ISP", "Photo_Preprocess", "OP_AI_BURST", 0.36, "review"),
+            ("B_MEM", "AI_Tensor_Buffer_Traffic", "OP_AI_BURST", 0.66, "review"),
+            ("B_NOC", "AI_Fabric_Traffic", "OP_AI_BURST", 0.36, "review"),
+            ("B_IO", "Image_Storage_IO", "OP_AI_BURST", 0.08, "review"),
+            ("B_PMU", "Burst_Power_Control", "OP_AI_BURST", 0.06, "review"),
+
+            ("B0", "5G_Video_Call_Total", "OP_5G_VIDEO_CALL", 3.70, "review"),
+            ("B_MODEM", "5G_Sub6_VideoCall", "OP_5G_VIDEO_CALL", 1.20, "approved"),
+            ("B_ISP", "FrontCamera_1080p", "OP_5G_VIDEO_CALL", 0.45, "approved"),
+            ("B_MEDIA", "VideoCall_Codec", "OP_5G_VIDEO_CALL", 0.32, "approved"),
+            ("B_CPU", "VideoCall_App_Stack", "OP_5G_VIDEO_CALL", 0.56, "approved"),
+            ("B_DISPLAY", "VideoCall_Display", "OP_5G_VIDEO_CALL", 0.40, "approved"),
+            ("B_MEM", "VideoCall_Memory_Traffic", "OP_5G_VIDEO_CALL", 0.28, "review"),
+            ("B_NOC", "VideoCall_Fabric", "OP_5G_VIDEO_CALL", 0.23, "review"),
+            ("B_IO", "RF_MIPI_USB_IO", "OP_5G_VIDEO_CALL", 0.18, "review"),
+            ("B_PMU", "Connectivity_Power_Control", "OP_5G_VIDEO_CALL", 0.065, "review"),
+        ]
+
+        scenario_compositions = {
+            "AS_STANDBY_AOD": [("B0", "AOD_System_Total", "OP_STANDBY_AOD", False), ("B_PMU", "AOD_SensorHub", "OP_STANDBY_AOD", True), ("B_DISPLAY", "AOD_1Hz_Panel", "OP_STANDBY_AOD", True), ("B_MODEM", "Modem_Paging", "OP_STANDBY_AOD", True), ("B_MEM", "Memory_Retention", "OP_STANDBY_AOD", True), ("B_SEC", "Secure_Heartbeat", "OP_STANDBY_AOD", True), ("B_IO", "LowSpeed_IO_Idle", "OP_STANDBY_AOD", True)],
+            "AS_UI_BROWSING": [("B0", "UI_Browsing_Total", "OP_UI_BALANCED", False), ("B_CPU", "UI_App_Bursts", "OP_UI_BALANCED", True), ("B_GPU", "UI_Composition", "OP_UI_BALANCED", True), ("B_DISPLAY", "Display_120Hz_UI", "OP_UI_BALANCED", True), ("B_MODEM", "Web_Data_Bursty", "OP_UI_BALANCED", True), ("B_MEM", "Browser_Memory_Traffic", "OP_UI_BALANCED", True), ("B_NOC", "Interactive_Fabric", "OP_UI_BALANCED", True), ("B_IO", "Storage_And_MIPI_Active", "OP_UI_BALANCED", True), ("B_PMU", "Active_Power_Control", "OP_UI_BALANCED", True), ("B_SEC", "TLS_Crypto_Assist", "OP_UI_BALANCED", True)],
+            "AS_VIDEO_PLAYBACK": [("B0", "Video_Playback_Total", "OP_VIDEO_PLAYBACK", False), ("B_MEDIA", "Video_Decode_4K_HDR", "OP_VIDEO_PLAYBACK", True), ("B_DISPLAY", "HDR_Display_60Hz", "OP_VIDEO_PLAYBACK", True), ("B_CPU", "Playback_Control", "OP_VIDEO_PLAYBACK", True), ("B_GPU", "Video_Overlay_Composition", "OP_VIDEO_PLAYBACK", True), ("B_MEM", "Video_Buffer_Traffic", "OP_VIDEO_PLAYBACK", True), ("B_NOC", "Media_Fabric", "OP_VIDEO_PLAYBACK", True), ("B_IO", "Display_PHY_Active", "OP_VIDEO_PLAYBACK", True), ("B_PMU", "Playback_Power_Control", "OP_VIDEO_PLAYBACK", True)],
+            "AS_CAMERA_4K60": [("B0", "Camera_4K60_Total", "OP_CAMERA_4K60", False), ("B_ISP", "ISP_4K60_TriplePipe", "OP_CAMERA_4K60", True), ("B_MEDIA", "Video_Encode_4K60", "OP_CAMERA_4K60", True), ("B_NPU", "NPU_Denoise_HDR", "OP_CAMERA_4K60", True), ("B_CPU", "Camera_App_Control", "OP_CAMERA_4K60", True), ("B_GPU", "Preview_Composition", "OP_CAMERA_4K60", True), ("B_DISPLAY", "Camera_Preview_Display", "OP_CAMERA_4K60", True), ("B_MEM", "Camera_Frame_Buffer", "OP_CAMERA_4K60", True), ("B_NOC", "Camera_Fabric_Traffic", "OP_CAMERA_4K60", True), ("B_IO", "MIPI_CSI_DPHY_Active", "OP_CAMERA_4K60", True), ("B_PMU", "Camera_Power_Control", "OP_CAMERA_4K60", True)],
+            "AS_GAMING_SUSTAINED": [("B0", "Gaming_Sustained_Total", "OP_GAMING_SUSTAINED", False), ("B_GPU", "GPU_3D_Render_120Hz", "OP_GAMING_SUSTAINED", True), ("B_CPU", "CPU_Game_Threads", "OP_GAMING_SUSTAINED", True), ("B_DISPLAY", "Gaming_Display_120Hz", "OP_GAMING_SUSTAINED", True), ("B_MEM", "Gaming_Memory_Bandwidth", "OP_GAMING_SUSTAINED", True), ("B_NOC", "Gaming_Fabric", "OP_GAMING_SUSTAINED", True), ("B_NPU", "Game_AI_Assist_Light", "OP_GAMING_SUSTAINED", True), ("B_IO", "Touch_Audio_IO", "OP_GAMING_SUSTAINED", True), ("B_PMU", "Thermal_Power_Control", "OP_GAMING_SUSTAINED", True), ("B_SEC", "Game_Security_Services", "OP_GAMING_SUSTAINED", True)],
+            "AS_AI_BURST": [("B0", "AI_Photo_Burst_Total", "OP_AI_BURST", False), ("B_NPU", "NPU_Photo_Enhance", "OP_AI_BURST", True), ("B_CPU", "AI_Dispatch_PrePost", "OP_AI_BURST", True), ("B_GPU", "AI_Preview_Composition", "OP_AI_BURST", True), ("B_ISP", "Photo_Preprocess", "OP_AI_BURST", True), ("B_MEM", "AI_Tensor_Buffer_Traffic", "OP_AI_BURST", True), ("B_NOC", "AI_Fabric_Traffic", "OP_AI_BURST", True), ("B_IO", "Image_Storage_IO", "OP_AI_BURST", True), ("B_PMU", "Burst_Power_Control", "OP_AI_BURST", True)],
+            "AS_5G_VIDEO_CALL": [("B0", "5G_Video_Call_Total", "OP_5G_VIDEO_CALL", False), ("B_MODEM", "5G_Sub6_VideoCall", "OP_5G_VIDEO_CALL", True), ("B_ISP", "FrontCamera_1080p", "OP_5G_VIDEO_CALL", True), ("B_MEDIA", "VideoCall_Codec", "OP_5G_VIDEO_CALL", True), ("B_CPU", "VideoCall_App_Stack", "OP_5G_VIDEO_CALL", True), ("B_DISPLAY", "VideoCall_Display", "OP_5G_VIDEO_CALL", True), ("B_MEM", "VideoCall_Memory_Traffic", "OP_5G_VIDEO_CALL", True), ("B_NOC", "VideoCall_Fabric", "OP_5G_VIDEO_CALL", True), ("B_IO", "RF_MIPI_USB_IO", "OP_5G_VIDEO_CALL", True), ("B_PMU", "Connectivity_Power_Control", "OP_5G_VIDEO_CALL", True)],
+        }
+
+        module_power_obs = [
+            PowerObservation(
+                id=f"PUC_S2_PM_3DIC_A_{safe_key(component_id)}_{safe_key(use_case)}_{safe_key(op_id)}",
+                project_id="P001",
+                impl_option_id="S2",
+                physical_mapping_id="PM_3DIC_A",
+                application_scenario_id="AS_MODULE_LIBRARY",
+                operating_point_set_id=op_id,
+                scope_type="component",
+                scope_id=component_id,
+                scope_name=logical_by_id[component_id].name,
+                use_case_name=use_case,
+                time_window_name="steady_state",
+                statistic_type="average",
+                power_type="total",
+                power_value_w=power_w,
+                development_stage="architecture_estimate",
+                source_type="module_usecase_seed",
+                confidence=confidence,
+                is_additive=True,
+                note="Realistic mobile SoC demo module use case/Profile power value.",
             )
-        module_power_obs = list(module_power_obs_by_key.values())
+            for component_id, use_case, op_id, power_w, confidence in module_usecase_specs
+        ]
+        scenario_selections = [
+            ApplicationScenarioSelection(
+                id=f"ASC_{safe_key(scenario_id)}_{safe_key(component_id)}_{safe_key(use_case)}_{safe_key(op_id)}",
+                project_id="P001",
+                impl_option_id="S2",
+                physical_mapping_id="PM_3DIC_A",
+                application_scenario_id=scenario_id,
+                component_id=component_id,
+                component_name=logical_by_id[component_id].name,
+                use_case_name=use_case,
+                operating_point_set_id=op_id,
+                included=included,
+                note="Seed scenario composition selection. SOC_TOP rows are inactive references for roll-up comparison.",
+            )
+            for scenario_id, rows in scenario_compositions.items()
+            for component_id, use_case, op_id, included in rows
+        ]
+        power_obs: list[PowerObservation] = []
         
         for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities + app_scenarios + phys_mappings + op_point_sets + power_obs + module_power_obs + scenario_selections:
             session.merge(row)

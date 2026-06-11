@@ -344,15 +344,15 @@ def main() -> None:
         assert team_import_result["imported"]["logical_components"] == 4
         assert team_import_result["imported"]["physical_partitions"] == 19
         assert team_import_result["imported"]["metrics"] > 0
-        assert len(power_library_rows) == 8, f"expected 8 module power use cases for S2/PM_3DIC_A, got {len(power_library_rows)}"
+        assert len(power_library_rows) == 66, f"expected 66 realistic module power use cases for S2/PM_3DIC_A, got {len(power_library_rows)}"
         assert "OP_DEFAULT" in {row["id"] for row in operating_point_rows}, "Default Profile should be seeded"
         assert valid_new_profile_power.json()["operating_point_set_name"] == "CPU Eco"
         assert "OP_CPU_ECO" in {row["id"] for row in operating_point_rows_after_new_profile}, "new module Profile should be created on valid save"
         assert deleted_new_profile_power.json()["deleted_id"] == new_profile_power_id
         assert new_profile_power_id not in {row["id"] for row in power_library_after_delete.json()}, "deleted module power use case should leave the module library"
-        assert len(camera_composition.json()) == 6, f"expected 6 selected module use cases in Camera 4K60"
-        assert camera_summary_result["total_additive_power_w"] == 6.4
-        assert camera_summary_result["selected_count"] == 6
+        assert len(camera_composition.json()) == 11, f"expected 11 Camera 4K60 composition rows including SOC_TOP reference"
+        assert camera_summary_result["total_additive_power_w"] == 5.295
+        assert camera_summary_result["selected_count"] == 10
         assert camera_summary_result["missing_count"] == 0
         assert invalid_power.status_code == 400, "invalid power context should be rejected"
         assert updated_application_scenario.json()["name"] == "Smoke Test Scenario Updated"
