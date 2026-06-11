@@ -10,6 +10,7 @@ import {
   SplitSquareVertical,
   Package,
   Moon,
+  Plus,
   Sun,
   Zap,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { getQualityIssues, type QualityIssue } from "./api/quality";
 import { getResponsibilityTeams } from "./api/responsibilities";
 import { getImplOptions } from "./api/impl_options";
 import { getTiers } from "./api/tiers";
+import { createDatabase, getDatabases, selectDatabase, type DatabaseInfo } from "./api/databases";
 
 import type { DashboardData } from "./types/metric";
 import type { BlockNode, TreeBlock, PhysicalPartition } from "./types/component";
@@ -78,6 +80,8 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const [teams, setTeams] = useState<string[]>(["Architecture Team"]);
   const [selectedImplOptionId, setSelectedImplOptionId] = useState<string>("S2");
   const [selectedTeam, setSelectedTeam] = useState<string>("Architecture Team");
+  const [databases, setDatabases] = useState<DatabaseInfo[]>([]);
+  const [activeDatabaseId, setActiveDatabaseId] = useState<string>("");
 
   // Keep track of base lookup data (implOptions list, teams list)
   const [loadedBase, setLoadedBase] = useState<boolean>(false);
@@ -105,6 +109,27 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   const activeTab = tabs.find((tab) => tab.id === active) ?? tabs[0];
   const selectedImplOption = implOptions.find((impl_option) => impl_option.id === selectedImplOptionId);
 
+  function resetLoadedState(): void {
+    setLoadedBase(false);
+    setLoadedCategories({
+      dashboard: false,
+      hierarchy: false,
+      tiers: false,
+      quality: false,
+    });
+    setDashboard(null);
+    setBlocks([]);
+    setTree([]);
+    setImplOptions([]);
+    setTiers([]);
+    setPhysicalPartitions([]);
+    setQualityIssues([]);
+    setTeams(["Architecture Team"]);
+    setSelectedImplOptionId("");
+    setImportResult(null);
+    setImportError(null);
+  }
+
   useEffect(() => {
     window.localStorage.setItem("soc-theme", theme);
   }, [theme]);
@@ -114,6 +139,19 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       setSelectedImplOptionId(implOptions[0].id);
     }
   }, [implOptions, selectedImplOptionId]);
+
+  useEffect(() => {
+    async function loadDatabases(): Promise<void> {
+      try {
+        const catalog = await getDatabases();
+        setDatabases(catalog.databases);
+        setActiveDatabaseId(catalog.active_id);
+      } catch {
+        // Keep the main API error surface focused on tab data.
+      }
+    }
+    void loadDatabases();
+  }, []);
 
   // Whenever the impl_option or team changes, invalidate the cache for all categories,
   // so they will reload fresh when that tab is visited.
@@ -138,29 +176,43 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       setError(null);
 
       // 1. Ensure base lookup data is loaded
+      let effectiveImplOptionId = implOptionId;
       if (!loadedBase || forceReload) {
-        const [implOptionsData, teamsData] = await Promise.all([
-          getImplOptions(),
-          getResponsibilityTeams(implOptionId),
-        ]);
+        const implOptionsData = await getImplOptions();
+        effectiveImplOptionId = implOptionsData.some((row) => row.id === implOptionId)
+          ? implOptionId
+          : (implOptionsData[0]?.id ?? "");
+        const teamsData = effectiveImplOptionId ? await getResponsibilityTeams(effectiveImplOptionId) : ["Architecture Team"];
         setImplOptions(implOptionsData);
         setTeams(teamsData);
+        setSelectedImplOptionId(effectiveImplOptionId);
         setLoadedBase(true);
+      }
+
+      if (!effectiveImplOptionId) {
+        setDashboard(null);
+        setBlocks([]);
+        setTree([]);
+        setTiers([]);
+        setPhysicalPartitions([]);
+        setQualityIssues([]);
+        setLoading(false);
+        return;
       }
 
       // 2. Load tab-specific data
       if (activeTab === "dashboard") {
         if (!loadedCategories.dashboard || forceReload) {
-          const dashboardData = await getDashboard(implOptionId);
+          const dashboardData = await getDashboard(effectiveImplOptionId);
           setDashboard(dashboardData);
           setLoadedCategories(prev => ({ ...prev, dashboard: true }));
         }
       } else if (activeTab === "hierarchy") {
         if (!loadedCategories.hierarchy || forceReload) {
           const [componentData, treeData, tierData] = await Promise.all([
-            getComponents(team, implOptionId),
-            getComponentTree(team, implOptionId),
-            getTiers(implOptionId),
+            getComponents(team, effectiveImplOptionId),
+            getComponentTree(team, effectiveImplOptionId),
+            getTiers(effectiveImplOptionId),
           ]);
           setBlocks(componentData);
           setTree(treeData);
@@ -170,8 +222,8 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       } else if (activeTab === "tiers") {
         if (!loadedCategories.tiers || forceReload) {
           const [tierData, partitionData] = await Promise.all([
-            getTiers(implOptionId),
-            getPhysicalPartitions(team, implOptionId),
+            getTiers(effectiveImplOptionId),
+            getPhysicalPartitions(team, effectiveImplOptionId),
           ]);
           setTiers(tierData);
           setPhysicalPartitions(partitionData);
@@ -179,7 +231,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
         }
       } else if (activeTab === "quality") {
         if (!loadedCategories.quality || forceReload) {
-          const qualityIssueData = await getQualityIssues(team, implOptionId);
+          const qualityIssueData = await getQualityIssues(team, effectiveImplOptionId);
           setQualityIssues(qualityIssueData);
           setLoadedCategories(prev => ({ ...prev, quality: true }));
         }
@@ -215,6 +267,40 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       setImportError(err instanceof Error ? err.message : "Unknown import error");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function handleSelectDatabase(databaseId: string): Promise<void> {
+    try {
+      setLoading(true);
+      setError(null);
+      const catalog = await selectDatabase(databaseId);
+      setDatabases(catalog.databases);
+      setActiveDatabaseId(catalog.active_id);
+      resetLoadedState();
+      await loadActiveTabData(active, "Architecture Team", "", true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to select database");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreateDatabase(): Promise<void> {
+    const name = window.prompt("New SQLite database name");
+    if (!name?.trim()) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const catalog = await createDatabase(name.trim());
+      setDatabases(catalog.databases);
+      setActiveDatabaseId(catalog.active_id);
+      resetLoadedState();
+      await loadActiveTabData(active, "Architecture Team", "", true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create database");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -309,6 +395,29 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">第一阶段MVP：统一项目、方案、block层次、process/tier、核心指标、数据来源和质量检查，为后续AI解析和工程评估引擎打基础。</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <select
+                  aria-label="SQLite database"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm outline-none transition hover:bg-white focus:border-slate-400"
+                  onChange={(event) => void handleSelectDatabase(event.target.value)}
+                  title="SQLite database"
+                  value={activeDatabaseId}
+                >
+                  {databases.map((database) => (
+                    <option key={database.id} value={database.id}>
+                      {database.is_demo ? "Demo" : "DB"} - {database.name} ({database.project_count ?? 0})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  aria-label="Create SQLite database"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white"
+                  onClick={() => void handleCreateDatabase()}
+                  title="Create empty SQLite database"
+                  type="button"
+                >
+                  <Plus size={14} />
+                  New DB
+                </button>
                 <button
                   aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white"

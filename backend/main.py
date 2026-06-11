@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import os
 import json
-import os
 from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from tempfile import NamedTemporaryFile
@@ -22,10 +21,53 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE_URL = f"sqlite:///{BASE_DIR / 'soc_3dic.db'}"
+DATABASE_DIR = BASE_DIR / "databases"
+DEFAULT_DATABASE_PATH = BASE_DIR / "soc_3dic.db"
+ACTIVE_DATABASE_PATH = Path(os.getenv("SOC_DB_PATH", DEFAULT_DATABASE_PATH)).expanduser().resolve()
 TEMPLATE_PATH = BASE_DIR.parent / "templates" / "soc_import_template.xlsx"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(f"sqlite:///{ACTIVE_DATABASE_PATH}", connect_args={"check_same_thread": False})
+
+
+def database_id(path: Path) -> str:
+    return path.stem
+
+
+def database_label(path: Path) -> str:
+    return "Demo database" if path.resolve() == DEFAULT_DATABASE_PATH.resolve() else path.stem.replace("_", " ")
+
+
+def database_paths() -> list[Path]:
+    DATABASE_DIR.mkdir(parents=True, exist_ok=True)
+    paths = [DEFAULT_DATABASE_PATH]
+    paths.extend(sorted(DATABASE_DIR.glob("*.db")))
+    unique: dict[str, Path] = {}
+    for path in paths:
+        unique[str(path.resolve())] = path.resolve()
+    return list(unique.values())
+
+
+def database_path_from_id(db_id: str) -> Path:
+    cleaned = db_id.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Database id is required.")
+    for path in database_paths():
+        if database_id(path) == cleaned:
+            return path
+    raise HTTPException(status_code=404, detail=f"Database not found: {db_id}")
+
+
+def switch_database(path: Path, create_if_missing: bool = False) -> None:
+    global engine, ACTIVE_DATABASE_PATH
+    resolved = path.resolve()
+    if create_if_missing:
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.touch(exist_ok=True)
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail=f"Database file not found: {database_id(resolved)}")
+    engine.dispose()
+    ACTIVE_DATABASE_PATH = resolved
+    engine = create_engine(f"sqlite:///{ACTIVE_DATABASE_PATH}", connect_args={"check_same_thread": False})
 
 
 def now_iso() -> str:
@@ -353,6 +395,15 @@ class ApplicationScenarioCompositionUpdate(BaseModel):
     physical_mapping_id: str
     application_scenario_id: str
     selections: list[ApplicationScenarioSelectionInput]
+
+
+class DatabaseCreateInput(BaseModel):
+    name: str
+    seed_demo: bool = False
+
+
+class DatabaseSelectInput(BaseModel):
+    id: str
 
 
 class ImplementationTierInput(BaseModel):
@@ -1014,10 +1065,81 @@ def metric(
 
 @app.on_event("startup")
 def on_startup() -> None:
+    DATABASE_DIR.mkdir(parents=True, exist_ok=True)
     create_db_and_tables()
     ensure_sqlite_schema_compatibility()
-    if os.getenv("SEED_DEMO", "true").lower() in {"1", "true", "yes", "on"}:
+    if ACTIVE_DATABASE_PATH == DEFAULT_DATABASE_PATH.resolve() and os.getenv("SEED_DEMO", "true").lower() in {"1", "true", "yes", "on"}:
         seed_data()
+
+
+def database_info(path: Path) -> dict[str, Any]:
+    resolved = path.resolve()
+    is_active = resolved == ACTIVE_DATABASE_PATH
+    project_count = None
+    if resolved.exists():
+        try:
+            temp_engine = create_engine(f"sqlite:///{resolved}", connect_args={"check_same_thread": False})
+            with Session(temp_engine) as session:
+                SQLModel.metadata.create_all(temp_engine)
+                project_count = len(session.exec(select(Project)).all())
+            temp_engine.dispose()
+        except Exception:
+            project_count = None
+    return {
+        "id": database_id(resolved),
+        "name": database_label(resolved),
+        "path": str(resolved),
+        "active": is_active,
+        "is_demo": resolved == DEFAULT_DATABASE_PATH.resolve(),
+        "project_count": project_count,
+    }
+
+
+@app.get("/api/databases")
+def get_databases() -> dict[str, Any]:
+    return {
+        "active_id": database_id(ACTIVE_DATABASE_PATH),
+        "databases": [database_info(path) for path in database_paths()],
+    }
+
+
+@app.post("/api/databases")
+def create_database(payload: DatabaseCreateInput) -> dict[str, Any]:
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Database name is required.")
+    safe_name = "".join(ch.lower() if ch.isalnum() else "_" for ch in name).strip("_")
+    while "__" in safe_name:
+        safe_name = safe_name.replace("__", "_")
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Database name must include letters or numbers.")
+    path = (DATABASE_DIR / f"{safe_name}.db").resolve()
+    if path.exists():
+        raise HTTPException(status_code=409, detail=f"Database already exists: {safe_name}")
+
+    previous_path = ACTIVE_DATABASE_PATH
+    switch_database(path, create_if_missing=True)
+    create_db_and_tables()
+    ensure_sqlite_schema_compatibility()
+    if payload.seed_demo:
+        seed_data()
+    info = database_info(ACTIVE_DATABASE_PATH)
+    if not payload.seed_demo:
+        # Keep the new empty database active so the UI can immediately import into it.
+        pass
+    if previous_path != ACTIVE_DATABASE_PATH:
+        # The newly created database intentionally remains selected.
+        pass
+    return {"active_id": database_id(ACTIVE_DATABASE_PATH), "database": info, "databases": [database_info(db_path) for db_path in database_paths()]}
+
+
+@app.post("/api/databases/select")
+def select_database(payload: DatabaseSelectInput) -> dict[str, Any]:
+    path = database_path_from_id(payload.id)
+    switch_database(path)
+    create_db_and_tables()
+    ensure_sqlite_schema_compatibility()
+    return {"active_id": database_id(ACTIVE_DATABASE_PATH), "database": database_info(ACTIVE_DATABASE_PATH), "databases": [database_info(db_path) for db_path in database_paths()]}
 
 
 def metrics_for(session: Session, impl_option_id: str, subject_type: str, subject_id: str) -> dict[str, Metric]:

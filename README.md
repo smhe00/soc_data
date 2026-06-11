@@ -136,6 +136,31 @@ PULL=true bash scripts/deploy_linux.sh
 
 For LAN or public access, make sure the host firewall/security group allows TCP `5173` and `8000`.
 
+## SQLite Database Selection
+
+The built-in demo database is:
+
+```text
+backend/soc_3dic.db
+```
+
+Additional user-created SQLite databases are stored under:
+
+```text
+backend/databases/
+```
+
+Use the database selector in the app header to switch databases, or click `New DB` to create an empty SQLite database.
+New databases contain only the schema; import an Excel template or use the editing pages to add data.
+
+API endpoints:
+
+```text
+GET  /api/databases
+POST /api/databases
+POST /api/databases/select
+```
+
 ## V7 Data Model
 
 Core tables:
