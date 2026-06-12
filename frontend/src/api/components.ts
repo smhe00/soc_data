@@ -69,7 +69,6 @@ export interface ComponentDetailUpdate {
   logic_area?: number;
   sram_area?: number;
   block_area?: number;
-  power?: number;
 }
 
 export interface ComponentDetailUpdateResult {

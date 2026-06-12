@@ -333,7 +333,6 @@ class ComponentDetailUpdate(BaseModel):
     logic_area: float | None = None
     sram_area: float | None = None
     block_area: float | None = None
-    power: float | None = None
 
 
 class LogicalComponentInput(BaseModel):
@@ -537,6 +536,13 @@ def ensure_sqlite_schema_compatibility() -> None:
             )
         )
         connection.execute(text("DELETE FROM logicalcomponent WHERE instance_type = 'parent_residual'"))
+        connection.execute(
+            text(
+                "DELETE FROM metric "
+                "WHERE metric_name = 'power' "
+                "AND subject_type IN ('logical_component', 'physical_partition')"
+            )
+        )
 
 
 def number_or_zero(value: Any) -> float:
@@ -870,11 +876,11 @@ def seed_data() -> None:
                 power = round(component_power * share / category_count, 3)
                 partition_metric_values[partition_id] = (logic_area, sram_area, block_area, power, f"{category}_{tier_id.lower()}")
         metrics: list[Metric] = []
-        for component_id, (signals, sram_area, logic_area, block_area, power) in logical_metric_values.items():
-            for name, value, unit, category, workload in [("signal_count_total", signals, "count", "logical", "nominal"), ("logic_area", logic_area, "mm2", "logical_area", "nominal"), ("sram_area", sram_area, "mm2", "logical_area", "nominal"), ("block_area", block_area, "mm2", "logical_area", "nominal"), ("power", power, "W", "power", "peak")]:
+        for component_id, (signals, sram_area, logic_area, block_area, _power) in logical_metric_values.items():
+            for name, value, unit, category, workload in [("signal_count_total", signals, "count", "logical", "nominal"), ("logic_area", logic_area, "mm2", "logical_area", "nominal"), ("sram_area", sram_area, "mm2", "logical_area", "nominal"), ("block_area", block_area, "mm2", "logical_area", "nominal")]:
                 metrics.append(metric(f"M_LOG_{component_id}_{name.upper()}", "S2", "logical_component", component_id, name, value, unit, category, "number", "typical", workload, "review", "Architecture planning estimate for the realistic mobile SoC demo."))
-        for partition_id, (logic_area, sram_area, block_area, power, shape_type) in partition_metric_values.items():
-            for name, value, unit, category, workload, value_type in [("logic_area", logic_area, "mm2", "implementation_area", "nominal", "number"), ("sram_area", sram_area, "mm2", "implementation_area", "nominal", "number"), ("block_area", block_area, "mm2", "implementation_area", "nominal", "number"), ("power", power, "W", "power", "peak", "number"), ("shape_type", shape_type, "", "physical_shape", "nominal", "text")]:
+        for partition_id, (logic_area, sram_area, block_area, _power, shape_type) in partition_metric_values.items():
+            for name, value, unit, category, workload, value_type in [("logic_area", logic_area, "mm2", "implementation_area", "nominal", "number"), ("sram_area", sram_area, "mm2", "implementation_area", "nominal", "number"), ("block_area", block_area, "mm2", "implementation_area", "nominal", "number"), ("shape_type", shape_type, "", "physical_shape", "nominal", "text")]:
                 metrics.append(metric(f"M_PART_{partition_id}_{name.upper()}", "S2", "physical_partition", partition_id, name, value, unit, category, value_type, "typical", workload, "review", "Physical partition estimate for the realistic mobile SoC demo."))
         metrics.extend([
             metric("M_TIER_T0_POWER", "S2", "tier", "T0", "power", 31.2, "W", "power", "number", "typical", "peak", "review", "Compute-tier peak budget."),
@@ -1086,13 +1092,20 @@ def metric(
     )
 
 
+def database_has_project_data() -> bool:
+    with Session(engine) as session:
+        return session.exec(select(Project.id)).first() is not None
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     DATABASE_DIR.mkdir(parents=True, exist_ok=True)
     create_db_and_tables()
     ensure_sqlite_schema_compatibility()
     if ACTIVE_DATABASE_PATH == DEFAULT_DATABASE_PATH.resolve() and os.getenv("SEED_DEMO", "true").lower() in {"1", "true", "yes", "on"}:
-        seed_data()
+        force_seed = os.getenv("FORCE_SEED_DEMO", "false").lower() in {"1", "true", "yes", "on"}
+        if force_seed or not database_has_project_data():
+            seed_data()
 
 
 def database_info(path: Path) -> dict[str, Any]:
@@ -1357,7 +1370,6 @@ def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, An
         "logic_area": metric_number(metrics, "logic_area"),
         "sram_area": metric_number(metrics, "sram_area"),
         "block_area": metric_number(metrics, "block_area"),
-        "power": metric_number(metrics, "power"),
         "shape_type": metrics["shape_type"].metric_value if "shape_type" in metrics else "",
         "description": partition.description,
     }
@@ -1605,7 +1617,6 @@ def component_ui(session: Session, component: LogicalComponent, impl_option_id: 
         "sram_area": metric_number(metrics, "sram_area"),
         "block_area": block_area,
         "area": block_area,
-        "power": metric_number(metrics, "power") + sum(row["power"] for row in partition_rows),
         "tier": "/".join(tier_ids) if tier_ids else "-",
         "confidence": confidence,
         "partitions": partition_rows,
@@ -3088,7 +3099,6 @@ def recalculate_component_partitions(session: Session, impl_option_id: str, comp
     current_logic_area = metric_number(logical_metrics, "logic_area")
     current_sram_area = metric_number(logical_metrics, "sram_area")
     current_block_area = metric_number(logical_metrics, "block_area")
-    current_power = metric_number(logical_metrics, "power")
 
     child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component_id)).all()
     child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
@@ -3106,7 +3116,6 @@ def recalculate_component_partitions(session: Session, impl_option_id: str, comp
     required_cats = {cat for cat, val in self_area.items() if val > 0.01}
     if not required_cats:
         required_cats = {"block"}
-    category_count = len(required_cats)
 
     partitions_by_cat = {}
     for p in partitions:
@@ -3132,14 +3141,12 @@ def recalculate_component_partitions(session: Session, impl_option_id: str, comp
             p_logic_val = round(cat_area * share, 3) if cat == "logic" else 0.0
             p_sram_val = round(cat_area * share, 3) if cat == "sram" else 0.0
             p_block_val = round(cat_area * share, 3) if cat == "block" else 0.0
-            p_power_val = round(current_power * share / category_count, 3)
             p_shape = f"{cat}_{p.tier_id.lower()}"
 
             p_metric_configs = [
                 ("logic_area", p_logic_val, "mm2", "implementation_area", "number", "typical", "nominal"),
                 ("sram_area", p_sram_val, "mm2", "implementation_area", "number", "typical", "nominal"),
                 ("block_area", p_block_val, "mm2", "implementation_area", "number", "typical", "nominal"),
-                ("power", p_power_val, "W", "power", "number", "typical", "peak"),
                 ("shape_type", p_shape, "", "physical_shape", "text", "typical", "nominal"),
             ]
             for name, val, unit, category_type, val_type, corner, workload in p_metric_configs:
@@ -3227,7 +3234,6 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
             ("logic_area", payload.logic_area, "mm2", "logical_area", "number", "typical", "nominal"),
             ("sram_area", payload.sram_area, "mm2", "logical_area", "number", "typical", "nominal"),
             ("block_area", payload.block_area, "mm2", "logical_area", "number", "typical", "nominal"),
-            ("power", payload.power, "W", "power", "number", "typical", "peak"),
         ]
         
         for name, val, unit, category, value_type, corner, workload in metric_configs:
@@ -3295,7 +3301,6 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         current_logic_area = payload.logic_area if payload.logic_area is not None else metric_number(logical_metrics, "logic_area")
         current_sram_area = payload.sram_area if payload.sram_area is not None else metric_number(logical_metrics, "sram_area")
         current_block_area = payload.block_area if payload.block_area is not None else metric_number(logical_metrics, "block_area")
-        current_power = payload.power if payload.power is not None else metric_number(logical_metrics, "power")
 
         child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component_id)).all()
         child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
@@ -3313,7 +3318,6 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         required_cats = {cat for cat, val in self_area.items() if val > 0.01}
         if not required_cats:
             required_cats = {"block"}
-        category_count = len(required_cats)
 
         partitions_by_cat = {}
         for item in canonical_partitions:
@@ -3339,14 +3343,12 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 p_logic_val = round(cat_area * share, 3) if cat == "logic" else 0.0
                 p_sram_val = round(cat_area * share, 3) if cat == "sram" else 0.0
                 p_block_val = round(cat_area * share, 3) if cat == "block" else 0.0
-                p_power_val = round(current_power * share / category_count, 3)
                 p_shape = f"{cat}_{p_in.tier_id.lower()}"
                 
                 p_metric_configs = [
                     ("logic_area", p_logic_val, "mm2", "implementation_area", "number", "typical", "nominal"),
                     ("sram_area", p_sram_val, "mm2", "implementation_area", "number", "typical", "nominal"),
                     ("block_area", p_block_val, "mm2", "implementation_area", "number", "typical", "nominal"),
-                    ("power", p_power_val, "W", "power", "number", "typical", "peak"),
                     ("shape_type", p_shape, "", "physical_shape", "text", "typical", "nominal"),
                 ]
                 for name, val, unit, category_type, val_type, corner, workload in p_metric_configs:

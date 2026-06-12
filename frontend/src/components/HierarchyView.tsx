@@ -70,7 +70,6 @@ interface PartitionMappingEditorProps {
       logic_area?: number;
       sram_area?: number;
       block_area?: number;
-      power?: number;
     }
   ) => Promise<void>;
 }
@@ -92,7 +91,6 @@ export interface HierarchyViewProps {
       logic_area?: number;
       sram_area?: number;
       block_area?: number;
-      power?: number;
     }
   ) => Promise<void>;
   onCreateLogicalComponent: (payload: LogicalComponentInput) => Promise<void>;
@@ -148,6 +146,7 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
   const hasChildren = node.children.length > 0;
   const expanded = expandedIds.has(node.id);
   const active = selectedId === node.id;
+  const mappingClosed = hasChildren ? node.subtree_mapping_closed : node.own_mapping_closed;
 
   return (
     <div>
@@ -177,6 +176,16 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
         <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect(node.id)} type="button">
           <ResourceIcon resource={node.resource} />
           <span className="truncate font-medium">{node.name}</span>
+          {mappingClosed === false && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] ${
+                active ? "bg-amber-100 text-amber-700" : "bg-amber-50 text-amber-700"
+              }`}
+              title={hasChildren ? "Subtree mapping is open" : "Self mapping is open"}
+            >
+              unmap
+            </span>
+          )}
           <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] ${active ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>
             {node.tier}
           </span>
@@ -244,7 +253,6 @@ function makeDefaultPartition(component: BlockNode, selectedImplOptionId: string
     logic_area: 0,
     sram_area: 0,
     block_area: 0,
-    power: 0,
     shape_type: "",
     description: `Auto-filled ${partitionResourceLabels[category]} mapping for ${component.name}.`,
   };
@@ -263,6 +271,11 @@ function formFromComponent(component: BlockNode, mode: HierarchyEditMode): Logic
     visibility_level: mode === "edit" ? component.visibility_level : "team",
     description: mode === "edit" ? component.description : "",
   };
+}
+
+function parentPathFor(component: BlockNode, blocks: BlockNode[]): string {
+  if (!component.parent) return "-";
+  return blocks.find((block) => block.id === component.parent)?.hierarchy_path ?? component.parent;
 }
 
 function canonicalPartitionBaseName(component: BlockNode, partition: PhysicalPartition): string {
@@ -314,10 +327,11 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
   const [logicArea, setLogicArea] = useState<number>(Number(((component.logic_area || 0) / initCount).toFixed(3)));
   const [sramArea, setSramArea] = useState<number>(Number(((component.sram_area || 0) / initCount).toFixed(3)));
   const [blockArea, setBlockArea] = useState<number>(Number(((component.block_area || 0) / initCount).toFixed(3)));
-  const [powerMw, setPowerMw] = useState<number>(Number((((component.power || 0) / initCount) * 1000).toFixed(3)));
   const [partitions, setPartitions] = useState<PhysicalPartition[]>(component.partitions);
   const [saving, setSaving] = useState<boolean>(false);
+  const [savingLogical, setSavingLogical] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const mappingLogicalCount = component.logical_instance_count || 1;
 
   useEffect(() => {
     const absCount = component.absolute_logical_instance_count || 1;
@@ -326,7 +340,6 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
     setLogicArea(Number(((component.logic_area || 0) / absCount).toFixed(3)));
     setSramArea(Number(((component.sram_area || 0) / absCount).toFixed(3)));
     setBlockArea(Number(((component.block_area || 0) / absCount).toFixed(3)));
-    setPowerMw(Number((((component.power || 0) / absCount) * 1000).toFixed(3)));
     const normalizedPartitions = component.partitions.map((partition) => ({
       ...partition,
       resource_category: partition.resource_category ?? "block",
@@ -376,11 +389,14 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
   }, [component, logicArea, sramArea, blockArea, logicalCount, parentAbsoluteCount]);
 
   const liveRequiredCategories = useMemo<PartitionResourceCategory[]>(() => {
-    const cats = partitionResourceCategories
-      .filter((cat) => liveResiduals[cat.id] > 0.01)
-      .map((cat) => cat.id);
+    const savedResiduals = {
+      logic: component.has_children ? component.residual_logic_area : component.logic_area,
+      sram: component.has_children ? component.residual_sram_area : component.sram_area,
+      block: component.has_children ? component.residual_block_area : component.block_area,
+    };
+    const cats = partitionResourceCategories.filter((cat) => savedResiduals[cat.id] > 0.01).map((cat) => cat.id);
     return cats.length > 0 ? cats : ["block"];
-  }, [liveResiduals]);
+  }, [component]);
 
   const categoryCoverage = partitionResourceCategories.map((category) => {
     const equivalent = partitions
@@ -392,7 +408,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
       equivalent,
       rowCount,
       required: liveRequiredCategories.includes(category.id),
-      closed: !liveRequiredCategories.includes(category.id) && rowCount === 0 ? true : Math.abs(equivalent - logicalCount) < 0.001,
+      closed: !liveRequiredCategories.includes(category.id) && rowCount === 0 ? true : Math.abs(equivalent - mappingLogicalCount) < 0.001,
     };
   });
 
@@ -420,29 +436,36 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
   function addPartition(): void {
     const suffix = partitions.length + 1;
     const resourceCategory = liveRequiredCategories.find((category) => !partitions.some((partition) => partition.resource_category === category)) ?? partitionResourceCategories.find((category) => !partitions.some((partition) => partition.resource_category === category.id))?.id ?? "logic";
-    setPartitions((rows) => [
-      ...rows,
-      makeDefaultPartition(component, selectedImplOptionId, logicalCount, tiers, resourceCategory, suffix),
-    ]);
+    setPartitions((rows) => [...rows, makeDefaultPartition(component, selectedImplOptionId, mappingLogicalCount, tiers, resourceCategory, suffix)]);
   }
 
-  async function save(): Promise<void> {
+  async function saveLogicalDefinition(): Promise<void> {
     try {
-      setSaving(true);
+      setSavingLogical(true);
       setSaveError(null);
       const count = logicalCount || 1;
       const absoluteCount = count * parentAbsoluteCount;
+      await onSave(component, count, component.partitions, {
+        signal_count_total: Math.round(signalCount * absoluteCount),
+        logic_area: logicArea * absoluteCount,
+        sram_area: sramArea * absoluteCount,
+        block_area: blockArea * absoluteCount,
+      });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Unknown save error");
+    } finally {
+      setSavingLogical(false);
+    }
+  }
+
+  async function saveMapping(): Promise<void> {
+    try {
+      setSaving(true);
+      setSaveError(null);
       await onSave(
         component,
-        logicalCount,
-        canonicalizePartitionNames(component, sortPartitionsForDisplay(partitions)),
-        {
-          signal_count_total: Math.round(signalCount * absoluteCount),
-          logic_area: logicArea * absoluteCount,
-          sram_area: sramArea * absoluteCount,
-          block_area: blockArea * absoluteCount,
-          power: (powerMw / 1000) * absoluteCount,
-        }
+        mappingLogicalCount,
+        canonicalizePartitionNames(component, sortPartitionsForDisplay(partitions))
       );
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Unknown save error");
@@ -456,8 +479,9 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
     : `Daily edit surface for ${selectedTeam}; metrics stay behind friendly fields.`;
 
   return (
-    <Card title="Logical Info & Physical Partition Editor" subtitle={mappingSubtitle} icon={SplitSquareVertical}>
-      <div className="mb-4 grid gap-4 sm:grid-cols-2 md:grid-cols-6 rounded-2xl bg-slate-50 p-4 border border-slate-100">
+    <div className="space-y-6">
+    <Card title="Logical Definition" subtitle="Edit logical instance count, signal count, and base-area metrics before physical planning." icon={Cpu}>
+      <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5 rounded-2xl bg-slate-50 p-4 border border-slate-100">
         <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1">Logical Instances</label>
           <input
@@ -531,31 +555,28 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
             </div>
           )}
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1">Power (per inst, mW)</label>
-          <input
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-slate-400"
-            type="number"
-            step={0.01}
-            min={0}
-            value={powerMw}
-            onChange={(e) => setPowerMw(Number(e.target.value))}
-          />
-          {logicalCount > 1 && (
-            <div className="mt-1 text-[10px] text-slate-500 font-medium">
-              Total: {(powerMw * logicalCount).toFixed(3)} mW
-            </div>
-          )}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-xs text-slate-500">
+          Physical partition rows are not changed by this save.
+        </div>
+        <div className="flex items-center gap-3">
+          {saveError && !saving && <span className="max-w-xl text-sm text-red-600">{saveError}</span>}
+          <button className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60" disabled={savingLogical} type="button" onClick={() => void saveLogicalDefinition()}>
+            {savingLogical ? "Saving..." : "Save Logical Definition"}
+          </button>
         </div>
       </div>
+    </Card>
 
+    <Card title="Physical Partition Mapping" subtitle={mappingSubtitle} icon={SplitSquareVertical}>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl bg-slate-50/50 border border-slate-100 p-4">
           <div className="text-xs text-slate-500 font-medium mb-2">Mapped Equivalent by Category</div>
           <div className="flex flex-wrap gap-2">
             {categoryCoverage.map((category) => (
               <Badge key={category.id} tone={category.closed ? "green" : "amber"}>
-                {category.label} {category.required ? `${category.equivalent.toFixed(2)}/${logicalCount}` : category.rowCount === 0 ? "optional" : `${category.equivalent.toFixed(2)}/${logicalCount}`}
+                {category.label} {category.required ? `${category.equivalent.toFixed(2)}/${mappingLogicalCount}` : category.rowCount === 0 ? "optional" : `${category.equivalent.toFixed(2)}/${mappingLogicalCount}`}
               </Badge>
             ))}
           </div>
@@ -633,7 +654,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
                   <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-400" min={0} type="number" value={partition.physical_instance_count} onChange={(event) => updatePartition(partition.originalIndex, { physical_instance_count: Number(event.target.value) })} />
                 </td>
                 <td className="px-3 py-2">
-                  <span className="text-sm font-medium text-slate-700">{logicalCount ? (Number(partition.physical_instance_count || 0) / logicalCount * 100).toFixed(1) : "0.0"}%</span>
+                  <span className="text-sm font-medium text-slate-700">{mappingLogicalCount ? (Number(partition.physical_instance_count || 0) / mappingLogicalCount * 100).toFixed(1) : "0.0"}%</span>
                 </td>
                 <td className="px-3 py-2">
                   <input
@@ -662,12 +683,13 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
         <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" type="button" onClick={addPartition}>Add Partition</button>
         <div className="flex items-center gap-3">
           {saveError && <span className="max-w-xl text-sm text-red-600">{saveError}</span>}
-          <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60" disabled={saving} type="button" onClick={() => void save()}>
+          <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60" disabled={saving} type="button" onClick={() => void saveMapping()}>
             {saving ? "Saving..." : "Save Mapping"}
           </button>
         </div>
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -970,7 +992,6 @@ export function HierarchyView({
                               logic_area: nextLogic,
                               sram_area: nextSram,
                               block_area: nextBlock,
-                              power: selected.power,
                             }
                           );
                         }}
@@ -1126,7 +1147,9 @@ export function HierarchyView({
               </div>
               <div className="rounded-xl bg-slate-50 p-3">
                 <div className="text-xs text-slate-500">Parent</div>
-                <div className="mt-1 font-semibold text-slate-900">{selected.parent || "-"}</div>
+                <div className="mt-1 truncate font-semibold text-slate-900" title={parentPathFor(selected, blocks)}>
+                  {parentPathFor(selected, blocks)}
+                </div>
               </div>
               <div className="rounded-xl bg-slate-50 p-3">
                 <div className="text-xs text-slate-500">Owner</div>

@@ -313,7 +313,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       logic_area?: number;
       sram_area?: number;
       block_area?: number;
-      power?: number;
     }
   ): Promise<void> {
     await updateComponentDetail(component.id, {

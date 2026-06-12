@@ -28,7 +28,6 @@ export interface BlockNode {
   residual_sram_area: number;
   residual_block_area: number;
   area: number;
-  power: number;
   tier: string;
   confidence: ConfidenceLevel;
   partitions: PhysicalPartition[];
@@ -58,7 +57,6 @@ export interface PhysicalPartition {
   logic_area: number;
   sram_area: number;
   block_area: number;
-  power: number;
   shape_type: string;
   description: string;
 }
