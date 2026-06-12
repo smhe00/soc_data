@@ -731,22 +731,22 @@ def seed_data() -> None:
         ]
 
         logical_metric_values = {
-            "B0": (2200, 84.0, 168.0, 285.0, 0.0), "B_CPU": (620, 10.0, 28.0, 42.0, 9.8),
-            "B_CPU_P": (320, 0.0, 18.4, 20.2, 7.8),
-            "B_CPU_P_ALU": (160, 0.0, 10.0, 10.0, 4.0),
-            "B_CPU_P_CTRL": (80, 0.0, 5.0, 5.0, 2.0),
-            "B_CPU_P_L1": (80, 0.0, 2.0, 3.2, 1.0),
-            "B_CPU_E": (220, 0.0, 5.8, 6.5, 2.2),
-            "B_CPU_E_ALU": (120, 0.0, 3.5, 4.0, 1.2),
-            "B_CPU_E_CTRL": (60, 0.0, 1.5, 1.5, 0.6),
-            "B_CPU_L3": (180, 9.6, 2.1, 12.8, 1.6),
-            "B_GPU": (740, 10.5, 30.8, 44.0, 9.4), "B_GPU_SHADER": (520, 0.0, 27.6, 30.2, 8.6), "B_GPU_L2": (96, 8.6, 0.8, 9.9, 0.8), "B_NPU": (680, 14.2, 24.7, 43.5, 7.2), "B_NPU_TENSOR": (360, 0.0, 20.8, 22.4, 6.4), "B_NPU_SRAM": (128, 12.8, 0.9, 14.2, 0.7), "B_NPU_DMA": (104, 0.8, 2.5, 3.6, 0.6),
-            "B_ISP": (420, 4.0, 13.3, 19.0, 3.6), "B_ISP_PIPE": (240, 1.8, 9.6, 12.0, 2.8), "B_CV_DSP": (150, 1.2, 3.7, 5.2, 0.9), "B_MEDIA": (240, 1.2, 7.8, 10.0, 2.1), "B_VDEC": (120, 0.5, 3.6, 4.6, 0.9), "B_VENC": (130, 0.6, 4.2, 5.3, 1.1), "B_DISPLAY": (150, 0.8, 4.2, 5.6, 1.0),
-            "B_DPU": (120, 0.6, 3.6, 4.8, 0.9),
-            "B_DPU_PIXEL_PROC": (70, 0.0, 2.0, 3.0, 0.5),
-            "B_DPU_SRAM": (40, 0.4, 0.5, 1.0, 0.2),
-            "B_MODEM": (520, 7.8, 19.6, 31.0, 5.4), "B_MODEM_DSP": (260, 1.6, 10.2, 12.6, 3.2), "B_MODEM_SRAM": (90, 5.4, 0.7, 6.4, 0.5), "B_MODEM_RF": (110, 0.8, 3.8, 5.1, 0.9), "B_MEM": (260, 32.0, 6.0, 42.0, 2.5), "B_SYS_CACHE": (80, 25.6, 0.9, 28.2, 1.1), "B_LPDDR_CTRL": (180, 1.2, 4.8, 6.1, 1.4), "B_NOC": (300, 0.8, 8.5, 10.5, 2.2),
-            "B_IO": (210, 0.5, 18.0, 24.0, 2.0), "B_DDR_PHY": (70, 0.0, 8.8, 9.6, 1.1), "B_UFS_PHY": (24, 0.0, 1.5, 1.8, 0.2), "B_USB_PCIE_PHY": (42, 0.0, 2.8, 3.4, 0.4), "B_MIPI_PHY": (52, 0.0, 3.6, 4.5, 0.3), "B_SEC": (95, 1.2, 2.2, 4.0, 0.6), "B_CRYPTO": (50, 0.2, 1.2, 1.7, 0.4), "B_PMU": (86, 0.8, 2.8, 4.2, 0.3),
+            "B0": (2200, 84.0, 168.0, 285.0), "B_CPU": (620, 10.0, 28.0, 42.0),
+            "B_CPU_P": (320, 0.0, 18.4, 20.2),
+            "B_CPU_P_ALU": (160, 0.0, 10.0, 10.0),
+            "B_CPU_P_CTRL": (80, 0.0, 5.0, 5.0),
+            "B_CPU_P_L1": (80, 0.0, 2.0, 3.2),
+            "B_CPU_E": (220, 0.0, 5.8, 6.5),
+            "B_CPU_E_ALU": (120, 0.0, 3.5, 4.0),
+            "B_CPU_E_CTRL": (60, 0.0, 1.5, 1.5),
+            "B_CPU_L3": (180, 9.6, 2.1, 12.8),
+            "B_GPU": (740, 10.5, 30.8, 44.0), "B_GPU_SHADER": (520, 0.0, 27.6, 30.2), "B_GPU_L2": (96, 8.6, 0.8, 9.9), "B_NPU": (680, 14.2, 24.7, 43.5), "B_NPU_TENSOR": (360, 0.0, 20.8, 22.4), "B_NPU_SRAM": (128, 12.8, 0.9, 14.2), "B_NPU_DMA": (104, 0.8, 2.5, 3.6),
+            "B_ISP": (420, 4.0, 13.3, 19.0), "B_ISP_PIPE": (240, 1.8, 9.6, 12.0), "B_CV_DSP": (150, 1.2, 3.7, 5.2), "B_MEDIA": (240, 1.2, 7.8, 10.0), "B_VDEC": (120, 0.5, 3.6, 4.6), "B_VENC": (130, 0.6, 4.2, 5.3), "B_DISPLAY": (150, 0.8, 4.2, 5.6),
+            "B_DPU": (120, 0.6, 3.6, 4.8),
+            "B_DPU_PIXEL_PROC": (70, 0.0, 2.0, 3.0),
+            "B_DPU_SRAM": (40, 0.4, 0.5, 1.0),
+            "B_MODEM": (520, 7.8, 19.6, 31.0), "B_MODEM_DSP": (260, 1.6, 10.2, 12.6), "B_MODEM_SRAM": (90, 5.4, 0.7, 6.4), "B_MODEM_RF": (110, 0.8, 3.8, 5.1), "B_MEM": (260, 32.0, 6.0, 42.0), "B_SYS_CACHE": (80, 25.6, 0.9, 28.2), "B_LPDDR_CTRL": (180, 1.2, 4.8, 6.1), "B_NOC": (300, 0.8, 8.5, 10.5),
+            "B_IO": (210, 0.5, 18.0, 24.0), "B_DDR_PHY": (70, 0.0, 8.8, 9.6), "B_UFS_PHY": (24, 0.0, 1.5, 1.8), "B_USB_PCIE_PHY": (42, 0.0, 2.8, 3.4), "B_MIPI_PHY": (52, 0.0, 3.6, 4.5), "B_SEC": (95, 1.2, 2.2, 4.0), "B_CRYPTO": (50, 0.2, 1.2, 1.7), "B_PMU": (86, 0.8, 2.8, 4.2),
         }
         logical_by_id = {component.id: component for component in logical_components}
         children_by_parent: dict[str, list[LogicalComponent]] = {}
@@ -858,28 +858,25 @@ def seed_data() -> None:
             value = values[index] - sum(row[index] for row in child_values) if child_values else values[index]
             return max(0.0, value)
 
-        partition_metric_values: dict[str, tuple[float, float, float, float, str]] = {}
+        partition_metric_values: dict[str, tuple[float, float, float, str]] = {}
         rows_by_component_category: dict[tuple[str, str], list[tuple[str, str, str, str, str, str, int, float]]] = {}
         for row in partition_rows:
             rows_by_component_category.setdefault((row[1], row[5]), []).append(row)
         for (component_id, category), rows in rows_by_component_category.items():
             category_area = category_area_for_seed(component_id, category)
             total_equivalent = sum(count * (1.0 if ptype == "full" else ratio) for _, _, _, _, ptype, _, count, ratio in rows) or 1.0
-            component_power = logical_metric_values[component_id][4]
-            category_count = len(required_categories_for_seed(component_id)) or 1
             for partition_id, _logical_id, tier_id, _name, ptype, _category, count, ratio in rows:
                 equivalent = count * (1.0 if ptype == "full" else ratio)
                 share = equivalent / total_equivalent
                 logic_area = round(category_area * share, 3) if category == "logic" else 0.0
                 sram_area = round(category_area * share, 3) if category == "sram" else 0.0
                 block_area = round(category_area * share, 3) if category == "block" else 0.0
-                power = round(component_power * share / category_count, 3)
-                partition_metric_values[partition_id] = (logic_area, sram_area, block_area, power, f"{category}_{tier_id.lower()}")
+                partition_metric_values[partition_id] = (logic_area, sram_area, block_area, f"{category}_{tier_id.lower()}")
         metrics: list[Metric] = []
-        for component_id, (signals, sram_area, logic_area, block_area, _power) in logical_metric_values.items():
+        for component_id, (signals, sram_area, logic_area, block_area) in logical_metric_values.items():
             for name, value, unit, category, workload in [("signal_count_total", signals, "count", "logical", "nominal"), ("logic_area", logic_area, "mm2", "logical_area", "nominal"), ("sram_area", sram_area, "mm2", "logical_area", "nominal"), ("block_area", block_area, "mm2", "logical_area", "nominal")]:
                 metrics.append(metric(f"M_LOG_{component_id}_{name.upper()}", "S2", "logical_component", component_id, name, value, unit, category, "number", "typical", workload, "review", "Architecture planning estimate for the realistic mobile SoC demo."))
-        for partition_id, (logic_area, sram_area, block_area, _power, shape_type) in partition_metric_values.items():
+        for partition_id, (logic_area, sram_area, block_area, shape_type) in partition_metric_values.items():
             for name, value, unit, category, workload, value_type in [("logic_area", logic_area, "mm2", "implementation_area", "nominal", "number"), ("sram_area", sram_area, "mm2", "implementation_area", "nominal", "number"), ("block_area", block_area, "mm2", "implementation_area", "nominal", "number"), ("shape_type", shape_type, "", "physical_shape", "nominal", "text")]:
                 metrics.append(metric(f"M_PART_{partition_id}_{name.upper()}", "S2", "physical_partition", partition_id, name, value, unit, category, value_type, "typical", workload, "review", "Physical partition estimate for the realistic mobile SoC demo."))
         metrics.extend([
@@ -2045,7 +2042,7 @@ def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str |
                 make_quality_issue(
                     "Medium",
                     "Tier physical area limit exceeded",
-                    f"Tier {tier.id} ({tier.name}) computed area {total_scaled_area:.3f} mm² (after process scaling) exceeds its limit of {tier.area_limit_mm2:.3f} mm².",
+                    f"Tier {tier.id} ({tier.name}) computed area {total_scaled_area:.3f} mm2 (after process scaling) exceeds its limit of {tier.area_limit_mm2:.3f} mm2.",
                     "Optimize partition mappings, move blocks to other tiers, or use a more advanced process node with better area scaling.",
                     "tier",
                     tier.id,
@@ -2453,12 +2450,12 @@ def build_power_hierarchy_rollups(
             else:
                 child_sum += child_power
 
-        residual = None
+        unsplit_power = None
         status = "incomplete"
         if parent_power is None:
             status = "incomplete"
         else:
-            residual = round(parent_power - child_sum, 4)
+            unsplit_power = round(parent_power - child_sum, 4)
             tolerance = power_rollup_tolerance(parent_power, child_sum)
             if missing_child_count > 0:
                 status = "incomplete"
@@ -2467,7 +2464,7 @@ def build_power_hierarchy_rollups(
             elif abs(parent_power - child_sum) <= tolerance:
                 status = "closed"
             else:
-                status = "residual"
+                status = "unsplit"
 
         parent = components_by_id.get(parent_id)
         rollups.append(
@@ -2479,7 +2476,8 @@ def build_power_hierarchy_rollups(
                 "assigned_child_count": assigned_child_count,
                 "missing_child_count": missing_child_count,
                 "child_sum_power_w": round(child_sum, 4),
-                "residual_power_w": residual,
+                "unsplit_power_w": unsplit_power,
+                "residual_power_w": unsplit_power,
                 "status": status,
                 "covered_descendant_ids": sorted(descendants_by_id.get(parent_id, set())),
             }

@@ -11,55 +11,55 @@ export interface SchemaTable {
 const schemaTables: SchemaTable[] = [
   {
     table: "project",
-    purpose: "产品线、项目、代际管理",
-    fields: "project_id, family, name, owner, phase, created_at",
+    purpose: "Product family, project generation, ownership, and planning phase.",
+    fields: "id, name, product_family, generation, owner, phase",
   },
   {
     table: "impl_option",
-    purpose: "2D/3DIC/降本/性能方案管理",
-    fields: "impl_option_id, project_id, name, process_combo, status",
+    purpose: "Implementation options such as monolithic, 2.5D, or 3DIC stack choices.",
+    fields: "id, project_id, name, impl_type, process_combo, status",
   },
   {
     table: "module_definition",
-    purpose: "可复用RTL/IP/block主定义",
+    purpose: "Reusable RTL, IP, hard macro, and subsystem definitions.",
     fields: "id, name, module_type, ip_owner, reuse_class",
   },
   {
     table: "logical_component",
-    purpose: "逻辑层次结构与逻辑例化数量",
+    purpose: "Logical hierarchy and logical instance count.",
     fields: "id, parent_id, module_definition_id, hierarchy_path, logical_instance_count",
   },
   {
     table: "process_node",
-    purpose: "工艺能力、密度、成本、成熟度",
-    fields: "process_id, foundry, node, logic_density, sram_density, logic/sram/block_area_scale",
+    purpose: "Process density, voltage, cost, maturity, and area scaling by resource category.",
+    fields: "id, foundry, node_name, logic/sram/block_area_scale",
   },
   {
     table: "tier",
-    purpose: "3D stack中每层die/tier定义",
-    fields: "tier_id, impl_option_id, process_id, tier_index, role, thickness",
+    purpose: "Die or tier definition inside an implementation option.",
+    fields: "id, impl_option_id, process_id, tier_index, tier_name, role",
   },
   {
     table: "physical_partition",
-    purpose: "逻辑模块到Tier的物理承载事实",
-    fields: "id, logical_component_id, tier_id, resource_category, physical_instance_count, content_share",
+    purpose: "Mapping from a logical component's self/residual content to a tier.",
+    fields: "id, impl_option_id, logical_component_id, tier_id, resource_category, physical_instance_count, content_share",
   },
   {
     table: "metric",
-    purpose: "统一指标表，挂到logical/partition/tier/impl_option",
-    fields: "id, subject_type, subject_id, metric_name, metric_value, value_type",
+    purpose: "Typed metric rows attached to logical components, physical partitions, tiers, or implementation options.",
+    fields: "id, impl_option_id, subject_type, subject_id, metric_name, metric_value, value_type",
   },
   {
-    table: "source_artifact",
-    purpose: "Excel/PDF/report/PPT等来源追溯",
-    fields: "source_id, filename, source_type, owner, version, uploaded_at",
+    table: "power_observation",
+    purpose: "Application power use cases and scenario composition source values.",
+    fields: "component_id, use_case_name, operating_point_set_id, power_value_w",
   },
 ];
 
 export function SchemaView(): JSX.Element {
   return (
     <div className="space-y-6">
-      <Card title="Phase-1 Logical Data Model" subtitle="先稳定核心表，后续AI、仿真、优化都挂在这套数据模型上" icon={Database}>
+      <Card title="Phase-1 Data Model" subtitle="Core SQLite tables for logical hierarchy, physical mapping, metrics, and application power." icon={Database}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {schemaTables.map((table) => (
             <div key={table.table} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -71,36 +71,46 @@ export function SchemaView(): JSX.Element {
         </div>
       </Card>
 
-      <Card title="Phase-1 Boundary" subtitle="原型阶段不追求完整EDA闭环，先保证数据结构、追溯、对比能力" icon={Settings2}>
+      <Card title="Phase-1 Boundary" subtitle="Keep daily data maintenance explicit, reviewable, and SQLite-friendly." icon={Settings2}>
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><CheckCircle2 size={18} />Included</div>
+            <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
+              <CheckCircle2 size={18} />
+              Included
+            </div>
             <ul className="space-y-2 text-sm leading-6 text-slate-600">
-              <li>项目/方案/版本管理</li>
-              <li>Block hierarchy和资源类型建模</li>
-              <li>Process/Tier/Allocation</li>
-              <li>面积/功耗/频率基础指标</li>
-              <li>文件来源追溯</li>
+              <li>Project and implementation option tracking</li>
+              <li>Logical hierarchy and responsibility ownership</li>
+              <li>Process, tier, and physical partition mapping</li>
+              <li>Logic, SRAM, block area metrics with process scaling</li>
+              <li>Application power use case library and scenario composition</li>
+              <li>Excel import/export for bulk exchange</li>
             </ul>
           </div>
           <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><AlertTriangle size={18} />Deferred to P1/P2</div>
+            <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
+              <AlertTriangle size={18} />
+              Deferred
+            </div>
             <ul className="space-y-2 text-sm leading-6 text-slate-600">
-              <li>AI自动解析和命名对齐</li>
-              <li>Thermal surrogate model</li>
-              <li>Partition candidate generator</li>
-              <li>EDA flow自动闭环</li>
-              <li>Cost/yield高级模型</li>
+              <li>Multi-user authentication and role enforcement</li>
+              <li>Thermal, cost, and yield surrogate models</li>
+              <li>EDA flow automation</li>
+              <li>Automatic partition optimization</li>
+              <li>Production database migration and audit trails</li>
             </ul>
           </div>
           <div className="rounded-2xl bg-slate-50 p-5">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><Flame size={18} />Key Risk</div>
+            <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900">
+              <Flame size={18} />
+              Data Risks
+            </div>
             <ul className="space-y-2 text-sm leading-6 text-slate-600">
-              <li>数据口径不一致</li>
-              <li>Block命名不统一</li>
-              <li>PHY/Analog约束遗漏</li>
-              <li>3D split比例缺失</li>
-              <li>来源文件不可追溯</li>
+              <li>Logical hierarchy and physical mapping edited out of sequence</li>
+              <li>Resource category closure not matching logical instance count</li>
+              <li>Parent subtree closure hidden by local self/residual closure</li>
+              <li>Application power use cases mixed with legacy block metrics</li>
+              <li>Excel imports overwriting reviewed web edits</li>
             </ul>
           </div>
         </div>

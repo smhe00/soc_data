@@ -519,7 +519,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
           />
           {logicalCount > 1 && (
             <div className="mt-1 text-[10px] text-slate-500 font-medium">
-              Total: {(logicArea * logicalCount).toFixed(3)} mm²
+              Total: {(logicArea * logicalCount).toFixed(3)} mm2
             </div>
           )}
         </div>
@@ -535,7 +535,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
           />
           {logicalCount > 1 && (
             <div className="mt-1 text-[10px] text-slate-500 font-medium">
-              Total: {(sramArea * logicalCount).toFixed(3)} mm²
+              Total: {(sramArea * logicalCount).toFixed(3)} mm2
             </div>
           )}
         </div>
@@ -551,7 +551,7 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
           />
           {logicalCount > 1 && (
             <div className="mt-1 text-[10px] text-slate-500 font-medium">
-              Total: {(blockArea * logicalCount).toFixed(3)} mm²
+              Total: {(blockArea * logicalCount).toFixed(3)} mm2
             </div>
           )}
         </div>
@@ -590,12 +590,12 @@ function PartitionMappingEditor({ component, blocks, tiers, selectedImplOptionId
         </div>
         <div className="rounded-2xl bg-slate-50/50 border border-slate-100 p-4 relative group">
           <div className="flex items-center justify-between gap-1 text-xs text-slate-50 font-medium mb-2">
-            <span className="text-slate-500">Live Residual Area (mm²)</span>
+            <span className="text-slate-500">Live Residual Area (mm2)</span>
             {component.has_children && (liveResiduals.logic < -0.001 || liveResiduals.sram < -0.001 || liveResiduals.block < -0.001) && (
               <button
                 className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200 hover:bg-amber-100 transition shadow-sm"
                 onClick={fixFormResiduals}
-                title="自动增加当前层面积以消除负值"
+                title="Raise this component's self area to remove negative residual area"
                 type="button"
               >
                 Fix
@@ -851,7 +851,7 @@ export function HierarchyView({
               aria-label="Expand all blocks"
               className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
               onClick={expandAll}
-              title="展开全部"
+              title="Expand all"
               type="button"
             >
               <ChevronDown size={15} />
@@ -860,7 +860,7 @@ export function HierarchyView({
               aria-label="Collapse all blocks"
               className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
               onClick={collapseAll}
-              title="折叠全部"
+              title="Collapse all"
               type="button"
             >
               <ChevronRight size={15} />
@@ -936,7 +936,7 @@ export function HierarchyView({
               <div className="mt-3 flex items-start gap-6">
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{formatNumber(selected.logic_area)}</div>
-                  <div className="text-xs text-slate-500">logic mm²</div>
+                  <div className="text-xs text-slate-500">logic mm2</div>
                   {selected.absolute_logical_instance_count > 1 && (
                     <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
                       {(selected.logic_area / selected.absolute_logical_instance_count).toFixed(3)} / inst
@@ -945,7 +945,7 @@ export function HierarchyView({
                 </div>
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{formatNumber(selected.sram_area)}</div>
-                  <div className="text-xs text-slate-500">SRAM mm²</div>
+                  <div className="text-xs text-slate-500">SRAM mm2</div>
                   {selected.absolute_logical_instance_count > 1 && (
                     <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
                       {(selected.sram_area / selected.absolute_logical_instance_count).toFixed(3)} / inst
@@ -954,7 +954,7 @@ export function HierarchyView({
                 </div>
                 <div>
                   <div className="text-2xl font-semibold text-slate-950">{formatNumber(selected.block_area)}</div>
-                  <div className="text-xs text-slate-500">block mm²</div>
+                  <div className="text-xs text-slate-500">block mm2</div>
                   {selected.absolute_logical_instance_count > 1 && (
                     <div className="mt-1 text-[11px] font-medium text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-100 shadow-sm inline-block whitespace-nowrap">
                       {(selected.block_area / selected.absolute_logical_instance_count).toFixed(3)} / inst
@@ -976,7 +976,7 @@ export function HierarchyView({
                   </div>
                   {(selected.residual_logic_area < -0.001 || selected.residual_sram_area < -0.001 || selected.residual_block_area < -0.001) && (
                     <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between gap-3">
-                      <span className="text-[11px] text-amber-700 font-semibold">检测到负的 Residual 面积！</span>
+                      <span className="text-[11px] text-amber-700 font-semibold">Negative residual area detected.</span>
                       <button
                         className="rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 border border-amber-200 hover:bg-amber-100 transition shadow-sm"
                         onClick={async () => {
@@ -996,7 +996,7 @@ export function HierarchyView({
                           );
                         }}
                         type="button"
-                        title="点击调整本级面积以对齐下层子模块总和"
+                        title="Raise this component's total area to match child sums"
                       >
                         Fix Residual
                       </button>
@@ -1238,19 +1238,19 @@ export function HierarchyView({
 
         <PartitionMappingEditor component={selected} blocks={blocks} tiers={tiers} selectedImplOptionId={selectedImplOptionId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
 
-        <Card title="建模原则" subtitle="第一阶段需要先统一数据口径" icon={Settings2}>
+        <Card title="Modeling Principles" subtitle="Keep logical definition, physical mapping, and application power as separate maintenance steps." icon={Settings2}>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><Cpu size={18} />Logic</div>
-              <p className="text-sm leading-6 text-slate-600">保存晶体管数、标准单元面积、利用率和工艺密度，用于跨工艺面积换算。</p>
+              <p className="text-sm leading-6 text-slate-600">Logical hierarchy stores structure, ownership, instance count, and base-process area metrics. Parent self/residual area is derived from child sums.</p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><MemoryStick size={18} />Memory</div>
-              <p className="text-sm leading-6 text-slate-600">保存macro实例、容量、compiler版本、实际macro面积，避免纯经验估算。</p>
+              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><MemoryStick size={18} />Physical Mapping</div>
+              <p className="text-sm leading-6 text-slate-600">Physical partitions map only the selected component's own self/residual logic, SRAM, and block content to tiers. Closure is checked per resource category and recursively through children.</p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><RadioTower size={18} />PHY / Analog</div>
-              <p className="text-sm leading-6 text-slate-600">按固定物理面积和placement constraint记录，不建议自动拆分。</p>
+              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><RadioTower size={18} />Power</div>
+              <p className="text-sm leading-6 text-slate-600">Application power is maintained in the power use case library and scenario composition page, not as block hierarchy or partition metrics.</p>
             </div>
           </div>
         </Card>

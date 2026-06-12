@@ -91,16 +91,16 @@ function formatMw(powerW: number | null | undefined): string {
 
 function rollupTone(status: ApplicationPowerSummary["hierarchy_rollups"][number]["status"]): "slate" | "green" | "amber" | "red" | "blue" {
   if (status === "closed") return "green";
-  if (status === "residual") return "blue";
+  if (status === "unsplit") return "blue";
   if (status === "over_specified") return "red";
   return "amber";
 }
 
 function rollupLabel(rollup: ApplicationPowerSummary["hierarchy_rollups"][number]): string {
   if (rollup.status === "closed") return "Closed";
-  if (rollup.status === "over_specified") return `Over ${formatMw(Math.abs(rollup.residual_power_w || 0))}`;
+  if (rollup.status === "over_specified") return `Over ${formatMw(Math.abs(rollup.unsplit_power_w ?? rollup.residual_power_w ?? 0))}`;
   if (rollup.status === "incomplete") return "Incomplete";
-  return `Unsplit ${formatMw(rollup.residual_power_w)}`;
+  return `Unsplit ${formatMw(rollup.unsplit_power_w ?? rollup.residual_power_w)}`;
 }
 
 function profileIdFromName(name: string): string {

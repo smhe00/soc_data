@@ -15,11 +15,11 @@ The latest demo seed models a realistic flagship mobile SoC:
 
 - 43 logical components.
 - 144 physical partitions.
-- 3 scenarios:
+- 3 implementation options:
   - `S1`: monolithic N3E baseline.
   - `S2`: 3-tier W2W 3DIC performance option.
   - `S3`: cost-optimized 2.5D option.
-- `S2` is the primary working demo scenario.
+- `S2` is the primary working demo implementation option.
 - Quality issues should be `0` after seed.
 
 ## Critical Data Semantics
@@ -35,7 +35,7 @@ Logical hierarchy:
 
 Physical mapping:
 
-- `physical_partition` maps a logical component's own self/residual content to a scenario tier.
+- physical_partition maps a logical component's own self/residual content to an implementation-option tier.
 - It does not stand in for child modules.
 - Resource categories are independent: `logic`, `sram`, `block`.
 - If a component's own self/residual area is zero for a category, that category must not appear in direct map rows.
@@ -58,6 +58,7 @@ Application power semantics:
 - Every module can use `Default` as a use case name, but `Default` is not usable in an application scenario until a real Profile and power value are saved.
 - An application scenario is a composition: it checks which module use case/Profile rows participate in the scenario.
 - Scenario total power is the sum of checked module use case/Profile rows.
+- Inclusive parent rows can coexist with inactive child assignments for roll-up comparison. The unexplained parent-child delta is shown as unsplit power, not as an automatic database row.
 
 ## Important Files
 
@@ -69,10 +70,10 @@ Application power semantics:
   - quality rules.
   - component/tier/dashboard APIs.
 - `frontend/src/App.tsx`
-  - Main prototype UI.
-  - Hierarchy view.
-  - component detail mapping editor.
-  - scenario implementation editor.
+  - Main app shell and navigation.
+  - Hierarchy editor with separate logical definition and physical partition mapping panels.
+  - Implementation option detail editor.
+  - Application power use case and scenario composition page.
 - `frontend/src/types/component.ts`
   - Shared component/partition response types.
 - `scripts/check_phase1.py`
@@ -130,8 +131,8 @@ physical_partitions: 144
 quality_issues: 0
 AI Team components: 4
 AI Team physical_partitions: 19
-AI Team imported metrics: 115
-camera_power_w: 6.4
+AI Team imported metrics: 92
+camera_power_w: 5.295
 ```
 
 `uv run python scripts\verify_import.py` should report:
@@ -157,8 +158,6 @@ Do not add these in Phase 1 unless explicitly requested:
 ## Suggested Next Work
 
 - Split `backend/main.py` into smaller modules once behavior stabilizes.
-- Add focused pytest tests for quality rules and import validation.
-- Add a Web form for editing logical metrics by friendly fields instead of raw long-table rows.
-- Add quality warnings for scenario/tier area limits after process scaling.
-- Improve the Component Detail UI so self/residual and subtree closure status are visually distinct.
+- Add focused pytest tests for quality rules, import validation, and application power roll-up validation.
 - Add a schema/version banner to exported workbooks.
+- Convert lightweight team filtering into real authentication/authorization only in a later phase.

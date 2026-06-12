@@ -2,412 +2,203 @@
 
 ## Purpose
 
-Schema V7 separates four concerns:
+Schema V7 separates five concerns:
 
-- Reusable module definitions
-- Logical hierarchy and logical instance count
-- Scenario-specific physical partitioning
-- Metrics attached to logical, physical, tier, or scenario subjects
+- Reusable module definitions.
+- Logical hierarchy and logical instance count.
+- Implementation-option-specific physical stack and partition mapping.
+- Metrics attached to logical, physical, tier, or implementation-option subjects.
+- Application power use case libraries and scenario composition.
 
-This keeps the logical hierarchy compact while still supporting repeated modules, split implementations across dies, and different physical realization styles.
+The old `scenario_id` physical-implementation concept has been replaced by `impl_option_id`. In the current codebase, `ApplicationScenario` means an application workload scenario for power composition, not a physical implementation option.
 
 ## Core Relationship
 
 ```mermaid
 flowchart LR
-  Project --> Scenario
+  Project --> ImplOption
   Project --> LogicalComponent
   ModuleDefinition --> LogicalComponent
-  Scenario --> Tier
-  Scenario --> ScenarioImplementation
-  ScenarioImplementation --> ImplementationTier
-  ScenarioImplementation --> ImplementationInterface
-  ScenarioImplementation --> ImplementationPackageEscape
-  Scenario --> PhysicalPartition
+  ImplOption --> Tier
+  ImplOption --> ImplOptionDetail
+  ImplOptionDetail --> ImplementationTier
+  ImplOptionDetail --> ImplementationInterface
+  ImplOptionDetail --> ImplementationPackageEscape
+  ImplOption --> PhysicalPartition
   LogicalComponent --> PhysicalPartition
   Tier --> PhysicalPartition
   ResponsibilityAssignment --> LogicalComponent
   Metric --> LogicalComponent
   Metric --> PhysicalPartition
   Metric --> Tier
-  Metric --> Scenario
+  Metric --> ImplOption
+  ImplOption --> PhysicalMapping
+  ApplicationScenario --> ApplicationScenarioSelection
+  LogicalComponent --> PowerObservation
+  OperatingPointSet --> PowerObservation
+  PhysicalMapping --> PowerObservation
 ```
 
-## Tables
+## Main Tables
 
 ### project
 
 Product or chip planning object.
 
-Key fields:
+Key fields: `id`, `name`, `product_family`, `generation`, `owner`, `phase`, `description`, `created_at`, `updated_at`.
 
-- `id`
-- `name`
-- `product_family`
-- `generation`
-- `owner`
-- `phase`
+### impl_option
 
-### scenario
+Physical implementation option under a project, such as monolithic, W2W 3DIC, or 2.5D.
 
-Architecture or package option under a project.
-
-Examples:
-
-- Monolithic N3E baseline
-- 3-tier 3DIC performance option
-- Cost-optimized 2.5D option
-
-Key fields:
-
-- `id`
-- `project_id`
-- `name`
-- `scenario_type`
-- `process_combo`
-- `status`
-
-Scenario is also the owner for implementation-form definition. The frontend `实现方案` page treats each scenario as one implementation option under a project, such as monolithic, 2.5D, or wafer-to-wafer 3DIC.
-
-Implementation-form details are stored separately from physical partitions so a scenario can describe both:
-
-- the stack definition: tier order, names, processes, roles, thicknesses, orientations, and package escape
-- the logical-to-physical mapping: physical partition rows attached to logical components and scenario tiers
-
-Because physical partitions reference `tier_id`, changing a saved implementation's tier structure is impact-checked. If any physical partition already uses a tier, the implementation save must not remove/rename that tier or reorder it.
+Key fields: `id`, `project_id`, `name`, `impl_type`, `process_combo`, `status`, `description`, `created_at`, `updated_at`.
 
 ### module_definition
 
-Reusable IP/module master definition.
+Reusable IP/module master definition. Use this for what a reusable thing is, not where it appears in the logical hierarchy.
 
-Use this for "what this reusable thing is", not where it appears in the logical hierarchy.
-
-Key fields:
-
-- `id`
-- `name`
-- `module_type`
-- `ip_owner`
-- `reuse_class`
+Key fields: `id`, `name`, `module_type`, `ip_owner`, `reuse_class`, `description`.
 
 ### logical_component
 
 Logical architecture tree. Repeated modules remain one row with `logical_instance_count`.
 
-Example:
+Key fields: `id`, `project_id`, `parent_id`, `module_definition_id`, `name`, `instance_type`, `resource_type`, `function_domain`, `hierarchy_path`, `logical_instance_count`, `owner_team`, `visibility_level`, `description`.
 
-`GPU_SHADER_SLICE` appears once with `logical_instance_count = 6`, not six separate logical rows.
-
-Key fields:
-
-- `id`
-- `project_id`
-- `parent_id`
-- `module_definition_id`
-- `name`
-- `instance_type`
-- `resource_type`
-- `function_domain`
-- `hierarchy_path`
-- `logical_instance_count`
-- `owner_team`
-- `visibility_level`
-
-`owner_team` is used by the phase-1 API for lightweight team-scoped views. It is not a full authentication or permission system.
-
-### tier
-
-Scenario-specific physical stack tier.
-
-Key fields:
-
-- `id`
-- `scenario_id`
-- `tier_index`
-- `name`
-- `process_id`
-- `role`
-- `orientation`
-- `thickness_um`
-- `area_limit_mm2`
-
-For implementation-definition workflows, tiers are ordered top to bottom within a scenario. A single-layer monolithic scenario can have one tier/die, while a stacked W2W scenario can have multiple ordered tiers.
+Parent residual/self/glue area is not stored as a virtual child row. Store parent total area on the parent, store child total area on each direct child, and derive self/residual area as `parent total - direct child sum`.
 
 ### process_node
 
 Process-node capability and area scaling reference.
 
-Key fields:
+Key fields: `id`, `foundry`, `node_name`, `logic_density_mtr_per_mm2`, `sram_density_mb_per_mm2`, `logic_area_scale`, `sram_area_scale`, `block_area_scale`, `voltage_nominal`, `cost_factor`, `maturity_level`, `description`.
 
-- `id`
-- `foundry`
-- `node_name`
-- `logic_density_mtr_per_mm2`
-- `sram_density_mb_per_mm2`
-- `logic_area_scale`
-- `sram_area_scale`
-- `block_area_scale`
-- `cost_factor`
-- `maturity_level`
+Logical area metrics use the demo base-process convention. When a physical partition is placed on a tier, the backend scales logic/SRAM/block area with the tier process node's matching scale factor.
 
-Logical component and physical-partition area metrics are stored in the demo base-process area convention. When a physical partition is placed on a tier, the tier's `process_id` selects the process node and the backend multiplies the relevant resource area by the matching scale:
+### tier
 
-- logic partition area uses `logic_area_scale`
-- SRAM partition area uses `sram_area_scale`
-- hard/block partition area uses `block_area_scale`
+Physical stack tier for one implementation option.
 
-This lets the same logical architecture data be compared across tier/process choices without rewriting the source logical area metrics.
+Key fields: `id`, `impl_option_id`, `tier_index`, `name`, `process_id`, `role`, `orientation`, `thickness_um`, `area_limit_mm2`, `description`.
 
-The component detail API exposes `tier_area_distribution` for the selected logical component's subtree. It reports per-tier scaled logic/SRAM/block area and total area after the scenario's physical partitioning is applied.
+### impl_option_detail
 
-Phase-1 frontend interface semantics:
+Saved implementation-form definition for one implementation option.
 
-- die-to-die orientation uses `Face-to-Face`, `Face-to-Back`, `Back-to-Face`, or `Back-to-Back`
-- orientation choices are chained; if one interface uses a die's face/back side, the next interface for the same die must use the opposite side
-- HB pitch and TSV pitch are independent quantities
-- TSV parameters are side-specific: upper-side TSV and lower-side TSV are separate; `Back-to-Back` can require both
-- bottom-die package escape is derived from the final die-to-die orientation; if the bottom die back side faces bumps, a derived `Tn-BUMP` TSV escape must be parameterized separately
+Key fields: `impl_option_id`, `implementation_type`, `status`, `version`, `updated_at`.
 
-### scenario_implementation
+Child tables:
 
-One saved implementation-form definition for a scenario.
+- `implementation_tier`: saved tier/die definition rows.
+- `implementation_interface`: saved adjacent die-to-die interface rows.
+- `implementation_package_escape`: derived bottom-tier package escape parameters.
 
-Key fields:
-
-- `scenario_id`
-- `implementation_type`
-- `status`
-- `version`
-- `updated_at`
-
-The version increments on each successful implementation save. This table intentionally stores scenario-level implementation metadata only; detailed rows live in the implementation child tables.
-
-### implementation_tier
-
-Saved tier/die definitions for the scenario implementation.
-
-Key fields:
-
-- `id`
-- `scenario_id`
-- `tier_id`
-- `tier_index`
-- `name`
-- `process`
-- `role`
-- `thickness_um`
-
-`tier_id` is the user-facing stable tier key, such as `T0`, `T1`, or `T2`. The backend stores a scenario-prefixed primary key internally, but API payloads use the plain tier key.
-
-### implementation_interface
-
-Saved die-to-die interface definitions between adjacent implementation tiers.
-
-Key fields:
-
-- `id`
-- `scenario_id`
-- `from_tier_id`
-- `to_tier_id`
-- `orientation`
-- `interconnect`
-- `hb_pitch_um`
-- `upper_tsv_pitch_um`
-- `upper_tsv_keepout_um`
-- `lower_tsv_pitch_um`
-- `lower_tsv_keepout_um`
-- `description`
-
-HB pitch and TSV pitch are independent. Upper-side TSV and lower-side TSV parameters are also independent, including for `Back-to-Back` interfaces.
-
-### implementation_package_escape
-
-Saved derived bottom-tier-to-package-bump TSV escape parameters.
-
-Key fields:
-
-- `scenario_id`
-- `bottom_tier_id`
-- `requires_tsv`
-- `pitch_um`
-- `keepout_um`
-- `description`
-
-`requires_tsv` is derived from the final die-to-die orientation in the UI. If the bottom die back side faces package bumps, the page represents the package escape as a derived `Tn-BUMP` TSV row and stores its pitch/keep-out here.
+The backend protects saved details from removing, renaming, or reordering tiers already used by physical partitions.
 
 ### physical_partition
 
-Physical carrying of a logical component in a scenario.
+Physical carrying of a logical component's own self/residual content in one implementation option.
 
-`physical_partition` is scenario-specific by design. A logical component can map to different tiers, counts, or content shares in different implementation scenarios. The tuple of `scenario_id`, `logical_component_id`, and `tier_id` must therefore be interpreted together.
+Key fields: `id`, `impl_option_id`, `logical_component_id`, `tier_id`, `partition_name`, `partition_type`, `resource_category`, `physical_instance_count`, `partition_ratio`, `content_share`, `description`.
 
-It is also resource-category-specific. Logic, SRAM, and hard/block content can be mapped independently for the same logical component. This avoids forcing one content share to describe heterogeneous resources that may live on different tiers.
+Current rules:
 
-Use this table for placement/mapping facts:
-
-- Which scenario
-- Which logical component
-- Which resource category
-- Which tier
-- How many physical copies
-- What content share is carried by a partial partition
-
-Key fields:
-
-- `id`
-- `scenario_id`
-- `logical_component_id`
-- `tier_id`
-- `partition_name`
-- `resource_category`
-- `partition_type`
-- `physical_instance_count`
-- `content_share`
-
-The referenced `tier_id` must belong to the same `scenario_id` as the physical partition. API saves validate this directly, and workbook import validation rejects rows where a partition's tier comes from another scenario.
-
-`partition_type` values:
-
-- `full`: a whole logical instance/copy is realized by this partition
-- `partial`: one logical module is split across multiple tiers/partitions
-
-`resource_category` values:
-
-- `logic`
-- `sram`
-- `block`
-
-`block` is also the compatibility category for existing coarse mappings that have not yet been split into logic/SRAM/block-specific rows.
-
-Partition row display and generated naming follow a stable category order:
-
-- `logic`
-- `sram`
-- `block`
-
-Partition `id` and `partition_name` should be generated by the application instead of manually entered. The generated base is `logicalName_resourceCategory_tier`. `full` rows use that base directly; `partial` rows append a per-resource-category/per-tier partial index such as `_P1`, `_P2`, etc. Multiple partial rows can target the same tier.
-
-`instance_share` is not stored and should not be manually entered. It is computed as `physical_instance_count / logical_instance_count` (both of which are parent-relative).
-
-`content_share` is manually meaningful only for `partial` rows. For `full` rows, `content_share` is always `1`.
-
-Residual parent self/glue logic is not stored as a logical component row. Store parent total metrics on the parent component, store child total metrics on each direct child, and derive residual/self area as `parent total - direct child sum`.
-
-Physical partitions attached directly to a logical component represent only that component's self/residual content. They do not stand in for child modules. For each resource category:
-
-- zero self/residual area means no direct partition rows are allowed
-- non-zero self/residual area must close independently by equivalent instance count and by base-area metric
-- a parent component is fully mapped only if its own self/residual categories close and all child subtrees close recursively
-
-### responsibility_assignment
-
-Lightweight assignment of a team/user to a logical subtree in a scenario.
-
-Key fields:
-
-- `id`
-- `project_id`
-- `scenario_id`
-- `user_id`
-- `team_name`
-- `logical_component_id`
-- `scope_type`
-- `can_read`
-- `can_write`
-
-In phase 1, `scope_type = subtree` means a team can see the assigned logical component and its descendants. API filtering is available through `?team=...` on component, physical partition, metric, and quality endpoints.
-
-Team-scoped Excel input uses the same SQLite schema and long-table metric format. The generated team workbook includes shared reference sheets for context, but team uploads only merge:
-
-- `logical_components`
-- `physical_partitions`
-- `metrics`
-
-The backend validates that these rows remain inside the assigned logical subtree.
+- `resource_category` is one of `logic`, `sram`, or `block`.
+- Direct rows on a parent component map only that parent's self/residual content, not child modules.
+- A zero self/residual area category must not have direct map rows.
+- `full` rows always mean `content_share = 1`.
+- `partial` rows use `content_share` to describe what fraction of the logical content is carried by that physical piece.
+- `partition_ratio` remains only as a compatibility alias for older templates and code paths.
+- `instance_share` is computed as `physical_instance_count / logical_instance_count`; it is not stored or manually entered.
+- A component is fully mapped only if its own non-zero categories close and every child subtree is fully mapped.
 
 ### metric
 
-Unified metric table.
+Unified metric table for non-power facts.
 
-Metrics attach to a subject through:
+Key fields: `id`, `impl_option_id`, `subject_type`, `subject_id`, `metric_name`, `metric_value`, `metric_unit`, `metric_category`, `value_type`, `corner`, `workload`, `confidence`, `source_note`, `created_at`.
 
-- `subject_type`
-- `subject_id`
+Allowed `subject_type` values include `logical_component`, `physical_partition`, `tier`, and `impl_option`.
 
-Allowed `subject_type` values:
-
-- `logical_component`
-- `physical_partition`
-- `tier`
-- `scenario`
-
-Key fields:
-
-- `id`
-- `scenario_id`
-- `subject_type`
-- `subject_id`
-- `metric_name`
-- `metric_value`
-- `metric_unit`
-- `metric_category`
-- `value_type`
-- `corner`
-- `workload`
-- `confidence`
-- `source_note`
-- `created_at`
-
-## Metric Naming
-
-Phase-1 logical metrics:
+Current logical metrics:
 
 - `signal_count_total`
 - `logic_area`
 - `sram_area`
 - `block_area`
-- `power`
 
-Common physical partition metrics:
+Application power is no longer stored as ordinary block or partition metrics. Use `power_observation` and `application_scenario_selection` instead.
 
-- `logic_area`
-- `sram_area`
-- `block_area`
-- `power`
-- `shape_type`
+### responsibility_assignment
 
-Tier/scenario metrics:
+Lightweight team-scoped access/filtering for phase 1. This is not full authentication.
 
-- `area`
-- `power`
-- `utilization`
+Key fields: `id`, `project_id`, `impl_option_id`, `user_id`, `team_name`, `logical_component_id`, `scope_type`, `can_read`, `can_write`.
 
-## Closure Rules
+`scope_type = subtree` means a team can see the assigned logical component and its descendants. API filtering is available through `?team=...` on component, partition, metric, quality, and import endpoints.
 
-For each logical component that has physical partitions in a scenario and resource category:
+## Application Power Tables
 
-- `sum(physical_instance_count * content_share)` should equal `logical_instance_count` (both relative to parent)
-- `full` partitions always use `content_share = 1`
-- `partial` partitions use `content_share` to describe how much of each covered logical instance is carried by that physical piece
-- For components with children, physical partitions attached directly to the parent map only the derived residual/self portion.
+### application_scenario
 
-Frontend maintenance uses the selected scenario as the working context. Switching scenarios changes the available tiers and physical partitions rather than reusing mappings from another scenario.
+Application workload scenario for power composition, such as UI browsing, camera 4K60, gaming, or AI burst.
 
-## Current Demo Data
+Key fields: `id`, `project_id`, `name`, `category`, `description`.
 
-The seeded demo is `Orion X1 Mobile SoC`.
+### physical_mapping
 
-It includes:
+Named physical mapping/version under an implementation option.
 
-- 36 logical components
-- 129 physical partitions, including parent residual/self mappings
-- 3 scenarios
-- 3 tiers in the 3DIC scenario
+Key fields: `id`, `impl_option_id`, `name`, `mapping_version`, `description`, `mapping_json`.
 
-Representative multi-instance closure:
+### operating_point_set
 
-- `P_CORE`: logical 4, physical 4
-- `E_CORE`: logical 4, physical 4
-- `GPU_SHADER_SLICE`: logical 6, physical 6
-- `NPU_TENSOR_TILE`: logical 8, physical 8
-- `MIPI_PHY`: logical 6, physical 6
+Module-local or shared Profile name for voltage/frequency context.
+
+Key fields: `id`, `project_id`, `name`, `description`, `op_json`.
+
+### power_observation
+
+Module use case/Profile power library and lower-level future power observations.
+
+Key fields: `id`, `project_id`, `impl_option_id`, `physical_mapping_id`, `application_scenario_id`, `operating_point_set_id`, `scope_type`, `scope_id`, `scope_name`, `use_case_name`, `power_value_w`, `statistic_type`, `power_type`, `development_stage`, `confidence`, `is_additive`, `context_json`, `note`.
+
+The current demo stores module use case power under `application_scenario_id = AS_MODULE_LIBRARY`. A unique module power value is keyed by:
+
+```text
+impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
+```
+
+### application_scenario_selection
+
+Composition rows that choose which module use case/Profile rows participate in one application scenario.
+
+Key fields: `id`, `project_id`, `impl_option_id`, `physical_mapping_id`, `application_scenario_id`, `component_id`, `component_name`, `use_case_name`, `operating_point_set_id`, `included`, `note`.
+
+`included = true` means the row participates in the scenario total. `included = false` may preserve a draft assignment without contributing to the total.
+
+Composition rules:
+
+- Active parent and child rows cannot both be included because that double-counts power.
+- Selecting a child should make ancestor included rows inactive.
+- Selecting a parent should make descendant included rows inactive.
+- Summary power sums only included rows.
+- Parent inclusive power may show an `unsplit` explanation when assigned child power is smaller.
+- Child assigned power greater than active parent inclusive power is over-specified and should be rejected by save validation.
+
+## Import and Team Input
+
+The canonical workbook is `templates/soc_import_template.xlsx`.
+
+Team-scoped Excel input uses the same SQLite schema and long-table metric format. Team uploads only merge rows inside the assigned logical subtree. The template is an exchange/import format; day-to-day maintenance should happen through the web editors.
+
+## Current Boundaries
+
+Phase 1 intentionally avoids:
+
+- Docker.
+- PostgreSQL.
+- Alembic migrations.
+- Full authentication or complex permission enforcement.
+- AI parsing, AI optimization, or automatic partition inference.
+- Tier-level and hard-macro-level power decomposition.

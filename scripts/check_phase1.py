@@ -195,7 +195,7 @@ def main() -> None:
                 ],
             },
         )
-        negative_residual = client.put(
+        over_specified_power = client.put(
             "/api/application-scenario-composition",
             json={
                 "project_id": "P001",
@@ -234,7 +234,7 @@ def main() -> None:
             },
         )
         high_parent_power.raise_for_status()
-        residual_composition = client.put(
+        unsplit_composition = client.put(
             "/api/application-scenario-composition",
             json={
                 "project_id": "P001",
@@ -259,7 +259,7 @@ def main() -> None:
                 ],
             },
         )
-        residual_composition.raise_for_status()
+        unsplit_composition.raise_for_status()
         smoke_composition = client.put(
             "/api/application-scenario-composition",
             json={
@@ -375,12 +375,12 @@ def main() -> None:
         assert invalid_power.status_code == 400, "invalid power context should be rejected"
         assert updated_application_scenario.json()["name"] == "Smoke Test Scenario Updated"
         assert parent_child_conflict.status_code == 400, "active parent/child selections should be rejected"
-        assert negative_residual.status_code == 400, "active parent with child sum greater than parent should be rejected"
-        residual_result = residual_composition.json()["summary"]
-        residual_rollup = next(row for row in residual_result["hierarchy_rollups"] if row["parent_component_id"] == "B0")
-        assert residual_result["total_additive_power_w"] == 0.2
-        assert residual_rollup["status"] == "residual"
-        assert abs(residual_rollup["residual_power_w"] - 0.077) < 0.0001
+        assert over_specified_power.status_code == 400, "active parent with child sum greater than parent should be rejected"
+        unsplit_result = unsplit_composition.json()["summary"]
+        unsplit_rollup = next(row for row in unsplit_result["hierarchy_rollups"] if row["parent_component_id"] == "B0")
+        assert unsplit_result["total_additive_power_w"] == 0.2
+        assert unsplit_rollup["status"] == "unsplit"
+        assert abs(unsplit_rollup["unsplit_power_w"] - 0.077) < 0.0001
         assert smoke_composition.json()["summary"]["total_additive_power_w"] == 0.123
         assert deleted_application_scenario.json()["deleted_selection_count"] == 1
         assert created_application_scenario_id not in {row["id"] for row in application_scenarios_after_delete.json()}, "deleted application scenario should disappear from list"

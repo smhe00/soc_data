@@ -142,8 +142,9 @@ export interface ApplicationPowerSummary {
     assigned_child_count: number;
     missing_child_count: number;
     child_sum_power_w: number;
+    unsplit_power_w: number | null;
     residual_power_w: number | null;
-    status: "closed" | "residual" | "over_specified" | "incomplete";
+    status: "closed" | "unsplit" | "over_specified" | "incomplete";
     covered_descendant_ids: string[];
   }>;
   by_component: Record<string, number>;

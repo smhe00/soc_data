@@ -51,15 +51,15 @@ interface TabItem {
 }
 
 const tabs: TabItem[] = [
-  { id: "dashboard", label: "总览", icon: BarChart3 },
-  { id: "hierarchy", label: "Block层次", icon: GitBranch },
+  { id: "dashboard", label: "Overview", icon: BarChart3 },
+  { id: "hierarchy", label: "Block Hierarchy", icon: GitBranch },
   { id: "tiers", label: "3D Tier", icon: Layers3 },
-  { id: "implementation", label: "实现方案", icon: Package },
-  { id: "compare", label: "方案对比", icon: SplitSquareVertical },
-  { id: "imports", label: "数据导入", icon: Upload },
-  { id: "quality", label: "数据质量", icon: AlertTriangle },
-  { id: "schema", label: "数据模型", icon: Database },
-  { id: "power", label: "应用功耗", icon: Zap },
+  { id: "implementation", label: "Implementation", icon: Package },
+  { id: "compare", label: "Compare", icon: SplitSquareVertical },
+  { id: "imports", label: "Import", icon: Upload },
+  { id: "quality", label: "Quality", icon: AlertTriangle },
+  { id: "schema", label: "Schema", icon: Database },
+  { id: "power", label: "Application Power", icon: Zap },
 ];
 
 export default function Soc3dicPhase1Prototype(): JSX.Element {
@@ -398,7 +398,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
 
           <div className="mt-8 rounded-2xl bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-900">MVP Goal</div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">把架构规划数据从PPT/Excel转成可管理、可比较、可追溯的工程数据库。</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Turn architecture planning data from PPT/Excel into a manageable, comparable, traceable engineering database.</p>
           </div>
         </aside>
 
@@ -411,7 +411,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                   SoC Cross-Die / 3DIC Architecture Data Platform
                 </div>
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{activeTab.label}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">第一阶段MVP：统一项目、方案、block层次、process/tier、核心指标、数据来源和质量检查，为后续AI解析和工程评估引擎打基础。</p>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Phase-1 MVP: unify projects, implementation options, block hierarchy, process/tier data, core metrics, source tracking, and quality checks for engineering evaluation.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <select
@@ -444,7 +444,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                   type="button"
                 >
                   {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-                  {theme === "dark" ? "白天" : "夜晚"}
+                  {theme === "dark" ? "Light" : "Dark"}
                 </button>
                 <select
                   value={selectedTeam}

@@ -1,7 +1,7 @@
 import type { Project } from "./project";
 import type { ImplOption } from "./impl_option";
 
-export interface ComponentMetric {
+export interface MetricRecord {
   id: string;
   impl_option_id: string;
   subject_type: string;
