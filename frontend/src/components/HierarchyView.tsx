@@ -9,7 +9,10 @@ import {
   Cpu,
   SplitSquareVertical,
   AlertTriangle,
-  Settings2
+  Settings2,
+  Plus,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import {
   Badge,
@@ -21,6 +24,7 @@ import {
 } from "./ui";
 import type { BlockNode, TreeBlock, PhysicalPartition } from "../types/component";
 import type { TierInfo } from "../types/tier";
+import type { LogicalComponentInput } from "../api/components";
 
 type PartitionResourceCategory = "logic" | "sram" | "block";
 
@@ -91,6 +95,24 @@ export interface HierarchyViewProps {
       power?: number;
     }
   ) => Promise<void>;
+  onCreateLogicalComponent: (payload: LogicalComponentInput) => Promise<void>;
+  onUpdateLogicalComponent: (componentId: string, payload: LogicalComponentInput) => Promise<void>;
+  onDeleteLogicalComponent: (componentId: string) => Promise<void>;
+}
+
+type HierarchyEditMode = "add-child" | "edit";
+
+interface LogicalComponentForm {
+  id: string;
+  parent_id: string;
+  name: string;
+  instance_type: string;
+  resource_type: string;
+  function_domain: string;
+  logical_instance_count: string;
+  owner_team: string;
+  visibility_level: string;
+  description: string;
 }
 
 function collectExpandableIds(nodes: TreeBlock[]): string[] {
@@ -225,6 +247,21 @@ function makeDefaultPartition(component: BlockNode, selectedImplOptionId: string
     power: 0,
     shape_type: "",
     description: `Auto-filled ${partitionResourceLabels[category]} mapping for ${component.name}.`,
+  };
+}
+
+function formFromComponent(component: BlockNode, mode: HierarchyEditMode): LogicalComponentForm {
+  return {
+    id: mode === "edit" ? component.id : "",
+    parent_id: mode === "edit" ? (component.parent ?? "") : component.id,
+    name: mode === "edit" ? component.name : "",
+    instance_type: mode === "edit" ? component.type : "block",
+    resource_type: mode === "edit" ? component.resource : "logic",
+    function_domain: mode === "edit" ? component.domain : component.domain || "General",
+    logical_instance_count: mode === "edit" ? String(component.logical_instance_count) : "1",
+    owner_team: mode === "edit" ? component.owner_team : component.owner_team || "Architecture Team",
+    visibility_level: mode === "edit" ? component.visibility_level : "team",
+    description: mode === "edit" ? component.description : "",
   };
 }
 
@@ -643,10 +680,17 @@ export function HierarchyView({
   loading,
   error,
   onSaveComponentDetail,
+  onCreateLogicalComponent,
+  onUpdateLogicalComponent,
+  onDeleteLogicalComponent,
 }: HierarchyViewProps): JSX.Element {
   const [selectedId, setSelectedId] = useState<string>("B_NPU");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [editMode, setEditMode] = useState<HierarchyEditMode | null>(null);
+  const [componentForm, setComponentForm] = useState<LogicalComponentForm | null>(null);
+  const [componentEditError, setComponentEditError] = useState<string | null>(null);
+  const [componentSaving, setComponentSaving] = useState(false);
 
   useEffect(() => {
     if (blocks.length > 0 && !blocks.some((block) => block.id === selectedId)) {
@@ -687,17 +731,91 @@ export function HierarchyView({
   const expandAll = (): void => setExpandedIds(new Set(collectExpandableIds(tree)));
   const collapseAll = (): void => setExpandedIds(new Set(findAncestorPath(tree, selectedId)));
 
+  const selected = blocks.find((block) => block.id === selectedId) ?? blocks[0];
+
+  useEffect(() => {
+    if (!selected || !editMode) return;
+    setComponentForm(formFromComponent(selected, editMode));
+    setComponentEditError(null);
+  }, [selected?.id, editMode]);
+
   if (loading) return <Card title="Loading Block Hierarchy" subtitle="Fetching component tree..." icon={GitBranch}><div className="text-sm text-slate-500">Loading...</div></Card>;
   if (error) return <Card title="API Error" subtitle="FastAPI backend is not reachable yet." icon={AlertTriangle}><div className="text-sm text-red-600">{error}</div></Card>;
   if (blocks.length === 0) return <Card title="No Components" icon={GitBranch}><div className="text-sm text-slate-500">No component data returned.</div></Card>;
 
-  const selected = blocks.find((block) => block.id === selectedId) ?? blocks[0];
   const children = blocks.filter((block) => block.parent === selected.id);
   const SelectedIcon = selected.resource.includes("phy") ? RadioTower : selected.resource.includes("memory") ? MemoryStick : Cpu;
   const logicalBaseAreaTotal = selected.logic_area + selected.sram_area + selected.block_area;
   const tierBaseAreaTotal = selected.tier_area_distribution.reduce((total, row) => total + row.base_total_area, 0);
   const tierScaledAreaTotal = selected.tier_area_distribution.reduce((total, row) => total + row.total_area, 0);
   const unmappedBaseArea = logicalBaseAreaTotal - tierBaseAreaTotal;
+  const updateComponentForm = (patch: Partial<LogicalComponentForm>): void => {
+    setComponentForm((current) => ({ ...(current ?? formFromComponent(selected, editMode ?? "edit")), ...patch }));
+  };
+  const startEdit = (mode: HierarchyEditMode): void => {
+    setEditMode(mode);
+    setComponentForm(formFromComponent(selected, mode));
+    setComponentEditError(null);
+  };
+  const cancelEdit = (): void => {
+    setEditMode(null);
+    setComponentForm(null);
+    setComponentEditError(null);
+  };
+  const saveLogicalComponent = async (): Promise<void> => {
+    if (!componentForm || !editMode) return;
+    const payload: LogicalComponentInput = {
+      id: editMode === "add-child" ? (componentForm.id.trim() || null) : selected.id,
+      project_id: selected.project_id,
+      parent_id: componentForm.parent_id || null,
+      name: componentForm.name.trim(),
+      instance_type: componentForm.instance_type.trim() || "block",
+      resource_type: componentForm.resource_type.trim() || "logic",
+      function_domain: componentForm.function_domain.trim() || "General",
+      logical_instance_count: Math.max(0, Number(componentForm.logical_instance_count) || 0),
+      owner_team: componentForm.owner_team.trim() || "Architecture Team",
+      visibility_level: componentForm.visibility_level.trim() || "team",
+      description: componentForm.description,
+      impl_option_id: selectedImplOptionId,
+      team: selectedTeam,
+    };
+    if (!payload.name) {
+      setComponentEditError("Component name is required.");
+      return;
+    }
+    try {
+      setComponentSaving(true);
+      setComponentEditError(null);
+      if (editMode === "add-child") {
+        await onCreateLogicalComponent(payload);
+      } else {
+        await onUpdateLogicalComponent(selected.id, payload);
+      }
+      cancelEdit();
+    } catch (err) {
+      setComponentEditError(err instanceof Error ? err.message : "Failed to save logical component.");
+    } finally {
+      setComponentSaving(false);
+    }
+  };
+  const deleteSelectedComponent = async (): Promise<void> => {
+    const childCount = blocks.filter((block) => block.id !== selected.id && block.hierarchy_path.startsWith(`${selected.hierarchy_path}/`)).length;
+    const message = childCount > 0
+      ? `Delete ${selected.name} and ${childCount} descendant module(s)? Related metrics, partitions, and power use cases will also be removed.`
+      : `Delete ${selected.name}? Related metrics, partitions, and power use cases will also be removed.`;
+    if (!window.confirm(message)) return;
+    try {
+      setComponentSaving(true);
+      setComponentEditError(null);
+      await onDeleteLogicalComponent(selected.id);
+      setSelectedId(blocks.find((block) => block.id !== selected.id)?.id ?? "");
+      cancelEdit();
+    } catch (err) {
+      setComponentEditError(err instanceof Error ? err.message : "Failed to delete logical component.");
+    } finally {
+      setComponentSaving(false);
+    }
+  };
 
   return (
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
@@ -963,6 +1081,136 @@ export function HierarchyView({
               </div>
             </div>
           </div>
+        </Card>
+
+        <Card
+          title="Logical Hierarchy Editor"
+          subtitle="Maintain block hierarchy after the first Excel import."
+          icon={GitBranch}
+          right={
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => startEdit("add-child")}
+                type="button"
+              >
+                <Plus size={14} />
+                Add Child
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => startEdit("edit")}
+                type="button"
+              >
+                <Pencil size={14} />
+                Edit
+              </button>
+              <button
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-100 bg-white px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                disabled={selected.parent === null || componentSaving}
+                onClick={() => void deleteSelectedComponent()}
+                title={selected.parent === null ? "Top component cannot be deleted here" : "Delete selected component subtree"}
+                type="button"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            </div>
+          }
+        >
+          {!componentForm || !editMode ? (
+            <div className="grid gap-3 text-sm md:grid-cols-4">
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Selected ID</div>
+                <div className="mt-1 font-semibold text-slate-900">{selected.id}</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Parent</div>
+                <div className="mt-1 font-semibold text-slate-900">{selected.parent || "-"}</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Owner</div>
+                <div className="mt-1 font-semibold text-slate-900">{selected.owner_team}</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-xs text-slate-500">Children</div>
+                <div className="mt-1 font-semibold text-slate-900">{children.length}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                {editMode === "add-child" && (
+                  <label className="text-xs font-medium text-slate-500">
+                    ID (optional)
+                    <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.id} onChange={(event) => updateComponentForm({ id: event.target.value })} placeholder="Auto generated if empty" />
+                  </label>
+                )}
+                <label className="text-xs font-medium text-slate-500">
+                  Name
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.name} onChange={(event) => updateComponentForm({ name: event.target.value })} />
+                </label>
+                <label className="text-xs font-medium text-slate-500">
+                  Parent
+                  <select className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.parent_id} onChange={(event) => updateComponentForm({ parent_id: event.target.value })}>
+                    <option value="">No parent (top)</option>
+                    {blocks
+                      .filter((block) => editMode === "add-child" || (block.id !== selected.id && !block.hierarchy_path.startsWith(`${selected.hierarchy_path}/`)))
+                      .map((block) => (
+                        <option key={block.id} value={block.id}>
+                          {block.hierarchy_path}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-slate-500">
+                  Logical Instances
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" min={0} type="number" value={componentForm.logical_instance_count} onChange={(event) => updateComponentForm({ logical_instance_count: event.target.value })} />
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="text-xs font-medium text-slate-500">
+                  Instance Type
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.instance_type} onChange={(event) => updateComponentForm({ instance_type: event.target.value })} />
+                </label>
+                <label className="text-xs font-medium text-slate-500">
+                  Resource Type
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.resource_type} onChange={(event) => updateComponentForm({ resource_type: event.target.value })} />
+                </label>
+                <label className="text-xs font-medium text-slate-500">
+                  Function Domain
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.function_domain} onChange={(event) => updateComponentForm({ function_domain: event.target.value })} />
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="text-xs font-medium text-slate-500">
+                  Owner Team
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.owner_team} onChange={(event) => updateComponentForm({ owner_team: event.target.value })} />
+                </label>
+                <label className="text-xs font-medium text-slate-500">
+                  Visibility
+                  <select className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.visibility_level} onChange={(event) => updateComponentForm({ visibility_level: event.target.value })}>
+                    <option value="team">team</option>
+                    <option value="public_summary">public_summary</option>
+                    <option value="restricted">restricted</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-slate-500">
+                  Description
+                  <input className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-indigo-400" value={componentForm.description} onChange={(event) => updateComponentForm({ description: event.target.value })} />
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-red-600">{componentEditError}</div>
+                <div className="flex items-center gap-2">
+                  <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={cancelEdit} type="button">Cancel</button>
+                  <button className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60" disabled={componentSaving} onClick={() => void saveLogicalComponent()} type="button">
+                    {componentSaving ? "Saving..." : editMode === "add-child" ? "Create Component" : "Save Component"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </Card>
 
         <PartitionMappingEditor component={selected} blocks={blocks} tiers={tiers} selectedImplOptionId={selectedImplOptionId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />

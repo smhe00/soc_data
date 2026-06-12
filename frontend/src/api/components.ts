@@ -22,6 +22,35 @@ export function getPhysicalPartitions(team?: string, implOptionId?: string): Pro
   return apiGet<PhysicalPartition[]>(scopedQuery("/api/physical-partitions", team, implOptionId));
 }
 
+export interface LogicalComponentInput {
+  id?: string | null;
+  project_id: string;
+  parent_id?: string | null;
+  module_definition_id?: string | null;
+  name: string;
+  instance_type: string;
+  resource_type: string;
+  function_domain: string;
+  logical_instance_count: number;
+  owner_team: string;
+  visibility_level: string;
+  description?: string;
+  impl_option_id: string;
+  team?: string | null;
+}
+
+export function createLogicalComponent(payload: LogicalComponentInput): Promise<BlockNode> {
+  return apiJson<BlockNode>("/api/components", "POST", payload);
+}
+
+export function updateLogicalComponent(componentId: string, payload: LogicalComponentInput): Promise<BlockNode> {
+  return apiJson<BlockNode>(`/api/components/${encodeURIComponent(componentId)}`, "PUT", payload);
+}
+
+export function deleteLogicalComponent(componentId: string, payload: { impl_option_id: string; team?: string | null; cascade?: boolean }): Promise<{ deleted_component_ids: string[]; deleted_partition_ids: string[] }> {
+  return apiJson<{ deleted_component_ids: string[]; deleted_partition_ids: string[] }>(`/api/components/${encodeURIComponent(componentId)}`, "DELETE", payload);
+}
+
 export interface ComponentDetailUpdate {
   impl_option_id: string;
   team?: string;

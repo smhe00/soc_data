@@ -15,7 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import { getComponents, getComponentTree, getPhysicalPartitions, updateComponentDetail } from "./api/components";
+import { createLogicalComponent, deleteLogicalComponent, getComponents, getComponentTree, getPhysicalPartitions, updateComponentDetail, updateLogicalComponent, type LogicalComponentInput } from "./api/components";
 import { uploadImportWorkbook, type ImportResult } from "./api/imports";
 import { getDashboard } from "./api/metrics";
 import { getQualityIssues, type QualityIssue } from "./api/quality";
@@ -343,6 +343,26 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
     await loadActiveTabData(active, selectedTeam, selectedImplOptionId, true);
   }
 
+  async function refreshHierarchy(): Promise<void> {
+    setLoadedCategories((current) => ({ ...current, dashboard: false, hierarchy: false, tiers: false, quality: false }));
+    await loadActiveTabData("hierarchy", selectedTeam, selectedImplOptionId, true);
+  }
+
+  async function handleCreateLogicalComponent(payload: LogicalComponentInput): Promise<void> {
+    await createLogicalComponent(payload);
+    await refreshHierarchy();
+  }
+
+  async function handleUpdateLogicalComponent(componentId: string, payload: LogicalComponentInput): Promise<void> {
+    await updateLogicalComponent(componentId, payload);
+    await refreshHierarchy();
+  }
+
+  async function handleDeleteLogicalComponent(componentId: string): Promise<void> {
+    await deleteLogicalComponent(componentId, { impl_option_id: selectedImplOptionId, team: selectedTeam, cascade: true });
+    await refreshHierarchy();
+  }
+
   return (
     <div className={`min-h-screen bg-slate-100 text-slate-900 theme-${theme}`}>
       <div className="flex min-h-screen">
@@ -491,6 +511,9 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               loading={loading}
               error={error}
               onSaveComponentDetail={handleSaveComponentDetail}
+              onCreateLogicalComponent={handleCreateLogicalComponent}
+              onUpdateLogicalComponent={handleUpdateLogicalComponent}
+              onDeleteLogicalComponent={handleDeleteLogicalComponent}
             />
           )}
           {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} selectedImplOptionId={selectedImplOptionId} loading={loading} error={error} />}

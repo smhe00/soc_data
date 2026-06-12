@@ -336,6 +336,29 @@ class ComponentDetailUpdate(BaseModel):
     power: float | None = None
 
 
+class LogicalComponentInput(BaseModel):
+    id: str | None = None
+    project_id: str
+    parent_id: str | None = None
+    module_definition_id: str | None = None
+    name: str
+    instance_type: str = "block"
+    resource_type: str = "logic"
+    function_domain: str = "General"
+    logical_instance_count: int = 1
+    owner_team: str = "Architecture Team"
+    visibility_level: str = "team"
+    description: str = ""
+    impl_option_id: str = "S2"
+    team: str | None = None
+
+
+class LogicalComponentDeleteInput(BaseModel):
+    impl_option_id: str = "S2"
+    team: str | None = None
+    cascade: bool = True
+
+
 class PowerObservationCreate(BaseModel):
     project_id: str
     impl_option_id: str
@@ -1237,6 +1260,59 @@ def component_rows_for_team(session: Session, team: str | None, impl_option_id: 
     return [row for row in rows if row.id in allowed], allowed
 
 
+def component_id_from_name(session: Session, name: str) -> str:
+    base = safe_power_id_part(name)
+    component_id = f"B_{base}" if not base.startswith("B_") else base
+    index = 2
+    while session.get(LogicalComponent, component_id):
+        component_id = f"B_{base}_{index}" if not base.startswith("B_") else f"{base}_{index}"
+        index += 1
+    return component_id
+
+
+def component_path(session: Session, parent_id: str | None, name: str) -> str:
+    if not parent_id:
+        return name
+    parent = session.get(LogicalComponent, parent_id)
+    if not parent:
+        raise HTTPException(status_code=400, detail=f"Unknown parent_id: {parent_id}")
+    return f"{parent.hierarchy_path}/{name}"
+
+
+def descendant_component_ids(session: Session, component_id: str) -> set[str]:
+    rows = session.exec(select(LogicalComponent)).all()
+    children: dict[str, list[str]] = {}
+    for row in rows:
+        if row.parent_id:
+            children.setdefault(row.parent_id, []).append(row.id)
+    result: set[str] = set()
+
+    def walk(current_id: str) -> None:
+        for child_id in children.get(current_id, []):
+            result.add(child_id)
+            walk(child_id)
+
+    walk(component_id)
+    return result
+
+
+def update_component_subtree_paths(session: Session, component: LogicalComponent) -> None:
+    children = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component.id)).all()
+    for child in children:
+        child.hierarchy_path = f"{component.hierarchy_path}/{child.name}"
+        child.updated_at = now_iso()
+        session.add(child)
+        update_component_subtree_paths(session, child)
+
+
+def ensure_component_write_scope(session: Session, component_id: str | None, team: str | None, impl_option_id: str) -> None:
+    if is_global_team(team) or not component_id:
+        return
+    allowed = allowed_component_ids_for_team(session, team, impl_option_id)
+    if allowed is not None and component_id not in allowed:
+        raise HTTPException(status_code=403, detail=f"{component_id} is outside team scope {team}")
+
+
 def scope_component_items(items: list[dict[str, Any]], allowed: set[str] | None) -> list[dict[str, Any]]:
     if allowed is None:
         return items
@@ -1509,6 +1585,7 @@ def component_ui(session: Session, component: LogicalComponent, impl_option_id: 
 
     return {
         "id": component.id,
+        "project_id": component.project_id,
         "parent": component.parent_id,
         "name": component.name,
         "type": component.instance_type,
@@ -2861,6 +2938,115 @@ def update_impl_option_detail(impl_option_id: str, payload: ImplOptionDetailUpda
 def get_module_definitions() -> list[ModuleDefinition]:
     with Session(engine) as session:
         return list(session.exec(select(ModuleDefinition)).all())
+
+
+@app.post("/api/components")
+def create_logical_component(payload: LogicalComponentInput) -> dict[str, Any]:
+    with Session(engine) as session:
+        if not session.get(Project, payload.project_id):
+            raise HTTPException(status_code=400, detail=f"Unknown project_id: {payload.project_id}")
+        if payload.parent_id:
+            ensure_component_write_scope(session, payload.parent_id, payload.team, payload.impl_option_id)
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Component name is required.")
+        if payload.logical_instance_count < 0:
+            raise HTTPException(status_code=400, detail="logical_instance_count must be non-negative")
+        component_id = (payload.id or "").strip() or component_id_from_name(session, name)
+        if session.get(LogicalComponent, component_id):
+            raise HTTPException(status_code=409, detail=f"Logical component already exists: {component_id}")
+        if payload.module_definition_id and not session.get(ModuleDefinition, payload.module_definition_id):
+            raise HTTPException(status_code=400, detail=f"Unknown module_definition_id: {payload.module_definition_id}")
+        row = LogicalComponent(
+            id=component_id,
+            project_id=payload.project_id,
+            parent_id=payload.parent_id or None,
+            module_definition_id=payload.module_definition_id or None,
+            name=name,
+            instance_type=payload.instance_type.strip() or "block",
+            resource_type=payload.resource_type.strip() or "logic",
+            function_domain=payload.function_domain.strip() or "General",
+            hierarchy_path=component_path(session, payload.parent_id, name),
+            logical_instance_count=payload.logical_instance_count,
+            owner_team=payload.owner_team.strip() or "Architecture Team",
+            visibility_level=payload.visibility_level.strip() or "team",
+            description=payload.description or "",
+            created_at=now_iso(),
+            updated_at=now_iso(),
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return component_ui(session, row, payload.impl_option_id)
+
+
+@app.put("/api/components/{component_id}")
+def update_logical_component(component_id: str, payload: LogicalComponentInput) -> dict[str, Any]:
+    with Session(engine) as session:
+        row = session.get(LogicalComponent, component_id)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Unknown logical component: {component_id}")
+        ensure_component_write_scope(session, component_id, payload.team, payload.impl_option_id)
+        if payload.parent_id:
+            ensure_component_write_scope(session, payload.parent_id, payload.team, payload.impl_option_id)
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Component name is required.")
+        if payload.logical_instance_count < 0:
+            raise HTTPException(status_code=400, detail="logical_instance_count must be non-negative")
+        if payload.parent_id == component_id:
+            raise HTTPException(status_code=400, detail="A component cannot be its own parent.")
+        if payload.parent_id and payload.parent_id in descendant_component_ids(session, component_id):
+            raise HTTPException(status_code=400, detail="A component cannot be moved under its own descendant.")
+        if payload.parent_id and not session.get(LogicalComponent, payload.parent_id):
+            raise HTTPException(status_code=400, detail=f"Unknown parent_id: {payload.parent_id}")
+        if payload.module_definition_id and not session.get(ModuleDefinition, payload.module_definition_id):
+            raise HTTPException(status_code=400, detail=f"Unknown module_definition_id: {payload.module_definition_id}")
+
+        row.project_id = payload.project_id
+        row.parent_id = payload.parent_id or None
+        row.module_definition_id = payload.module_definition_id or None
+        row.name = name
+        row.instance_type = payload.instance_type.strip() or "block"
+        row.resource_type = payload.resource_type.strip() or "logic"
+        row.function_domain = payload.function_domain.strip() or "General"
+        row.logical_instance_count = payload.logical_instance_count
+        row.owner_team = payload.owner_team.strip() or "Architecture Team"
+        row.visibility_level = payload.visibility_level.strip() or "team"
+        row.description = payload.description or ""
+        row.hierarchy_path = component_path(session, row.parent_id, row.name)
+        row.updated_at = now_iso()
+        session.add(row)
+        update_component_subtree_paths(session, row)
+        session.commit()
+        session.refresh(row)
+        return component_ui(session, row, payload.impl_option_id)
+
+
+@app.delete("/api/components/{component_id}")
+def delete_logical_component(component_id: str, payload: LogicalComponentDeleteInput) -> dict[str, Any]:
+    with Session(engine) as session:
+        row = session.get(LogicalComponent, component_id)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Unknown logical component: {component_id}")
+        ensure_component_write_scope(session, component_id, payload.team, payload.impl_option_id)
+        ids = {component_id, *descendant_component_ids(session, component_id)}
+        if not payload.cascade and len(ids) > 1:
+            raise HTTPException(status_code=409, detail="Component has children. Enable cascade to delete the subtree.")
+        partitions = session.exec(select(PhysicalPartition).where(PhysicalPartition.logical_component_id.in_(ids))).all()
+        partition_ids = {partition.id for partition in partitions}
+        if partition_ids:
+            session.exec(delete(Metric).where(Metric.subject_type == "physical_partition", Metric.subject_id.in_(partition_ids)))
+        session.exec(delete(PhysicalPartition).where(PhysicalPartition.logical_component_id.in_(ids)))
+        session.exec(delete(Metric).where(Metric.subject_type == "logical_component", Metric.subject_id.in_(ids)))
+        session.exec(delete(PowerObservation).where(PowerObservation.scope_type == "component", PowerObservation.scope_id.in_(ids)))
+        session.exec(delete(ApplicationScenarioSelection).where(ApplicationScenarioSelection.component_id.in_(ids)))
+        for logical_id in sorted(ids, key=lambda value: session.get(LogicalComponent, value).hierarchy_path if session.get(LogicalComponent, value) else "", reverse=True):
+            item = session.get(LogicalComponent, logical_id)
+            if item:
+                session.delete(item)
+        session.commit()
+        return {"deleted_component_ids": sorted(ids), "deleted_partition_ids": sorted(partition_ids)}
 
 
 @app.get("/api/components")

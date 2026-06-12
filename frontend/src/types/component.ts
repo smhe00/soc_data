@@ -2,6 +2,7 @@ export type ConfidenceLevel = "approved" | "review" | "draft";
 
 export interface BlockNode {
   id: string;
+  project_id: string;
   parent: string | null;
   name: string;
   type: string;
