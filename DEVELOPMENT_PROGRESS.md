@@ -8,7 +8,9 @@ The project is a Phase-1 SQLite MVP Alpha for a SoC cross-die / 3DIC architectur
 
 Backend:
 
-- FastAPI + SQLModel + SQLite in `backend/main.py`.
+- FastAPI + SQLModel + SQLite.
+- `backend/main.py` remains the compatibility app entry.
+- DB/config/models/schemas/seed/power/import code has been split into focused backend modules.
 - Automatic table creation and compatibility migration at startup.
 - Demo seed is enabled by default with `SEED_DEMO=true`.
 - Additional SQLite databases can be created and selected through `/api/databases`.
@@ -46,6 +48,7 @@ Primary entities:
 - `ImplementationInterface`
 - `ImplementationPackageEscape`
 - `ApplicationScenario`
+- `PowerDataset`
 - `PhysicalMapping`
 - `OperatingPointSet`
 - `PowerObservation`
@@ -60,6 +63,7 @@ Important semantics:
 - Physical partitions attached to a parent map only that parent's self/residual content.
 - `content_share` is the meaningful partial-partition content field; `partition_ratio` remains a compatibility alias.
 - Application power is stored in module use case/Profile library rows and selected into application scenarios.
+- Power Dataset is a first-class model in `powerdataset`; `physical_mapping_id` remains the compatibility field name for selected dataset ids.
 - Power roll-up uses explicit selection: included parent rows replace descendants, while included descendants make ancestors inactive.
 - Parent-child power deltas are displayed as unsplit power, not automatically created as residual database rows.
 
@@ -76,8 +80,10 @@ Important semantics:
 - Import template download and workbook upload.
 - Data quality API and UI gate.
 - Application power use case/Profile library.
+- Explicit Power Dataset model and `/api/power-datasets` API, with `/api/physical-mappings` kept as a compatibility alias.
 - Application scenario composition with included/inactive assignment semantics.
 - Parent/child power roll-up status and unsplit explanation.
+- Focused pytest regression tests for seed counts, import round trip, component detail saves, application power roll-up, Power Dataset compatibility, and database switching.
 - Windows deploy script for local frontend/backend startup.
 
 ## Key Commands
@@ -149,7 +155,7 @@ Do not add these in Phase 1 unless explicitly requested:
 
 ## Suggested Next Work
 
-- Split `backend/main.py` into smaller modules after the current behavior is locked down.
-- Add focused pytest coverage for quality rules, import validation, component editing, and application power roll-up validation.
+- Continue splitting remaining backend domain routes/services from `backend/main.py`.
+- Add more focused pytest coverage for quality edge cases, import validation failures, and implementation option detail validation.
 - Add a schema/version banner to exported workbooks.
 - Turn lightweight team filtering into real authorization in a later phase.

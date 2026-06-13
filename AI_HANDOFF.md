@@ -4,7 +4,7 @@ This repository is the Phase-1 MVP for a SoC cross-die / 3DIC architecture datab
 
 ## Current State
 
-- Backend: FastAPI + SQLModel + SQLite in `backend/main.py`.
+- Backend: FastAPI + SQLModel + SQLite. `backend/main.py` remains the compatibility app entry, with DB/config/models/schemas/seed/power/import code split into focused modules.
 - Frontend: React + TypeScript + Vite in `frontend/`.
 - Import template: `templates/soc_import_template.xlsx`.
 - Canonical schema notes: `docs/schema_v7.md`.
@@ -54,7 +54,8 @@ Area semantics:
 Application power semantics:
 
 - The demo keeps power values on logical modules under the current `impl_option` and selected Power Dataset; it does not yet split power to tiers or hard macros.
-- In Phase 1, Power Dataset is still stored through the compatibility table/field `physical_mapping` / `physical_mapping_id`. Treat it as a power data baseline or back-annotation set, such as architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement, not as physical partition maintenance.
+- Power Dataset is now a first-class backend model in `powerdataset`. Treat it as a power data baseline or back-annotation set, such as architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement, not as physical partition maintenance.
+- The field name `physical_mapping_id` remains as a compatibility alias for the selected Power Dataset id. The legacy `/api/physical-mappings` endpoint remains an alias for `/api/power-datasets`.
 - A module use case power value is keyed by `impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id`.
 - Every module can use `Default` as a use case name, but `Default` is not usable in an application scenario until a real Profile and power value are saved.
 - An application scenario is a composition: it checks which module use case/Profile rows participate in the scenario.
@@ -64,12 +65,13 @@ Application power semantics:
 ## Important Files
 
 - `backend/main.py`
-  - SQLModel models.
-  - SQLite compatibility migration.
-  - demo seed.
-  - import/export endpoints.
-  - quality rules.
-  - component/tier/dashboard APIs.
+  - FastAPI app entry, CORS, startup hook, remaining compatibility routes.
+- `backend/db.py`, `backend/models.py`, `backend/schemas.py`, `backend/seed.py`
+  - SQLite engine/switching/migration, SQLModel models, Pydantic schemas, and demo seed.
+- `backend/power.py`
+  - Power Dataset, module power use case, power observation, application scenario, and scenario composition routes.
+- `backend/imports.py`
+  - Import template and workbook upload routes.
 - `frontend/src/App.tsx`
   - Main app shell and navigation.
   - Hierarchy editor with separate logical definition and physical partition mapping panels.
@@ -82,6 +84,8 @@ Application power semantics:
   - Re-seeds demo data through TestClient startup.
 - `scripts/verify_import.py`
   - Static workbook import check.
+- `tests/`
+  - Focused pytest regression coverage for seed counts, import round trip, component detail saves, application power roll-up, Power Dataset compatibility, and database switching.
 
 ## Commands
 
@@ -158,7 +162,7 @@ Do not add these in Phase 1 unless explicitly requested:
 
 ## Suggested Next Work
 
-- Split `backend/main.py` into smaller modules once behavior stabilizes.
-- Add focused pytest tests for quality rules, import validation, and application power roll-up validation.
+- Continue splitting remaining backend domain routes/services from `backend/main.py`.
+- Add focused pytest tests for quality edge cases, import validation failures, and implementation detail validation.
 - Add a schema/version banner to exported workbooks.
 - Convert lightweight team filtering into real authentication/authorization only in a later phase.

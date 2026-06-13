@@ -32,11 +32,13 @@ flowchart LR
   Metric --> PhysicalPartition
   Metric --> Tier
   Metric --> ImplOption
-  ImplOption --> PhysicalMapping
+  ImplOption --> PowerDataset
+  PhysicalMapping --> PowerDataset
   ApplicationScenario --> ApplicationScenarioSelection
   LogicalComponent --> PowerObservation
   OperatingPointSet --> PowerObservation
-  PhysicalMapping --> PowerObservation
+  PowerDataset --> PowerObservation
+  PowerDataset --> ApplicationScenarioSelection
 ```
 
 ## Main Tables
@@ -145,13 +147,19 @@ Application workload scenario for power composition, such as UI browsing, camera
 
 Key fields: `id`, `project_id`, `name`, `category`, `description`.
 
+### power_dataset
+
+Power data baseline or back-annotation set under an implementation option.
+
+In the Application Power workflow, this represents one coherent power data source, not the editable physical partition map. Examples include early architecture estimates, RTL/PTPX simulation snapshots, post-PnR power, and silicon measurement campaigns.
+
+Key fields: `id`, `project_id`, `impl_option_id`, `name`, `dataset_type`, `development_stage`, `source_type`, `confidence`, `dataset_version`, `related_physical_mapping_id`, `description`, `context_json`, `created_at`, `updated_at`.
+
 ### physical_mapping
 
-Compatibility storage for a Power Dataset under an implementation option.
+Legacy compatibility storage for old Power Dataset ids.
 
-In the Application Power workflow, this represents a power data baseline or back-annotation set, not the editable physical partition map. Examples include early architecture estimate, RTL/PTPX simulation, post-PnR power, and silicon measurement campaigns. The table name remains `physical_mapping` in Phase 1 to preserve the current API and seed data; new UI and docs should present it as `Power Dataset`.
-
-Key fields: `id`, `impl_option_id`, `name`, `mapping_version`, `description`, `mapping_json`.
+The old `physicalmapping` table is retained in Phase 1 so existing demo ids and old SQLite databases keep working. Startup compatibility migration copies legacy rows into `powerdataset` when needed. New code should use `PowerDataset` and `/api/power-datasets`; `/api/physical-mappings` remains an API alias.
 
 ### operating_point_set
 
@@ -171,7 +179,7 @@ The current demo stores module use case power under `application_scenario_id = A
 impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
 ```
 
-Here `physical_mapping_id` is the compatibility field for the selected Power Dataset.
+Here `physical_mapping_id` is the compatibility field for the selected Power Dataset id. It points to `powerdataset.id` in new databases.
 
 ### application_scenario_selection
 

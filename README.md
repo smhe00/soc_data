@@ -179,6 +179,7 @@ Core tables:
 - `metric`
 - `responsibilityassignment`
 - `applicationscenario`
+- `powerdataset`
 - `physicalmapping`
 - `operatingpointset`
 - `powerobservation`
@@ -196,6 +197,12 @@ Detailed schema notes:
 
 ```text
 docs/schema_v7.md
+```
+
+Phase-1 scope waivers and compatibility exceptions:
+
+```text
+PHASE1_WAIVERS.md
 ```
 
 ## Demo Data
@@ -376,6 +383,9 @@ GET /api/application-scenarios
 POST /api/application-scenarios
 PUT /api/application-scenarios/{scenario_id}
 DELETE /api/application-scenarios/{scenario_id}
+GET /api/power-datasets?impl_option_id=S2
+POST /api/power-datasets
+PUT /api/power-datasets/{dataset_id}
 GET /api/physical-mappings?impl_option_id=S2
 GET /api/operating-point-sets
 GET /api/module-power-usecases?impl_option_id=S2&physical_mapping_id=PM_3DIC_A
@@ -392,11 +402,11 @@ The Application Power tab provides scenario-based power modeling and analysis.
 ### Data Modeling Principles
 Power is decoupled from static component attributes and modeled as `PowerObservation` (conditional observations). Power values are determined by the combination of:
 - **Implementation Option** (mapped to `impl_option`)
-- **Power Dataset** (currently stored through the compatibility table/field `physical_mapping`)
+- **Power Dataset** (mapped to `powerdataset`; selected through the compatibility field name `physical_mapping_id`)
 - **Application Scenario** (mapped to `application_scenario`)
 - **Operating Point Set / Profile** (mapped to `operating_point_set`)
 
-In the Application Power UI, `Power Dataset` means one power data baseline or back-annotation set, such as early architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement. It is not the day-to-day physical partition mapping editor. The storage name remains `physical_mapping` in Phase 1 to avoid a schema/API churn.
+In the Application Power UI, `Power Dataset` means one power data baseline or back-annotation set, such as early architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement. It is not the day-to-day physical partition mapping editor. The legacy `/api/physical-mappings` endpoint remains as a compatibility alias for `/api/power-datasets`.
 
 ### Additive vs Non-additive Power
 Observations are marked with `is_additive`:
