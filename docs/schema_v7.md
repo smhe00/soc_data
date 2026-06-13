@@ -147,7 +147,9 @@ Key fields: `id`, `project_id`, `name`, `category`, `description`.
 
 ### physical_mapping
 
-Named physical mapping/version under an implementation option.
+Compatibility storage for a Power Dataset under an implementation option.
+
+In the Application Power workflow, this represents a power data baseline or back-annotation set, not the editable physical partition map. Examples include early architecture estimate, RTL/PTPX simulation, post-PnR power, and silicon measurement campaigns. The table name remains `physical_mapping` in Phase 1 to preserve the current API and seed data; new UI and docs should present it as `Power Dataset`.
 
 Key fields: `id`, `impl_option_id`, `name`, `mapping_version`, `description`, `mapping_json`.
 
@@ -168,6 +170,8 @@ The current demo stores module use case power under `application_scenario_id = A
 ```text
 impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
 ```
+
+Here `physical_mapping_id` is the compatibility field for the selected Power Dataset.
 
 ### application_scenario_selection
 

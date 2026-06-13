@@ -8,7 +8,7 @@ import type {
   ApplicationScenarioSelection,
   ModulePowerUseCase,
   OperatingPointSet,
-  PhysicalMapping,
+  PowerDataset,
 } from "../types/power";
 import { getComponentTree } from "../api/components";
 import {
@@ -20,7 +20,7 @@ import {
   getApplicationScenarios,
   getModulePowerUseCases,
   getOperatingPointSets,
-  getPhysicalMappings,
+  getPowerDatasets,
   updateApplicationScenario,
   updateApplicationScenarioComposition,
   upsertModulePowerUseCase,
@@ -111,8 +111,8 @@ function profileIdFromName(name: string): string {
 
 export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps): JSX.Element {
   const [selectedImplOptionId, setSelectedImplOptionId] = useState("S2");
-  const [physicalMappings, setPhysicalMappings] = useState<PhysicalMapping[]>([]);
-  const [selectedPhysicalMappingId, setSelectedPhysicalMappingId] = useState("");
+  const [powerDatasets, setPowerDatasets] = useState<PowerDataset[]>([]);
+  const [selectedPowerDatasetId, setSelectedPowerDatasetId] = useState("");
   const [applicationScenarios, setApplicationScenarios] = useState<ApplicationScenario[]>([]);
   const [selectedApplicationScenarioId, setSelectedApplicationScenarioId] = useState("");
   const [operatingPointSets, setOperatingPointSets] = useState<OperatingPointSet[]>([]);
@@ -201,13 +201,13 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
       try {
         setPageError(null);
         const [mappings, tree] = await Promise.all([
-          getPhysicalMappings(selectedImplOptionId),
+          getPowerDatasets(selectedImplOptionId),
           getComponentTree(undefined, selectedImplOptionId),
         ]);
-        setPhysicalMappings(mappings);
+        setPowerDatasets(mappings);
         setComponentTree(tree);
-        const nextMapping = mappings.find((item) => item.id === selectedPhysicalMappingId) || mappings[0];
-        setSelectedPhysicalMappingId(nextMapping?.id || "");
+        const nextDataset = mappings.find((item) => item.id === selectedPowerDatasetId) || mappings[0];
+        setSelectedPowerDatasetId(nextDataset?.id || "");
         const nextExpanded: Record<string, boolean> = {};
         flattenTree(tree).forEach(({ node, depth }) => {
           if (depth < 2) nextExpanded[node.id] = true;
@@ -227,7 +227,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
         setSummary(null);
         return;
       }
-      if (!selectedImplOptionId || !selectedPhysicalMappingId || !selectedApplicationScenarioId) {
+      if (!selectedImplOptionId || !selectedPowerDatasetId || !selectedApplicationScenarioId) {
         setComposition([]);
         setSummary(null);
         return;
@@ -236,9 +236,9 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
         setLoading(true);
         setPageError(null);
         const [useCases, selections, summaryData] = await Promise.all([
-          getModulePowerUseCases(selectedImplOptionId, selectedPhysicalMappingId),
-          getApplicationScenarioComposition(selectedImplOptionId, selectedPhysicalMappingId, selectedApplicationScenarioId),
-          getApplicationPowerSummary(selectedImplOptionId, selectedPhysicalMappingId, selectedApplicationScenarioId),
+          getModulePowerUseCases(selectedImplOptionId, selectedPowerDatasetId),
+          getApplicationScenarioComposition(selectedImplOptionId, selectedPowerDatasetId, selectedApplicationScenarioId),
+          getApplicationPowerSummary(selectedImplOptionId, selectedPowerDatasetId, selectedApplicationScenarioId),
         ]);
         setModuleUseCases(useCases);
         setComposition(selections);
@@ -250,7 +250,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
       }
     }
     void loadPowerData();
-  }, [isCreatingScenario, selectedImplOptionId, selectedPhysicalMappingId, selectedApplicationScenarioId, refreshId]);
+  }, [isCreatingScenario, selectedImplOptionId, selectedPowerDatasetId, selectedApplicationScenarioId, refreshId]);
 
   useEffect(() => {
     const useCaseByComponent = new Map<string, ModulePowerUseCase[]>();
@@ -631,7 +631,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
       const savedUseCase = await upsertModulePowerUseCase({
         project_id: projectId,
         impl_option_id: selectedImplOptionId,
-        physical_mapping_id: selectedPhysicalMappingId,
+        physical_mapping_id: selectedPowerDatasetId,
         component_id: node.id,
         component_name: node.name,
         use_case_name: useCaseName,
@@ -674,7 +674,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
             row.operating_point_set_id === savedUseCase.operating_point_set_id,
         )
       ) {
-        const summaryData = await getApplicationPowerSummary(selectedImplOptionId, selectedPhysicalMappingId, selectedApplicationScenarioId);
+        const summaryData = await getApplicationPowerSummary(selectedImplOptionId, selectedPowerDatasetId, selectedApplicationScenarioId);
         setSummary(summaryData);
       }
     } catch (error) {
@@ -708,7 +708,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
       const result = await updateApplicationScenarioComposition({
         project_id: projectId,
         impl_option_id: selectedImplOptionId,
-        physical_mapping_id: selectedPhysicalMappingId,
+        physical_mapping_id: selectedPowerDatasetId,
         application_scenario_id: selectedApplicationScenarioId,
         selections,
       });
@@ -748,7 +748,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
         powerMw: "",
       });
       if (selectedApplicationScenarioId) {
-        const summaryData = await getApplicationPowerSummary(selectedImplOptionId, selectedPhysicalMappingId, selectedApplicationScenarioId);
+        const summaryData = await getApplicationPowerSummary(selectedImplOptionId, selectedPowerDatasetId, selectedApplicationScenarioId);
         setSummary(summaryData);
       }
     } catch (error) {
@@ -997,7 +997,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
 
   return (
     <div className="space-y-6">
-      <Card title="Application Power" subtitle="Demo model: module use case/Profile power library plus application scenario composition." icon={Zap}>
+      <Card title="Application Power" subtitle="Module use case/Profile power library plus scenario composition across power datasets." icon={Zap}>
         <div className="grid gap-4 xl:grid-cols-3">
           <FieldLabel htmlFor="power-impl" label="Implementation">
             <select id="power-impl" className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm" value={selectedImplOptionId} onChange={(e) => setSelectedImplOptionId(e.target.value)}>
@@ -1008,14 +1008,15 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
               ))}
             </select>
           </FieldLabel>
-          <FieldLabel htmlFor="power-map" label="Physical Mapping">
-            <select id="power-map" className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm" value={selectedPhysicalMappingId} onChange={(e) => setSelectedPhysicalMappingId(e.target.value)}>
-              {physicalMappings.map((item) => (
+          <FieldLabel htmlFor="power-dataset" label="Power Dataset">
+            <select id="power-dataset" className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm" value={selectedPowerDatasetId} onChange={(e) => setSelectedPowerDatasetId(e.target.value)}>
+              {powerDatasets.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
                 </option>
               ))}
             </select>
+            <div className="text-xs text-slate-500">Power estimate, simulation, or silicon measurement baseline.</div>
           </FieldLabel>
           <div className="flex items-end">
             <button className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setRefreshId((current) => current + 1)} type="button">

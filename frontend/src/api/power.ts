@@ -2,6 +2,7 @@ import { apiGet, apiJson } from "./client";
 import type {
   ApplicationScenario,
   PhysicalMapping,
+  PowerDataset,
   OperatingPointSet,
   PowerSummary,
   PowerObservation,
@@ -44,6 +45,10 @@ export function deleteApplicationScenario(id: string): Promise<{
 export function getPhysicalMappings(implOptionId?: string): Promise<PhysicalMapping[]> {
   const path = implOptionId ? `/api/physical-mappings?impl_option_id=${encodeURIComponent(implOptionId)}` : "/api/physical-mappings";
   return apiGet<PhysicalMapping[]>(path);
+}
+
+export function getPowerDatasets(implOptionId?: string): Promise<PowerDataset[]> {
+  return getPhysicalMappings(implOptionId);
 }
 
 export function getOperatingPointSets(): Promise<OperatingPointSet[]> {

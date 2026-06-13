@@ -392,9 +392,11 @@ The Application Power tab provides scenario-based power modeling and analysis.
 ### Data Modeling Principles
 Power is decoupled from static component attributes and modeled as `PowerObservation` (conditional observations). Power values are determined by the combination of:
 - **Implementation Option** (mapped to `impl_option`)
-- **Physical Mapping** (mapped to `physical_mapping`)
+- **Power Dataset** (currently stored through the compatibility table/field `physical_mapping`)
 - **Application Scenario** (mapped to `application_scenario`)
 - **Operating Point Set / Profile** (mapped to `operating_point_set`)
+
+In the Application Power UI, `Power Dataset` means one power data baseline or back-annotation set, such as early architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement. It is not the day-to-day physical partition mapping editor. The storage name remains `physical_mapping` in Phase 1 to avoid a schema/API churn.
 
 ### Additive vs Non-additive Power
 Observations are marked with `is_additive`:
@@ -420,4 +422,4 @@ A unique module power value is identified by:
 impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
 ```
 
-An application scenario total is the sum of the checked module use case/Profile rows. Tier, hard macro, power rail, and shared-resource breakdowns remain future extensions.
+Here `physical_mapping_id` should be read as the selected Power Dataset id. An application scenario total is the sum of the checked module use case/Profile rows. Tier, hard macro, power rail, and shared-resource breakdowns remain future extensions.

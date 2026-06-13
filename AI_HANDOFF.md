@@ -53,7 +53,8 @@ Area semantics:
 
 Application power semantics:
 
-- The demo keeps power values on logical modules under the current `impl_option` and `physical_mapping`; it does not yet split power to tiers or hard macros.
+- The demo keeps power values on logical modules under the current `impl_option` and selected Power Dataset; it does not yet split power to tiers or hard macros.
+- In Phase 1, Power Dataset is still stored through the compatibility table/field `physical_mapping` / `physical_mapping_id`. Treat it as a power data baseline or back-annotation set, such as architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement, not as physical partition maintenance.
 - A module use case power value is keyed by `impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id`.
 - Every module can use `Default` as a use case name, but `Default` is not usable in an application scenario until a real Profile and power value are saved.
 - An application scenario is a composition: it checks which module use case/Profile rows participate in the scenario.

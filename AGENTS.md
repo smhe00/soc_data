@@ -102,13 +102,15 @@ Use this for phase-1 subsystem-owner filtering. Do not add full login, roles, co
 
 ### application power
 
-The current demo keeps power values on logical modules under the current `impl_option` and `physical_mapping`; it does not yet split power to tiers or hard macros.
+The current demo keeps power values on logical modules under the current `impl_option` and selected Power Dataset. In Phase 1 this is still stored as `physical_mapping` / `physical_mapping_id` for compatibility, but the UI should present it as a power data baseline or back-annotation set, not as physical partition maintenance. It does not yet split power to tiers or hard macros.
 
 A module use case power value is keyed by:
 
 ```text
 impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
 ```
+
+Read `physical_mapping_id` in power APIs as the selected Power Dataset id.
 
 An application scenario selects module use case/Profile rows. Included rows participate in the scenario total; inactive assignments may remain for roll-up comparison. Inclusive parent rows can coexist with inactive child assignments, and the parent-child delta is displayed as unsplit power, not automatically stored as a residual row.
 

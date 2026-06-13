@@ -158,7 +158,7 @@ export interface ApplicationScenario {
   description: string;
 }
 
-export interface PhysicalMapping {
+export interface PowerDataset {
   id: string;
   impl_option_id: string;
   name: string;
@@ -166,6 +166,8 @@ export interface PhysicalMapping {
   description: string;
   mapping_json: string;
 }
+
+export type PhysicalMapping = PowerDataset;
 
 export interface OperatingPointSet {
   id: string;
