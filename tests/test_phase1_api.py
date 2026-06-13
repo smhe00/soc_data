@@ -141,6 +141,63 @@ def test_application_power_rollup_validation(client: TestClient) -> None:
     assert abs(rollup["unsplit_power_w"] - 0.077) < 0.0001
 
 
+def test_power_dataset_model_and_legacy_alias(client: TestClient) -> None:
+    datasets = client.get("/api/power-datasets?impl_option_id=S2")
+    datasets.raise_for_status()
+    power_dataset = next(row for row in datasets.json() if row["id"] == "PM_3DIC_A")
+
+    assert power_dataset["dataset_type"] == "architecture_estimate"
+    assert power_dataset["development_stage"] == "architecture_estimate"
+    assert power_dataset["dataset_version"] == "V02"
+    assert power_dataset["mapping_version"] == "V02"
+
+    legacy = client.get("/api/physical-mappings?impl_option_id=S2")
+    legacy.raise_for_status()
+    assert next(row for row in legacy.json() if row["id"] == "PM_3DIC_A")["dataset_type"] == "architecture_estimate"
+
+    created = client.post(
+        "/api/power-datasets",
+        json={
+            "project_id": "P001",
+            "impl_option_id": "S2",
+            "name": "PTPX Block Simulation Snapshot",
+            "dataset_type": "simulation",
+            "development_stage": "post_pnr_power",
+            "source_type": "ptpx",
+            "confidence": "review",
+            "dataset_version": "V01",
+            "related_physical_mapping_id": "PM_3DIC_A",
+            "description": "Pytest PTPX snapshot.",
+            "context_json": '{"tool": "ptpx"}',
+        },
+    )
+    created.raise_for_status()
+    new_dataset = created.json()
+
+    assert new_dataset["id"].startswith("PD_S2_PTPX_BLOCK_SIMULATION_SNAPSHOT")
+    assert new_dataset["source_type"] == "ptpx"
+
+    power = client.post(
+        "/api/module-power-usecases",
+        json={
+            "project_id": "P001",
+            "impl_option_id": "S2",
+            "physical_mapping_id": new_dataset["id"],
+            "component_id": "B_CPU",
+            "component_name": "CPU_CLUSTER",
+            "use_case_name": "PTPX_Default",
+            "operating_point_set_id": "OP_DEFAULT",
+            "power_value_w": 0.456,
+            "confidence": "review",
+        },
+    )
+    power.raise_for_status()
+
+    library = client.get(f"/api/module-power-usecases?impl_option_id=S2&physical_mapping_id={new_dataset['id']}")
+    library.raise_for_status()
+    assert library.json()[0]["power_value_w"] == 0.456
+
+
 def test_camera_power_summary_seed(client: TestClient) -> None:
     summary = client.get(
         "/api/application-power-summary?impl_option_id=S2&physical_mapping_id=PM_3DIC_A&application_scenario_id=AS_CAMERA_4K60"

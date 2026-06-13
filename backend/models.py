@@ -189,6 +189,24 @@ class PhysicalMapping(SQLModel, table=True):
     mapping_json: str = ""
 
 
+class PowerDataset(SQLModel, table=True):
+    __tablename__ = "powerdataset"
+    id: str = Field(primary_key=True)
+    project_id: str = Field(foreign_key="project.id")
+    impl_option_id: str = Field(foreign_key="imploption.id")
+    name: str
+    dataset_type: str = "architecture_estimate"
+    development_stage: str = "architecture_estimate"
+    source_type: str = "architecture_estimate"
+    confidence: str = "draft"
+    dataset_version: str = "V01"
+    related_physical_mapping_id: str | None = Field(default=None, foreign_key="physicalmapping.id")
+    description: str = ""
+    context_json: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+
 class OperatingPointSet(SQLModel, table=True):
     __tablename__ = "operatingpointset"
     id: str = Field(primary_key=True)
@@ -203,7 +221,7 @@ class PowerObservation(SQLModel, table=True):
     id: str = Field(primary_key=True)
     project_id: str = Field(foreign_key="project.id")
     impl_option_id: str = Field(foreign_key="imploption.id")
-    physical_mapping_id: str = Field(foreign_key="physicalmapping.id")
+    physical_mapping_id: str = Field(foreign_key="powerdataset.id")
     application_scenario_id: str = Field(foreign_key="applicationscenario.id")
     operating_point_set_id: str = Field(foreign_key="operatingpointset.id")
     
@@ -231,7 +249,7 @@ class ApplicationScenarioSelection(SQLModel, table=True):
     id: str = Field(primary_key=True)
     project_id: str = Field(foreign_key="project.id")
     impl_option_id: str = Field(foreign_key="imploption.id")
-    physical_mapping_id: str = Field(foreign_key="physicalmapping.id")
+    physical_mapping_id: str = Field(foreign_key="powerdataset.id")
     application_scenario_id: str = Field(foreign_key="applicationscenario.id")
     component_id: str = Field(foreign_key="logicalcomponent.id")
     component_name: str

@@ -48,7 +48,8 @@ export function getPhysicalMappings(implOptionId?: string): Promise<PhysicalMapp
 }
 
 export function getPowerDatasets(implOptionId?: string): Promise<PowerDataset[]> {
-  return getPhysicalMappings(implOptionId);
+  const path = implOptionId ? `/api/power-datasets?impl_option_id=${encodeURIComponent(implOptionId)}` : "/api/power-datasets";
+  return apiGet<PowerDataset[]>(path);
 }
 
 export function getOperatingPointSets(): Promise<OperatingPointSet[]> {

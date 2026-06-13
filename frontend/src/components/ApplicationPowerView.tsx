@@ -136,6 +136,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
 
   const selectedImplOption = implOptions.find((item) => item.id === selectedImplOptionId);
   const projectId = selectedImplOption?.project_id || "P001";
+  const selectedPowerDataset = powerDatasets.find((item) => item.id === selectedPowerDatasetId);
   const selectedApplicationScenario = applicationScenarios.find((item) => item.id === selectedApplicationScenarioId);
   const scenarioCategories = useMemo(
     () => Array.from(new Set(applicationScenarios.map((item) => item.category || "Custom").filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -1016,7 +1017,11 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
                 </option>
               ))}
             </select>
-            <div className="text-xs text-slate-500">Power estimate, simulation, or silicon measurement baseline.</div>
+            <div className="text-xs text-slate-500">
+              {selectedPowerDataset
+                ? `${selectedPowerDataset.development_stage.replace(/_/g, " ")} / ${selectedPowerDataset.source_type.replace(/_/g, " ")} / ${selectedPowerDataset.dataset_version} / ${selectedPowerDataset.confidence}`
+                : "No power dataset"}
+            </div>
           </FieldLabel>
           <div className="flex items-end">
             <button className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setRefreshId((current) => current + 1)} type="button">

@@ -160,11 +160,21 @@ export interface ApplicationScenario {
 
 export interface PowerDataset {
   id: string;
+  project_id: string;
   impl_option_id: string;
   name: string;
+  dataset_type: string;
+  development_stage: string;
+  source_type: string;
+  confidence: string;
+  dataset_version: string;
+  related_physical_mapping_id: string | null;
   mapping_version: string;
   description: string;
+  context_json: string;
   mapping_json: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export type PhysicalMapping = PowerDataset;

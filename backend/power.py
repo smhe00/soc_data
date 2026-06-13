@@ -14,6 +14,7 @@ from backend.models import (
     LogicalComponent,
     OperatingPointSet,
     PhysicalMapping,
+    PowerDataset,
     PowerObservation,
     Project,
 )
@@ -21,6 +22,7 @@ from backend.schemas import (
     ApplicationScenarioCompositionUpdate,
     ApplicationScenarioInput,
     ModulePowerUseCaseInput,
+    PowerDatasetInput,
     PowerObservationCreate,
 )
 
@@ -122,13 +124,130 @@ def register_power_routes(app: FastAPI) -> None:
             }
 
 
-    @app.get("/api/physical-mappings")
-    def get_physical_mappings(impl_option_id: str | None = None) -> list[PhysicalMapping]:
+    def power_dataset_response(row: PowerDataset) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "project_id": row.project_id,
+            "impl_option_id": row.impl_option_id,
+            "name": row.name,
+            "dataset_type": row.dataset_type,
+            "development_stage": row.development_stage,
+            "source_type": row.source_type,
+            "confidence": row.confidence,
+            "dataset_version": row.dataset_version,
+            "related_physical_mapping_id": row.related_physical_mapping_id,
+            "description": row.description,
+            "context_json": row.context_json,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+            "mapping_version": row.dataset_version,
+            "mapping_json": row.context_json,
+        }
+
+
+    def list_power_dataset_rows(session: Session, impl_option_id: str | None = None) -> list[PowerDataset]:
+        stmt = select(PowerDataset)
+        if impl_option_id:
+            stmt = stmt.where(PowerDataset.impl_option_id == impl_option_id)
+        rows = list(session.exec(stmt).all())
+        return sorted(rows, key=lambda row: (row.impl_option_id, row.development_stage, row.name, row.id))
+
+
+    def validate_power_dataset_payload(session: Session, payload: PowerDatasetInput) -> tuple[str, ImplOption]:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Power dataset name is required.")
+        project = session.get(Project, payload.project_id)
+        if not project:
+            raise HTTPException(status_code=400, detail=f"Unknown project_id: {payload.project_id}")
+        impl_option = session.get(ImplOption, payload.impl_option_id)
+        if not impl_option:
+            raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {payload.impl_option_id}")
+        if impl_option.project_id != payload.project_id:
+            raise HTTPException(status_code=400, detail=f"impl_option_id {payload.impl_option_id} does not belong to project_id {payload.project_id}")
+        if payload.related_physical_mapping_id:
+            mapping = session.get(PhysicalMapping, payload.related_physical_mapping_id)
+            if not mapping:
+                raise HTTPException(status_code=400, detail=f"Unknown related_physical_mapping_id: {payload.related_physical_mapping_id}")
+            if mapping.impl_option_id != payload.impl_option_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"related_physical_mapping_id {payload.related_physical_mapping_id} does not belong to impl_option_id {payload.impl_option_id}",
+                )
+        return name, impl_option
+
+
+    def next_power_dataset_id(session: Session, impl_option_id: str, name: str, requested_id: str | None = None) -> str:
+        base_id = (requested_id or "").strip() or f"PD_{safe_power_id_part(impl_option_id)}_{safe_power_id_part(name)}"
+        dataset_id = base_id
+        index = 2
+        while session.get(PowerDataset, dataset_id):
+            dataset_id = f"{base_id}_{index}"
+            index += 1
+        return dataset_id
+
+
+    @app.get("/api/power-datasets")
+    def get_power_datasets(impl_option_id: str | None = None) -> list[dict[str, Any]]:
         with Session(db.engine) as session:
-            stmt = select(PhysicalMapping)
-            if impl_option_id:
-                stmt = stmt.where(PhysicalMapping.impl_option_id == impl_option_id)
-            return list(session.exec(stmt).all())
+            return [power_dataset_response(row) for row in list_power_dataset_rows(session, impl_option_id)]
+
+
+    @app.post("/api/power-datasets")
+    def create_power_dataset(payload: PowerDatasetInput) -> dict[str, Any]:
+        with Session(db.engine) as session:
+            name, _impl_option = validate_power_dataset_payload(session, payload)
+            now = db.now_iso()
+            row = PowerDataset(
+                id=next_power_dataset_id(session, payload.impl_option_id, name, payload.id),
+                project_id=payload.project_id,
+                impl_option_id=payload.impl_option_id,
+                name=name,
+                dataset_type=(payload.dataset_type or "architecture_estimate").strip() or "architecture_estimate",
+                development_stage=(payload.development_stage or "architecture_estimate").strip() or "architecture_estimate",
+                source_type=(payload.source_type or "architecture_estimate").strip() or "architecture_estimate",
+                confidence=(payload.confidence or "draft").strip() or "draft",
+                dataset_version=(payload.dataset_version or "V01").strip() or "V01",
+                related_physical_mapping_id=payload.related_physical_mapping_id,
+                description=payload.description or "",
+                context_json=payload.context_json or "{}",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return power_dataset_response(row)
+
+
+    @app.put("/api/power-datasets/{dataset_id}")
+    def update_power_dataset(dataset_id: str, payload: PowerDatasetInput) -> dict[str, Any]:
+        with Session(db.engine) as session:
+            row = session.get(PowerDataset, dataset_id)
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Power dataset not found: {dataset_id}")
+            name, _impl_option = validate_power_dataset_payload(session, payload)
+            row.project_id = payload.project_id
+            row.impl_option_id = payload.impl_option_id
+            row.name = name
+            row.dataset_type = (payload.dataset_type or "architecture_estimate").strip() or "architecture_estimate"
+            row.development_stage = (payload.development_stage or "architecture_estimate").strip() or "architecture_estimate"
+            row.source_type = (payload.source_type or "architecture_estimate").strip() or "architecture_estimate"
+            row.confidence = (payload.confidence or "draft").strip() or "draft"
+            row.dataset_version = (payload.dataset_version or "V01").strip() or "V01"
+            row.related_physical_mapping_id = payload.related_physical_mapping_id
+            row.description = payload.description or ""
+            row.context_json = payload.context_json or "{}"
+            row.updated_at = db.now_iso()
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return power_dataset_response(row)
+
+
+    @app.get("/api/physical-mappings")
+    def get_physical_mappings(impl_option_id: str | None = None) -> list[dict[str, Any]]:
+        return get_power_datasets(impl_option_id)
 
 
     @app.get("/api/operating-point-sets")
@@ -151,9 +270,9 @@ def register_power_routes(app: FastAPI) -> None:
         )
 
 
-    def app_selection_id(application_scenario_id: str, component_id: str, use_case_name: str, operating_point_set_id: str) -> str:
+    def app_selection_id(physical_mapping_id: str, application_scenario_id: str, component_id: str, use_case_name: str, operating_point_set_id: str) -> str:
         return (
-            f"ASC_{safe_power_id_part(application_scenario_id)}_{safe_power_id_part(component_id)}_"
+            f"ASC_{safe_power_id_part(physical_mapping_id)}_{safe_power_id_part(application_scenario_id)}_{safe_power_id_part(component_id)}_"
             f"{safe_power_id_part(use_case_name)}_{safe_power_id_part(operating_point_set_id)}"
         )
 
@@ -171,11 +290,13 @@ def register_power_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail=f"Unknown project_id: {project_id}")
         if not session.get(ImplOption, impl_option_id):
             raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {impl_option_id}")
-        mapping = session.get(PhysicalMapping, physical_mapping_id)
-        if not mapping:
-            raise HTTPException(status_code=400, detail=f"Unknown physical_mapping_id: {physical_mapping_id}")
-        if mapping.impl_option_id != impl_option_id:
+        power_dataset = session.get(PowerDataset, physical_mapping_id)
+        if not power_dataset:
+            raise HTTPException(status_code=400, detail=f"Unknown power dataset physical_mapping_id: {physical_mapping_id}")
+        if power_dataset.impl_option_id != impl_option_id:
             raise HTTPException(status_code=400, detail=f"physical_mapping_id {physical_mapping_id} does not belong to impl_option_id {impl_option_id}")
+        if power_dataset.project_id != project_id:
+            raise HTTPException(status_code=400, detail=f"physical_mapping_id {physical_mapping_id} does not belong to project_id {project_id}")
         if application_scenario_id and not session.get(ApplicationScenario, application_scenario_id):
             raise HTTPException(status_code=400, detail=f"Unknown application_scenario_id: {application_scenario_id}")
         if operating_point_set_id and not session.get(OperatingPointSet, operating_point_set_id):
@@ -518,7 +639,7 @@ def register_power_routes(app: FastAPI) -> None:
                     )
                 pending_selections.append(
                     ApplicationScenarioSelection(
-                        id=app_selection_id(payload.application_scenario_id, item.component_id, use_case_name, item.operating_point_set_id),
+                        id=app_selection_id(payload.physical_mapping_id, payload.application_scenario_id, item.component_id, use_case_name, item.operating_point_set_id),
                         project_id=payload.project_id,
                         impl_option_id=payload.impl_option_id,
                         physical_mapping_id=payload.physical_mapping_id,

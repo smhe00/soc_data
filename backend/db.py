@@ -130,3 +130,23 @@ def ensure_sqlite_schema_compatibility() -> None:
                 "AND subject_type IN ('logical_component', 'physical_partition')"
             )
         )
+        powerdataset_rows = connection.execute(text("PRAGMA table_info(powerdataset)")).fetchall()
+        physicalmapping_rows = connection.execute(text("PRAGMA table_info(physicalmapping)")).fetchall()
+        if powerdataset_rows and physicalmapping_rows:
+            connection.execute(
+                text(
+                    "INSERT INTO powerdataset ("
+                    "id, project_id, impl_option_id, name, dataset_type, development_stage, source_type, "
+                    "confidence, dataset_version, related_physical_mapping_id, description, context_json, "
+                    "created_at, updated_at"
+                    ") "
+                    "SELECT pm.id, io.project_id, pm.impl_option_id, pm.name, "
+                    "'architecture_estimate', 'architecture_estimate', 'legacy_physical_mapping', "
+                    "'review', COALESCE(NULLIF(pm.mapping_version, ''), 'V01'), pm.id, "
+                    "COALESCE(pm.description, ''), COALESCE(pm.mapping_json, ''), :created_at, :updated_at "
+                    "FROM physicalmapping pm "
+                    "JOIN imploption io ON io.id = pm.impl_option_id "
+                    "WHERE NOT EXISTS (SELECT 1 FROM powerdataset pd WHERE pd.id = pm.id)"
+                ),
+                {"created_at": now_iso(), "updated_at": now_iso()},
+            )

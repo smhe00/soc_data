@@ -72,6 +72,21 @@ class PowerObservationCreate(BaseModel):
     note: str | None = None
 
 
+class PowerDatasetInput(BaseModel):
+    id: str | None = None
+    project_id: str
+    impl_option_id: str
+    name: str
+    dataset_type: str = "architecture_estimate"
+    development_stage: str = "architecture_estimate"
+    source_type: str = "architecture_estimate"
+    confidence: str = "draft"
+    dataset_version: str = "V01"
+    related_physical_mapping_id: str | None = None
+    description: str = ""
+    context_json: str = "{}"
+
+
 class ModulePowerUseCaseInput(BaseModel):
     project_id: str
     impl_option_id: str

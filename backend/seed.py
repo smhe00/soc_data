@@ -14,6 +14,7 @@ from .models import (
     OperatingPointSet,
     PhysicalMapping,
     PhysicalPartition,
+    PowerDataset,
     ProcessNode,
     Project,
     ResponsibilityAssignment,
@@ -43,6 +44,7 @@ def seed_data() -> None:
         session.exec(delete(ApplicationScenarioSelection))
         session.exec(delete(PowerObservation))
         session.exec(delete(OperatingPointSet))
+        session.exec(delete(PowerDataset))
         session.exec(delete(PhysicalMapping))
         session.exec(delete(ApplicationScenario))
 
@@ -377,6 +379,40 @@ def seed_data() -> None:
             PhysicalMapping(id="PM_2D_BASE", impl_option_id="S1", name="2D_BASELINE_MAPPING_V01", mapping_version="V01", description="Baseline monolithic 2D die mapping.", mapping_json='{"SOC_TOP": "monolithic"}'),
             PhysicalMapping(id="PM_3DIC_A", impl_option_id="S2", name="3DIC_A_MAPPING_V02", mapping_version="V02", description="3DIC split-die mapping with SRAM cache stacked on Middle Tier.", mapping_json='{"NPU_TOP": "T0/T1 split", "GPU_TOP": "T0/T1 split", "CPU_CLUSTER": "T0"}'),
         ]
+        power_datasets = [
+            PowerDataset(
+                id="PM_2D_BASE",
+                project_id="P001",
+                impl_option_id="S1",
+                name="2D Baseline Architecture Estimate",
+                dataset_type="architecture_estimate",
+                development_stage="architecture_estimate",
+                source_type="architecture_planning",
+                confidence="review",
+                dataset_version="V01",
+                related_physical_mapping_id="PM_2D_BASE",
+                description="Initial rough power dataset for the monolithic 2D baseline.",
+                context_json='{"scope": "module_usecase_library", "legacy_mapping_name": "2D_BASELINE_MAPPING_V01"}',
+                created_at=created,
+                updated_at=created,
+            ),
+            PowerDataset(
+                id="PM_3DIC_A",
+                project_id="P001",
+                impl_option_id="S2",
+                name="3DIC A Architecture Estimate",
+                dataset_type="architecture_estimate",
+                development_stage="architecture_estimate",
+                source_type="architecture_planning",
+                confidence="review",
+                dataset_version="V02",
+                related_physical_mapping_id="PM_3DIC_A",
+                description="Initial rough module use case/Profile power dataset for the 3DIC performance option.",
+                context_json='{"scope": "module_usecase_library", "legacy_mapping_name": "3DIC_A_MAPPING_V02"}',
+                created_at=created,
+                updated_at=created,
+            ),
+        ]
         
         op_point_sets = [
             OperatingPointSet(id="OP_DEFAULT", project_id="P001", name="Default", description="Default module Profile. Available to every module; it belongs to a module only after a saved module power value uses it.", op_json="{}"),
@@ -502,7 +538,7 @@ def seed_data() -> None:
         ]
         scenario_selections = [
             ApplicationScenarioSelection(
-                id=f"ASC_{safe_key(scenario_id)}_{safe_key(component_id)}_{safe_key(use_case)}_{safe_key(op_id)}",
+                id=f"ASC_PM_3DIC_A_{safe_key(scenario_id)}_{safe_key(component_id)}_{safe_key(use_case)}_{safe_key(op_id)}",
                 project_id="P001",
                 impl_option_id="S2",
                 physical_mapping_id="PM_3DIC_A",
@@ -519,7 +555,7 @@ def seed_data() -> None:
         ]
         power_obs: list[PowerObservation] = []
         
-        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities + app_scenarios + phys_mappings + op_point_sets + power_obs + module_power_obs + scenario_selections:
+        for row in projects + implOptions + process_nodes + module_definitions + logical_components + tiers + partitions + metrics + responsibilities + app_scenarios + phys_mappings + power_datasets + op_point_sets + power_obs + module_power_obs + scenario_selections:
             session.merge(row)
         session.commit()
 
