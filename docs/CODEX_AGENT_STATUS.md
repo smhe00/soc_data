@@ -11,7 +11,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-15 |
-| Current batch | P0.3 Power Dataset naming cleanup and P0.4 Metric provenance complete |
+| Current batch | P0.3/P0.4 follow-up complete: identity-aware metric upsert and alias conflict checks |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -35,6 +35,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 4 | Add metric identity uniqueness and duplicate protection | `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `tests/test_schema_migrations.py`, `tests/test_import_validation.py` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 5 | Normalize NULL metric identity fields before unique index | `backend/migrations.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 6 | P0.3 Power Dataset naming cleanup and P0.4 Metric provenance | `backend/power.py`, `backend/schemas.py`, `backend/models.py`, `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `backend/seed.py`, frontend power types/API, tests | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
+| 7 | P0.3/P0.4 review follow-up | `backend/main.py`, `backend/power.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 
 ## Blocking Questions
 
@@ -76,6 +77,11 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Marked auto-derived physical partition area/shape metrics as `source_type='architecture_estimate'` and `derivation='derived_from_logical_area'`.
 - Protected approved or tool-extracted/PTPX/simulation/silicon metric rows from silent auto-derived physical partition recalculation overwrites.
 - Verified local mergeability with `git merge-tree --write-tree HEAD origin/master`.
+- Made web and auto-derived metric writes identity-aware under `ux_metric_identity`.
+- Protected tool-extracted metrics even when their id differs from the generated auto-derived metric id but their metric identity matches.
+- Updated unprotected same-identity metric rows deterministically instead of inserting duplicate generated ids.
+- Rejected conflicting `power_dataset_id` / `physical_mapping_id` aliases with HTTP 400.
+- Added TODO notes for DB-compatibility naming that still uses `physical_mapping_id` internally.
 
 ### In Progress
 
@@ -91,7 +97,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 
 | Command | Result | Notes |
 |---|---|---|
-| `uv run pytest` | Passed | 21 tests passed; existing FastAPI deprecation warnings only. |
+| `uv run pytest` | Passed | 24 tests passed; existing FastAPI deprecation warnings only. |
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |

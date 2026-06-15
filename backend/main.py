@@ -190,6 +190,27 @@ def metric_number(metrics: dict[str, Metric], name: str) -> float:
     return number_or_zero(metrics[name].metric_value) if name in metrics else 0
 
 
+def find_metric_by_identity(
+    session: Session,
+    impl_option_id: str,
+    subject_type: str,
+    subject_id: str,
+    metric_name: str,
+    corner: str,
+    workload: str,
+) -> Metric | None:
+    return session.exec(
+        select(Metric).where(
+            Metric.impl_option_id == impl_option_id,
+            Metric.subject_type == subject_type,
+            Metric.subject_id == subject_id,
+            Metric.metric_name == metric_name,
+            Metric.corner == corner,
+            Metric.workload == workload,
+        )
+    ).first()
+
+
 def can_overwrite_with_auto_derived_metric(metric: Metric) -> bool:
     source_type = (metric.source_type or "").strip()
     if source_type in PROTECTED_AUTO_DERIVED_METRIC_SOURCES:
@@ -197,6 +218,59 @@ def can_overwrite_with_auto_derived_metric(metric: Metric) -> bool:
     if (metric.confidence or "").strip() == "approved":
         return False
     return True
+
+
+def upsert_web_metric(
+    session: Session,
+    metric_id: str,
+    impl_option_id: str,
+    subject_type: str,
+    subject_id: str,
+    name: str,
+    value: object,
+    unit: str,
+    category_type: str,
+    value_type: str,
+    corner: str,
+    workload: str,
+    source_note: str,
+) -> None:
+    existing_metric = session.get(Metric, metric_id) or find_metric_by_identity(
+        session, impl_option_id, subject_type, subject_id, name, corner, workload
+    )
+    if existing_metric:
+        existing_metric.metric_value = str(value)
+        existing_metric.metric_unit = unit
+        existing_metric.metric_category = category_type
+        existing_metric.value_type = value_type
+        existing_metric.corner = corner
+        existing_metric.workload = workload
+        existing_metric.source_type = "web_ui"
+        existing_metric.derivation = "manual"
+        existing_metric.source_note = source_note
+        session.add(existing_metric)
+        return
+
+    session.add(
+        Metric(
+            id=metric_id,
+            impl_option_id=impl_option_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            metric_name=name,
+            metric_value=str(value),
+            metric_unit=unit,
+            metric_category=category_type,
+            value_type=value_type,
+            corner=corner,
+            workload=workload,
+            confidence="review",
+            source_type="web_ui",
+            derivation="manual",
+            source_note=source_note,
+            created_at=now_iso(),
+        )
+    )
 
 
 def upsert_auto_derived_partition_metric(
@@ -213,7 +287,9 @@ def upsert_auto_derived_partition_metric(
     workload: str,
     source_note: str,
 ) -> None:
-    existing_metric = session.get(Metric, metric_id)
+    existing_metric = session.get(Metric, metric_id) or find_metric_by_identity(
+        session, impl_option_id, "physical_partition", partition_id, name, corner, workload
+    )
     if existing_metric:
         if can_overwrite_with_auto_derived_metric(existing_metric):
             existing_metric.metric_value = str(value)
@@ -1552,33 +1628,21 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
         for name, val, unit, category, value_type, corner, workload in metric_configs:
             if val is not None:
                 metric_id = f"M_LOG_{component_id}_{name.upper()}"
-                existing_metric = session.get(Metric, metric_id)
-                if existing_metric:
-                    existing_metric.metric_value = str(val)
-                    existing_metric.source_type = "web_ui"
-                    existing_metric.derivation = "manual"
-                    existing_metric.source_note = "Updated via web interface editor"
-                    session.add(existing_metric)
-                else:
-                    new_metric = Metric(
-                        id=metric_id,
-                        impl_option_id=payload.impl_option_id,
-                        subject_type="logical_component",
-                        subject_id=component_id,
-                        metric_name=name,
-                        metric_value=str(val),
-                        metric_unit=unit,
-                        metric_category=category,
-                        value_type=value_type,
-                        corner=corner,
-                        workload=workload,
-                        confidence="review",
-                        source_type="web_ui",
-                        derivation="manual",
-                        source_note="Updated via web interface editor",
-                        created_at=now_iso(),
-                    )
-                    session.add(new_metric)
+                upsert_web_metric(
+                    session,
+                    metric_id,
+                    payload.impl_option_id,
+                    "logical_component",
+                    component_id,
+                    name,
+                    val,
+                    unit,
+                    category,
+                    value_type,
+                    corner,
+                    workload,
+                    "Updated via web interface editor",
+                )
 
         existing = session.exec(
             select(PhysicalPartition).where(

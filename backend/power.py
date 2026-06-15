@@ -32,7 +32,14 @@ def safe_power_id_part(value: str | None) -> str:
 
 
 def coalesce_power_dataset_id(physical_mapping_id: str | None = None, power_dataset_id: str | None = None) -> str:
-    dataset_id = (power_dataset_id or physical_mapping_id or "").strip()
+    legacy_id = (physical_mapping_id or "").strip()
+    preferred_id = (power_dataset_id or "").strip()
+    if legacy_id and preferred_id and legacy_id != preferred_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Conflicting power dataset aliases: power_dataset_id={preferred_id} does not match physical_mapping_id={legacy_id}.",
+        )
+    dataset_id = preferred_id or legacy_id
     if not dataset_id:
         raise HTTPException(status_code=400, detail="power_dataset_id is required.")
     return dataset_id
@@ -279,6 +286,7 @@ def register_power_routes(app: FastAPI) -> None:
         )
 
 
+    # TODO: Rename DB-compatibility physical_mapping_id parameters after the storage column is migrated.
     def app_selection_id(physical_mapping_id: str, application_scenario_id: str, component_id: str, use_case_name: str, operating_point_set_id: str) -> str:
         return (
             f"ASC_{safe_power_id_part(physical_mapping_id)}_{safe_power_id_part(application_scenario_id)}_{safe_power_id_part(component_id)}_"
@@ -314,6 +322,7 @@ def register_power_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail=f"Unknown component_id: {component_id}")
 
 
+    # TODO: Rename this parameter to power_dataset_id after the DB column is migrated.
     def module_power_rows(session: Session, impl_option_id: str, physical_mapping_id: str) -> list[PowerObservation]:
         return list(
             session.exec(

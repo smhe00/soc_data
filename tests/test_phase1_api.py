@@ -222,6 +222,53 @@ def test_power_dataset_id_alias_for_application_power(client: TestClient) -> Non
     assert composition.json()[0]["power_dataset_id"] == "PM_3DIC_A"
 
 
+def test_power_dataset_alias_conflict_is_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/api/module-power-usecases",
+        json={
+            "project_id": "P001",
+            "impl_option_id": "S2",
+            "power_dataset_id": "PM_3DIC_A",
+            "physical_mapping_id": "PM_2D_BASE",
+            "component_id": "B_CPU",
+            "component_name": "CPU_CLUSTER",
+            "use_case_name": "AliasConflict",
+            "operating_point_set_id": "OP_DEFAULT",
+            "power_value_w": 0.1,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Conflicting power dataset aliases" in response.json()["detail"]
+
+
+def _save_npu_tensor_detail_with_logic_area(client: TestClient, logic_area: float) -> None:
+    npu = next(row for row in client.get("/api/components?team=AI%20Team").json() if row["id"] == "B_NPU_TENSOR")
+    response = client.put(
+        "/api/components/B_NPU_TENSOR/detail",
+        json={
+            "impl_option_id": "S2",
+            "team": "AI Team",
+            "logical_instance_count": npu["logical_instance_count"],
+            "logic_area": logic_area,
+            "partitions": [
+                {
+                    "id": partition["id"],
+                    "tier_id": partition["tier_id"],
+                    "partition_name": partition["partition_name"],
+                    "partition_type": partition["partition_type"],
+                    "resource_category": partition["resource_category"],
+                    "physical_instance_count": partition["physical_instance_count"],
+                    "content_share": partition["content_share"],
+                    "description": partition["description"],
+                }
+                for partition in npu["partitions"]
+            ],
+        },
+    )
+    response.raise_for_status()
+
+
 def test_metric_provenance_defaults_and_auto_derived_protection(client: TestClient) -> None:
     metrics = client.get("/api/metrics?impl_option_id=S2")
     metrics.raise_for_status()
@@ -281,6 +328,75 @@ def test_metric_provenance_defaults_and_auto_derived_protection(client: TestClie
         "source_type": "tool_extracted",
         "derivation": "ptpx_report",
     }
+
+
+def test_auto_derived_metric_skips_protected_same_identity_with_custom_id(client: TestClient) -> None:
+    canonical_id = "M_PART_PP_NPU_TOP_logic_T0_P1_LOGIC_AREA"
+    custom_id = "M_TOOL_PP_NPU_TOP_logic_T0_P1_LOGIC_AREA"
+    with backend_app.engine.begin() as connection:
+        connection.execute(text("DELETE FROM metric WHERE id=:id"), {"id": canonical_id})
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_type, derivation, source_note, created_at) "
+                "VALUES "
+                "(:id, 'S2', 'physical_partition', 'PP_NPU_TOP_logic_T0_P1', 'logic_area', '999.0', 'mm2', 'implementation_area', 'number', 'typical', 'nominal', 'approved', 'tool_extracted', 'ptpx_report', 'protected tool value', '2026-06-15')"
+            ),
+            {"id": custom_id},
+        )
+
+    _save_npu_tensor_detail_with_logic_area(client, 12.0)
+
+    with backend_app.engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, metric_value, confidence, source_type, derivation FROM metric "
+                "WHERE impl_option_id='S2' AND subject_type='physical_partition' AND subject_id='PP_NPU_TOP_logic_T0_P1' "
+                "AND metric_name='logic_area' AND corner='typical' AND workload='nominal' ORDER BY id"
+            )
+        ).mappings().all()
+
+    assert [row["id"] for row in rows] == [custom_id]
+    assert dict(rows[0]) == {
+        "id": custom_id,
+        "metric_value": "999.0",
+        "confidence": "approved",
+        "source_type": "tool_extracted",
+        "derivation": "ptpx_report",
+    }
+
+
+def test_auto_derived_metric_updates_unprotected_same_identity_with_custom_id(client: TestClient) -> None:
+    canonical_id = "M_PART_PP_NPU_TOP_logic_T0_P1_LOGIC_AREA"
+    custom_id = "M_USER_PP_NPU_TOP_logic_T0_P1_LOGIC_AREA"
+    with backend_app.engine.begin() as connection:
+        connection.execute(text("DELETE FROM metric WHERE id=:id"), {"id": canonical_id})
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_type, derivation, source_note, created_at) "
+                "VALUES "
+                "(:id, 'S2', 'physical_partition', 'PP_NPU_TOP_logic_T0_P1', 'logic_area', '111.0', 'mm2', 'implementation_area', 'number', 'typical', 'nominal', 'review', 'architecture_estimate', 'manual', 'unprotected user value', '2026-06-15')"
+            ),
+            {"id": custom_id},
+        )
+
+    _save_npu_tensor_detail_with_logic_area(client, 12.0)
+
+    with backend_app.engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, metric_value, confidence, source_type, derivation FROM metric "
+                "WHERE impl_option_id='S2' AND subject_type='physical_partition' AND subject_id='PP_NPU_TOP_logic_T0_P1' "
+                "AND metric_name='logic_area' AND corner='typical' AND workload='nominal' ORDER BY id"
+            )
+        ).mappings().all()
+
+    assert [row["id"] for row in rows] == [custom_id]
+    assert rows[0]["metric_value"] != "111.0"
+    assert rows[0]["confidence"] == "review"
+    assert rows[0]["source_type"] == "architecture_estimate"
+    assert rows[0]["derivation"] == "derived_from_logical_area"
 
 
 def test_camera_power_summary_seed(client: TestClient) -> None:
