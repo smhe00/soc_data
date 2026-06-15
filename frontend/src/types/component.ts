@@ -39,6 +39,8 @@ export interface BlockNode {
 
 export interface TreeBlock extends BlockNode {
   children: TreeBlock[];
+  folded_instance_count?: number;
+  folded_instance_title?: string;
 }
 
 export interface PhysicalPartition {

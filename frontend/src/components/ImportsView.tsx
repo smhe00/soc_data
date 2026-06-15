@@ -60,7 +60,7 @@ export function ImportsView({
 
   return (
     <div className="space-y-6">
-      <Card title="Excel Import Workbench" subtitle="Phase-1 imports use a controlled workbook template mapped to the SQLite schema." icon={Upload}>
+      <Card title="Excel Import" icon={Upload}>
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
           <Upload className="mx-auto text-slate-400" size={34} />
           <div className="mt-4 text-base font-semibold text-slate-900">Upload SoC Import Workbook</div>

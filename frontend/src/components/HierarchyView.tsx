@@ -4,12 +4,11 @@ import {
   ChevronDown,
   ChevronRight,
   Search,
+  Cpu,
   RadioTower,
   MemoryStick,
-  Cpu,
   SplitSquareVertical,
   AlertTriangle,
-  Settings2,
   Plus,
   Pencil,
   Trash2
@@ -142,12 +141,62 @@ function filterTree(nodes: TreeBlock[], query: string): TreeBlock[] {
     .filter((node): node is TreeBlock => node !== null);
 }
 
+function countTreeNodes(nodes: TreeBlock[]): number {
+  return nodes.reduce((total, node) => total + 1 + countTreeNodes(node.children), 0);
+}
+
+function foldedInstanceCount(node: TreeBlock): number {
+  return Math.max(1, node.logical_instance_count || 1, node.absolute_logical_instance_count || 1);
+}
+
+function foldRepeatedSiblings(nodes: TreeBlock[]): TreeBlock[] {
+  const groups = new Map<string, TreeBlock[]>();
+  nodes.forEach((node) => {
+    const key = [node.parent ?? "root", node.name.trim().toLowerCase(), node.type, node.resource, node.domain].join("|");
+    const group = groups.get(key);
+    if (group) group.push(node);
+    else groups.set(key, [node]);
+  });
+
+  const folded = Array.from(groups.values()).map((group) => {
+    const ordered = [...group].sort((left, right) => right.children.length - left.children.length);
+    const primary = ordered[0];
+    const mergedChildren = foldRepeatedSiblings(group.flatMap((node) => node.children));
+    if (group.length === 1) {
+      return { ...primary, children: mergedChildren };
+    }
+
+    const count = group.reduce((total, node) => total + foldedInstanceCount(node), 0);
+    const ids = group.map((node) => node.id).join(", ");
+    return {
+      ...primary,
+      children: mergedChildren,
+      folded_instance_count: count,
+      folded_instance_title: `${count} repeated logical instance rows folded here (${ids})`,
+    };
+  });
+
+  return folded.sort((left, right) => nodes.indexOf(groupOriginalNode(nodes, left)) - nodes.indexOf(groupOriginalNode(nodes, right)));
+}
+
+function groupOriginalNode(nodes: TreeBlock[], foldedNode: TreeBlock): TreeBlock {
+  return nodes.find((node) => node.id === foldedNode.id) ?? foldedNode;
+}
+
 function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0 }: TreeNodeProps): JSX.Element {
   const hasChildren = node.children.length > 0;
   const expanded = expandedIds.has(node.id);
   const active = selectedId === node.id;
   const mappingClosed = hasChildren ? node.subtree_mapping_closed : node.own_mapping_closed;
-
+  const localInstanceCount = node.logical_instance_count || 1;
+  const totalInstanceCount = node.absolute_logical_instance_count || localInstanceCount;
+  const displayInstanceCount = Math.max(totalInstanceCount, node.folded_instance_count ?? 1);
+  const isReplicated = localInstanceCount > 1 || totalInstanceCount > 1 || displayInstanceCount > 1;
+  const instanceTitle =
+    node.folded_instance_title ??
+    (totalInstanceCount !== localInstanceCount
+      ? `${localInstanceCount} instance(s) under this parent, ${totalInstanceCount} total along hierarchy`
+      : `${localInstanceCount} logical instance(s)`);
   return (
     <div>
       <div
@@ -176,6 +225,21 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
         <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect(node.id)} type="button">
           <ResourceIcon resource={node.resource} />
           <span className="truncate font-medium">{node.name}</span>
+          {isReplicated && (
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${
+                active ? "border-indigo-200 bg-white text-indigo-700" : "border-sky-100 bg-sky-50 text-sky-700"
+              }`}
+              title={instanceTitle}
+            >
+              <span className="flex -space-x-1" aria-hidden="true">
+                <span className={`h-2.5 w-2 rounded-sm border ${active ? "border-indigo-300 bg-indigo-100" : "border-sky-200 bg-sky-100"}`} />
+                <span className={`h-2.5 w-2 rounded-sm border ${active ? "border-indigo-400 bg-indigo-200" : "border-sky-300 bg-sky-200"}`} />
+                <span className={`h-2.5 w-2 rounded-sm border ${active ? "border-indigo-500 bg-indigo-300" : "border-sky-400 bg-sky-300"}`} />
+              </span>
+              x{displayInstanceCount}
+            </span>
+          )}
           {mappingClosed === false && (
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] ${
@@ -736,7 +800,8 @@ export function HierarchyView({
     });
   }, [tree, selectedId]);
 
-  const visibleTree = useMemo(() => filterTree(tree, searchQuery), [tree, searchQuery]);
+  const visibleTree = useMemo(() => foldRepeatedSiblings(filterTree(tree, searchQuery)), [tree, searchQuery]);
+  const visibleModuleCount = useMemo(() => countTreeNodes(visibleTree), [visibleTree]);
   const displayedExpandedIds = useMemo(() => {
     if (!searchQuery.trim()) return expandedIds;
     return new Set(collectExpandableIds(visibleTree));
@@ -843,10 +908,21 @@ export function HierarchyView({
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
       <Card
         title="Block Hierarchy"
-        subtitle="logical_component keeps hierarchy and logical instance count compact"
+        subtitle={visibleModuleCount === blocks.length ? `${blocks.length} modules` : `${visibleModuleCount} visible / ${blocks.length} modules`}
         icon={GitBranch}
         right={
           <div className="flex items-center gap-2">
+            <span
+              className="hidden items-center gap-1.5 rounded-full border border-sky-100 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 md:inline-flex"
+              title="Repeated logical modules are shown once with a folded instance count."
+            >
+              <span className="flex -space-x-1" aria-hidden="true">
+                <span className="h-2.5 w-2 rounded-sm border border-sky-200 bg-sky-100" />
+                <span className="h-2.5 w-2 rounded-sm border border-sky-300 bg-sky-200" />
+                <span className="h-2.5 w-2 rounded-sm border border-sky-400 bg-sky-300" />
+              </span>
+              folded xN
+            </span>
             <button
               aria-label="Expand all blocks"
               className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -1237,23 +1313,6 @@ export function HierarchyView({
         </Card>
 
         <PartitionMappingEditor component={selected} blocks={blocks} tiers={tiers} selectedImplOptionId={selectedImplOptionId} selectedTeam={selectedTeam} onSave={onSaveComponentDetail} />
-
-        <Card title="Modeling Principles" subtitle="Keep logical definition, physical mapping, and application power as separate maintenance steps." icon={Settings2}>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><Cpu size={18} />Logic</div>
-              <p className="text-sm leading-6 text-slate-600">Logical hierarchy stores structure, ownership, instance count, and base-process area metrics. Parent self/residual area is derived from child sums.</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><MemoryStick size={18} />Physical Mapping</div>
-              <p className="text-sm leading-6 text-slate-600">Physical partitions map only the selected component's own self/residual logic, SRAM, and block content to tiers. Closure is checked per resource category and recursively through children.</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="mb-2 flex items-center gap-2 font-semibold text-slate-900"><RadioTower size={18} />Power</div>
-              <p className="text-sm leading-6 text-slate-600">Application power is maintained in the power use case library and scenario composition page, not as block hierarchy or partition metrics.</p>
-            </div>
-          </div>
-        </Card>
       </div>
     </div>
   );

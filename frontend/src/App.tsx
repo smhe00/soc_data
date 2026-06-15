@@ -4,10 +4,8 @@ import {
   Database,
   Layers3,
   GitBranch,
-  BarChart3,
   Upload,
   AlertTriangle,
-  SplitSquareVertical,
   Package,
   Moon,
   Plus,
@@ -17,31 +15,24 @@ import {
 
 import { createLogicalComponent, deleteLogicalComponent, getComponents, getComponentTree, getPhysicalPartitions, updateComponentDetail, updateLogicalComponent, type LogicalComponentInput } from "./api/components";
 import { uploadImportWorkbook, type ImportResult } from "./api/imports";
-import { getDashboard } from "./api/metrics";
 import { getQualityIssues, type QualityIssue } from "./api/quality";
 import { getResponsibilityTeams } from "./api/responsibilities";
 import { getImplOptions } from "./api/impl_options";
 import { getTiers } from "./api/tiers";
 import { createDatabase, getDatabases, selectDatabase, type DatabaseInfo } from "./api/databases";
 
-import type { DashboardData } from "./types/metric";
 import type { BlockNode, TreeBlock, PhysicalPartition } from "./types/component";
 import type { ImplOption } from "./types/impl_option";
 import type { TierInfo } from "./types/tier";
 
-import { Badge } from "./components/ui";
-
-import { Dashboard } from "./components/Dashboard";
 import { HierarchyView } from "./components/HierarchyView";
 import { TiersView } from "./components/TiersView";
 import { ImplementationView } from "./components/ImplementationView";
-import { CompareView } from "./components/CompareView";
 import { ImportsView } from "./components/ImportsView";
 import { QualityView } from "./components/QualityView";
-import { SchemaView } from "./components/SchemaView";
 import { ApplicationPowerView } from "./components/ApplicationPowerView";
 
-type TabId = "dashboard" | "hierarchy" | "tiers" | "implementation" | "compare" | "imports" | "quality" | "schema" | "power";
+type TabId = "hierarchy" | "tiers" | "implementation" | "imports" | "quality" | "power";
 type ThemeMode = "light" | "dark";
 
 interface TabItem {
@@ -51,26 +42,22 @@ interface TabItem {
 }
 
 const tabs: TabItem[] = [
-  { id: "dashboard", label: "Overview", icon: BarChart3 },
   { id: "hierarchy", label: "Block Hierarchy", icon: GitBranch },
   { id: "tiers", label: "3D Tier", icon: Layers3 },
   { id: "implementation", label: "Implementation", icon: Package },
-  { id: "compare", label: "Compare", icon: SplitSquareVertical },
   { id: "imports", label: "Import", icon: Upload },
   { id: "quality", label: "Quality", icon: AlertTriangle },
-  { id: "schema", label: "Schema", icon: Database },
   { id: "power", label: "Application Power", icon: Zap },
 ];
 
 export default function Soc3dicPhase1Prototype(): JSX.Element {
-  const [active, setActive] = useState<TabId>("dashboard");
+  const [active, setActive] = useState<TabId>("hierarchy");
   const [theme, setTheme] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "light";
     const savedTheme = window.localStorage.getItem("soc-theme");
     if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
-  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [blocks, setBlocks] = useState<BlockNode[]>([]);
   const [tree, setTree] = useState<TreeBlock[]>([]);
   const [implOptions, setImplOptions] = useState<ImplOption[]>([]);
@@ -89,12 +76,10 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   // Keep track of which specific data categories have been successfully loaded
   // for the current selectedTeam and selectedImplOptionId
   const [loadedCategories, setLoadedCategories] = useState<{
-    dashboard: boolean;
     hierarchy: boolean;
     tiers: boolean;
     quality: boolean;
   }>({
-    dashboard: false,
     hierarchy: false,
     tiers: false,
     quality: false,
@@ -112,12 +97,10 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   function resetLoadedState(): void {
     setLoadedBase(false);
     setLoadedCategories({
-      dashboard: false,
       hierarchy: false,
       tiers: false,
       quality: false,
     });
-    setDashboard(null);
     setBlocks([]);
     setTree([]);
     setImplOptions([]);
@@ -157,7 +140,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   // so they will reload fresh when that tab is visited.
   useEffect(() => {
     setLoadedCategories({
-      dashboard: false,
       hierarchy: false,
       tiers: false,
       quality: false,
@@ -190,7 +172,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       }
 
       if (!effectiveImplOptionId) {
-        setDashboard(null);
         setBlocks([]);
         setTree([]);
         setTiers([]);
@@ -201,13 +182,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       }
 
       // 2. Load tab-specific data
-      if (activeTab === "dashboard") {
-        if (!loadedCategories.dashboard || forceReload) {
-          const dashboardData = await getDashboard(effectiveImplOptionId);
-          setDashboard(dashboardData);
-          setLoadedCategories(prev => ({ ...prev, dashboard: true }));
-        }
-      } else if (activeTab === "hierarchy") {
+      if (activeTab === "hierarchy") {
         if (!loadedCategories.hierarchy || forceReload) {
           const [componentData, treeData, tierData] = await Promise.all([
             getComponents(team, effectiveImplOptionId),
@@ -257,7 +232,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
       
       // Invalidate cache and reload current active tab
       setLoadedCategories({
-        dashboard: false,
         hierarchy: false,
         tiers: false,
         quality: false,
@@ -334,7 +308,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
 
     // Invalidate cache and reload current active tab
     setLoadedCategories({
-      dashboard: false,
       hierarchy: false,
       tiers: false,
       quality: false,
@@ -343,7 +316,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
   }
 
   async function refreshHierarchy(): Promise<void> {
-    setLoadedCategories((current) => ({ ...current, dashboard: false, hierarchy: false, tiers: false, quality: false }));
+    setLoadedCategories((current) => ({ ...current, hierarchy: false, tiers: false, quality: false }));
     await loadActiveTabData("hierarchy", selectedTeam, selectedImplOptionId, true);
   }
 
@@ -372,7 +345,7 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
             </div>
             <div>
               <div className="text-lg font-semibold tracking-tight">SoC Cross-Die DB</div>
-              <div className="text-xs text-slate-500">Phase-1 Prototype</div>
+              <div className="text-xs text-slate-500">Architecture Data</div>
             </div>
           </div>
 
@@ -395,23 +368,17 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
               );
             })}
           </nav>
-
-          <div className="mt-8 rounded-2xl bg-slate-50 p-4">
-            <div className="text-sm font-semibold text-slate-900">MVP Goal</div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Turn architecture planning data from PPT/Excel into a manageable, comparable, traceable engineering database.</p>
-          </div>
         </aside>
 
         <main className="flex-1 p-4 md:p-8">
-          <header className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <header className="mb-6 border-b border-slate-200 bg-white/70 px-1 pb-4">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Database size={16} />
-                  SoC Cross-Die / 3DIC Architecture Data Platform
+                  SoC Cross-Die Database
                 </div>
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">{activeTab.label}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Phase-1 MVP: unify projects, implementation options, block hierarchy, process/tier data, core metrics, source tracking, and quality checks for engineering evaluation.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <select
@@ -475,9 +442,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
                     </option>
                   ))}
                 </select>
-                <Badge tone="green">Data-first</Badge>
-                <Badge tone="blue">3DIC Ready</Badge>
-                <Badge tone="amber">AI Hooks Reserved</Badge>
               </div>
             </div>
 
@@ -499,7 +463,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
             </div>
           </header>
 
-          {active === "dashboard" && <Dashboard dashboard={dashboard} loading={loading} error={error} />}
           {active === "hierarchy" && (
             <HierarchyView
               blocks={blocks}
@@ -517,7 +480,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
           )}
           {active === "tiers" && <TiersView tiers={tiers} physicalPartitions={physicalPartitions} selectedImplOptionId={selectedImplOptionId} loading={loading} error={error} />}
           {active === "implementation" && <ImplementationView implOptions={implOptions} />}
-          {active === "compare" && <CompareView implOptions={implOptions} loading={loading} error={error} />}
           {active === "imports" && (
             <ImportsView
               importing={importing}
@@ -529,7 +491,6 @@ export default function Soc3dicPhase1Prototype(): JSX.Element {
             />
           )}
           {active === "quality" && <QualityView qualityIssues={qualityIssues} loading={loading} error={error} />}
-          {active === "schema" && <SchemaView />}
           {active === "power" && <ApplicationPowerView implOptions={implOptions} />}
         </main>
       </div>
