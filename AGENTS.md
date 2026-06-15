@@ -218,3 +218,9 @@ Implementation-definition rules to preserve:
 5. Keep SQLite schema clear enough to migrate to PostgreSQL later.
 6. Do not add enterprise concerns before the MVP is stable.
 7. Prefer V7 workbook/schema terminology in new code and docs.
+
+## Git Remote Policy
+
+- `origin` is the primary GitHub repository: `https://github.com/smhe00/soc_data.git`.
+- `gitee` is the backup repository: `https://gitee.com/smhe/soc_database.git`.
+- Every future push must push the same committed code to both remotes. After `git push origin master`, also run `git push gitee master`; when tags are involved, push tags to both remotes as well.
