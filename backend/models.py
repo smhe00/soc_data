@@ -3,6 +3,24 @@ from __future__ import annotations
 from sqlmodel import Field, SQLModel
 
 
+class SchemaVersion(SQLModel, table=True):
+    __tablename__ = "schema_version"
+    id: str = Field(primary_key=True)
+    version: str
+    updated_at: str
+
+
+class MigrationHistory(SQLModel, table=True):
+    __tablename__ = "migration_history"
+    id: str = Field(primary_key=True)
+    version: str
+    name: str
+    applied_at: str
+    checksum: str = ""
+    status: str = "applied"
+    note: str = ""
+
+
 class Project(SQLModel, table=True):
     id: str = Field(primary_key=True)
     name: str
