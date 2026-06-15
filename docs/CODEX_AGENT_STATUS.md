@@ -11,7 +11,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-15 |
-| Current batch | P0.1 review follow-up and P0.2 metric identity uniqueness complete |
+| Current batch | P0.2 NULL metric identity follow-up complete |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -22,6 +22,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Keep SQLite support as the primary Phase-2 target.
 - Do not implement full authentication/RBAC in this phase.
 - Do not silently overwrite high-confidence or tool-extracted metrics.
+- Conflicting duplicate metric identities intentionally block migration with a hard error unless covered by a narrow known legacy redundant-ID rule; dirty DBs must be cleaned manually rather than silently resolved.
 
 ## Batch Log
 
@@ -32,6 +33,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 2 | Open draft PR for ongoing Phase-2 hardening | `docs/CODEX_AGENT_STATUS.md` | Complete | PR #2 created as draft |
 | 3 | Address ChatGPT P0.1 review items | `backend/migrations.py`, `backend/db.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 4 | Add metric identity uniqueness and duplicate protection | `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `tests/test_schema_migrations.py`, `tests/test_import_validation.py` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
+| 5 | Normalize NULL metric identity fields before unique index | `backend/migrations.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 
 ## Blocking Questions
 
@@ -62,6 +64,10 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Added import-time duplicate metric identity validation.
 - Dropped known redundant legacy metric rows during import when a canonical identity exists, preventing the old template from reintroducing rows removed by migration.
 - Added duplicate metric identity quality issue reporting for existing dirty data.
+- Normalized legacy `metric.corner` NULL/empty values to `typical` before metric identity duplicate scanning.
+- Normalized legacy `metric.workload` NULL/empty values to `nominal` before metric identity duplicate scanning.
+- Added a clear migration failure for NULL/empty `impl_option_id`, `subject_type`, `subject_id`, or `metric_name`.
+- Added tests proving NULL/empty corner/workload rows are normalized before dedupe, required identity fields fail clearly, and `ux_metric_identity` blocks duplicate normalized identities.
 
 ### In Progress
 
@@ -70,14 +76,14 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 ### Next
 
 1. Await ChatGPT review on PR #2.
-2. Continue with the next Phase-2 batch after review, likely P0.3/P0.4 depending on comments.
+2. Continue to P0.3/P0.4 only after the next review.
 3. Preserve existing metric API behavior.
 
 ## Validation Log
 
 | Command | Result | Notes |
 |---|---|---|
-| `uv run pytest` | Passed | 15 tests passed; existing FastAPI deprecation warnings only. |
+| `uv run pytest` | Passed | 18 tests passed; existing FastAPI deprecation warnings only. |
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |

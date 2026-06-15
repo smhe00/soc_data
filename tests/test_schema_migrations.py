@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import create_engine
 import pytest
 
@@ -247,6 +248,83 @@ def test_metric_identity_migration_removes_known_legacy_redundant_rows(tmp_path)
     engine.dispose()
 
     assert rows == ["M_IMPL_OPTION_S2_AREA"]
+
+
+def test_metric_identity_migration_normalizes_null_corner_workload_before_dedupe(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'metric_null_identity.db'}", connect_args={"check_same_thread": False})
+
+    with engine.begin() as connection:
+        _create_metric_table(connection)
+        _mark_migrations_applied_before_metric_identity(connection)
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_note, created_at) "
+                "VALUES "
+                "('M_A', 'S2', 'logical_component', 'B_CPU', 'logic_area', '1.0', 'mm2', 'logical_area', 'number', NULL, '', 'review', 'same', '2026-01-01'), "
+                "('M_B', 'S2', 'logical_component', 'B_CPU', 'logic_area', '1.0', 'mm2', 'logical_area', 'number', 'typical', 'nominal', 'review', 'same', '2026-01-01')"
+            )
+        )
+        migrations.run_schema_migrations(connection, "2026-06-15T12:00:00Z")
+
+        rows = connection.execute(text("SELECT id, corner, workload FROM metric ORDER BY id")).mappings().all()
+        empty_identity_values = connection.execute(
+            text("SELECT COUNT(*) FROM metric WHERE corner IS NULL OR TRIM(corner)='' OR workload IS NULL OR TRIM(workload)=''")
+        ).scalar_one()
+
+    engine.dispose()
+
+    assert [dict(row) for row in rows] == [{"id": "M_A", "corner": "typical", "workload": "nominal"}]
+    assert empty_identity_values == 0
+
+
+def test_metric_identity_migration_blocks_missing_required_identity_field(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'metric_missing_required_identity.db'}", connect_args={"check_same_thread": False})
+
+    with engine.begin() as connection:
+        _create_metric_table(connection)
+        _mark_migrations_applied_before_metric_identity(connection)
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_note, created_at) "
+                "VALUES "
+                "('M_A', NULL, 'logical_component', 'B_CPU', 'logic_area', '1.0', 'mm2', 'logical_area', 'number', 'typical', 'nominal', 'review', 'missing impl', '2026-01-01')"
+            )
+        )
+        with pytest.raises(RuntimeError, match="impl_option_id cannot be null or empty"):
+            migrations.run_schema_migrations(connection, "2026-06-15T12:00:00Z")
+
+    engine.dispose()
+
+
+def test_metric_identity_unique_index_blocks_second_normalized_identity(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'metric_unique_index.db'}", connect_args={"check_same_thread": False})
+
+    with engine.begin() as connection:
+        _create_metric_table(connection)
+        _mark_migrations_applied_before_metric_identity(connection)
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_note, created_at) "
+                "VALUES "
+                "('M_A', 'S2', 'logical_component', 'B_CPU', 'logic_area', '1.0', 'mm2', 'logical_area', 'number', NULL, '', 'review', 'same', '2026-01-01')"
+            )
+        )
+        migrations.run_schema_migrations(connection, "2026-06-15T12:00:00Z")
+
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text(
+                    "INSERT INTO metric "
+                    "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_note, created_at) "
+                    "VALUES "
+                    "('M_B', 'S2', 'logical_component', 'B_CPU', 'logic_area', '2.0', 'mm2', 'logical_area', 'number', 'typical', 'nominal', 'review', 'duplicate', '2026-01-01')"
+                )
+            )
+
+    engine.dispose()
 
 
 def test_metric_identity_migration_blocks_conflicting_rows(tmp_path) -> None:

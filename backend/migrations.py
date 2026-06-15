@@ -10,6 +10,7 @@ from sqlalchemy.engine import Connection
 CURRENT_SCHEMA_VERSION = "V7.007"
 SCHEMA_VERSION_ID = "main"
 METRIC_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name", "corner", "workload")
+METRIC_REQUIRED_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name")
 LEGACY_REDUNDANT_METRIC_IDS = {
     "M_IMPL_OPTION_AREA",
     "M_PART_GPU_LOGIC_AREA_TOP",
@@ -204,9 +205,24 @@ def _remove_power_metrics_from_metric_table(connection: Connection, _: str) -> N
     )
 
 
+def _normalize_metric_identity_fields(connection: Connection) -> None:
+    connection.execute(text("UPDATE metric SET corner='typical' WHERE corner IS NULL OR TRIM(corner)=''"))
+    connection.execute(text("UPDATE metric SET workload='nominal' WHERE workload IS NULL OR TRIM(workload)=''"))
+
+    for column in METRIC_REQUIRED_IDENTITY_COLUMNS:
+        rows = connection.execute(
+            text(f"SELECT id FROM metric WHERE {column} IS NULL OR TRIM({column})='' ORDER BY id")
+        ).scalars().all()
+        if rows:
+            ids = ", ".join(rows)
+            raise RuntimeError(f"Metric identity column {column} cannot be null or empty; rows: {ids}")
+
+
 def _add_metric_identity_unique_index(connection: Connection, _: str) -> None:
     if not _table_exists(connection, "metric"):
         return
+
+    _normalize_metric_identity_fields(connection)
 
     duplicate_groups = connection.execute(
         text(
