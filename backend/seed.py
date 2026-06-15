@@ -574,7 +574,11 @@ def metric(
     workload: str,
     confidence: str,
     source_note: str,
+    source_type: str = "architecture_estimate",
+    derivation: str | None = None,
 ) -> Metric:
+    if derivation is None:
+        derivation = "derived_from_logical_area" if subject_type == "physical_partition" and metric_name in {"logic_area", "sram_area", "block_area", "shape_type"} else "manual"
     return Metric(
         id=id,
         impl_option_id=impl_option_id,
@@ -588,6 +592,8 @@ def metric(
         corner=corner,
         workload=workload,
         confidence=confidence,
+        source_type=source_type,
+        derivation=derivation,
         source_note=source_note,
         created_at=db.now_iso(),
     )

@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 
-CURRENT_SCHEMA_VERSION = "V7.007"
+CURRENT_SCHEMA_VERSION = "V7.008"
 SCHEMA_VERSION_ID = "main"
 METRIC_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name", "corner", "workload")
 METRIC_REQUIRED_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name")
@@ -283,6 +283,30 @@ def _add_metric_identity_unique_index(connection: Connection, _: str) -> None:
     )
 
 
+def _add_metric_provenance_fields(connection: Connection, _: str) -> None:
+    if not _table_exists(connection, "metric"):
+        return
+
+    columns = _columns(connection, "metric")
+    if "source_type" not in columns:
+        connection.execute(text("ALTER TABLE metric ADD COLUMN source_type VARCHAR DEFAULT 'architecture_estimate'"))
+    if "derivation" not in columns:
+        connection.execute(text("ALTER TABLE metric ADD COLUMN derivation VARCHAR DEFAULT 'manual'"))
+
+    connection.execute(text("UPDATE metric SET source_type='architecture_estimate' WHERE source_type IS NULL OR TRIM(source_type)=''"))
+    connection.execute(text("UPDATE metric SET derivation='manual' WHERE derivation IS NULL OR TRIM(derivation)=''"))
+    connection.execute(
+        text(
+            "UPDATE metric "
+            "SET source_type='architecture_estimate', derivation='derived_from_logical_area' "
+            "WHERE subject_type='physical_partition' "
+            "AND metric_name IN ('logic_area', 'sram_area', 'block_area', 'shape_type') "
+            "AND (id LIKE 'M_PART_%' OR source_note LIKE 'Recalculated%') "
+            "AND (source_type IS NULL OR source_type='' OR source_type='architecture_estimate')"
+        )
+    )
+
+
 MIGRATIONS = [
     Migration(
         version="V7.001",
@@ -332,6 +356,13 @@ MIGRATIONS = [
         checksum="metric.identity.unique_index",
         note="Deduplicates identical metric facts and enforces metric identity uniqueness.",
         apply=_add_metric_identity_unique_index,
+    ),
+    Migration(
+        version="V7.008",
+        name="add_metric_provenance_fields",
+        checksum="metric.source_type.derivation",
+        note="Adds metric provenance fields and marks auto-derived physical partition area metrics.",
+        apply=_add_metric_provenance_fields,
     ),
 ]
 

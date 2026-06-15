@@ -128,6 +128,8 @@ class Metric(SQLModel, table=True):
     corner: str = "typical"
     workload: str = "nominal"
     confidence: str = "draft"
+    source_type: str = "architecture_estimate"
+    derivation: str = "manual"
     source_note: str = ""
     created_at: str
 

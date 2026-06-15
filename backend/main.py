@@ -75,6 +75,9 @@ register_import_routes(app)
 
 ALLOWED_PARTITION_TYPES = {"full", "partial"}
 ALLOWED_PARTITION_RESOURCE_CATEGORIES = {"logic", "sram", "block"}
+PROTECTED_AUTO_DERIVED_METRIC_SOURCES = {"tool_extracted", "ptpx", "simulation", "silicon_measurement"}
+AUTO_DERIVED_PARTITION_METRIC_SOURCE = "architecture_estimate"
+AUTO_DERIVED_PARTITION_METRIC_DERIVATION = "derived_from_logical_area"
 
 
 def number_or_zero(value: Any) -> float:
@@ -185,6 +188,67 @@ def metrics_for(session: Session, impl_option_id: str, subject_type: str, subjec
 
 def metric_number(metrics: dict[str, Metric], name: str) -> float:
     return number_or_zero(metrics[name].metric_value) if name in metrics else 0
+
+
+def can_overwrite_with_auto_derived_metric(metric: Metric) -> bool:
+    source_type = (metric.source_type or "").strip()
+    if source_type in PROTECTED_AUTO_DERIVED_METRIC_SOURCES:
+        return False
+    if (metric.confidence or "").strip() == "approved":
+        return False
+    return True
+
+
+def upsert_auto_derived_partition_metric(
+    session: Session,
+    metric_id: str,
+    impl_option_id: str,
+    partition_id: str,
+    name: str,
+    value: object,
+    unit: str,
+    category_type: str,
+    value_type: str,
+    corner: str,
+    workload: str,
+    source_note: str,
+) -> None:
+    existing_metric = session.get(Metric, metric_id)
+    if existing_metric:
+        if can_overwrite_with_auto_derived_metric(existing_metric):
+            existing_metric.metric_value = str(value)
+            existing_metric.metric_unit = unit
+            existing_metric.metric_category = category_type
+            existing_metric.value_type = value_type
+            existing_metric.corner = corner
+            existing_metric.workload = workload
+            existing_metric.confidence = "review"
+            existing_metric.source_type = AUTO_DERIVED_PARTITION_METRIC_SOURCE
+            existing_metric.derivation = AUTO_DERIVED_PARTITION_METRIC_DERIVATION
+            existing_metric.source_note = source_note
+            session.add(existing_metric)
+        return
+
+    session.add(
+        Metric(
+            id=metric_id,
+            impl_option_id=impl_option_id,
+            subject_type="physical_partition",
+            subject_id=partition_id,
+            metric_name=name,
+            metric_value=str(value),
+            metric_unit=unit,
+            metric_category=category_type,
+            value_type=value_type,
+            corner=corner,
+            workload=workload,
+            confidence="review",
+            source_type=AUTO_DERIVED_PARTITION_METRIC_SOURCE,
+            derivation=AUTO_DERIVED_PARTITION_METRIC_DERIVATION,
+            source_note=source_note,
+            created_at=now_iso(),
+        )
+    )
 
 
 def normalized_content_share(partition_type: str, value: float | None) -> float:
@@ -1408,28 +1472,20 @@ def recalculate_component_partitions(session: Session, impl_option_id: str, comp
             ]
             for name, val, unit, category_type, val_type, corner, workload in p_metric_configs:
                 metric_id = f"M_PART_{p.id}_{name.upper()}"
-                existing_metric = session.get(Metric, metric_id)
-                if existing_metric:
-                    existing_metric.metric_value = str(val)
-                    session.add(existing_metric)
-                else:
-                    new_metric = Metric(
-                        id=metric_id,
-                        impl_option_id=impl_option_id,
-                        subject_type="physical_partition",
-                        subject_id=p.id,
-                        metric_name=name,
-                        metric_value=str(val),
-                        metric_unit=unit,
-                        metric_category=category_type,
-                        value_type=val_type,
-                        corner=corner,
-                        workload=workload,
-                        confidence="review",
-                        source_note="Recalculated on child area change",
-                        created_at=now_iso(),
-                    )
-                    session.add(new_metric)
+                upsert_auto_derived_partition_metric(
+                    session,
+                    metric_id,
+                    impl_option_id,
+                    p.id,
+                    name,
+                    val,
+                    unit,
+                    category_type,
+                    val_type,
+                    corner,
+                    workload,
+                    "Recalculated on child area change",
+                )
 
 
 @app.put("/api/components/{component_id}/detail")
@@ -1499,6 +1555,9 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 existing_metric = session.get(Metric, metric_id)
                 if existing_metric:
                     existing_metric.metric_value = str(val)
+                    existing_metric.source_type = "web_ui"
+                    existing_metric.derivation = "manual"
+                    existing_metric.source_note = "Updated via web interface editor"
                     session.add(existing_metric)
                 else:
                     new_metric = Metric(
@@ -1514,6 +1573,8 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                         corner=corner,
                         workload=workload,
                         confidence="review",
+                        source_type="web_ui",
+                        derivation="manual",
                         source_note="Updated via web interface editor",
                         created_at=now_iso(),
                     )
@@ -1610,28 +1671,20 @@ def update_component_detail(component_id: str, payload: ComponentDetailUpdate) -
                 ]
                 for name, val, unit, category_type, val_type, corner, workload in p_metric_configs:
                     metric_id = f"M_PART_{p_id}_{name.upper()}"
-                    existing_metric = session.get(Metric, metric_id)
-                    if existing_metric:
-                        existing_metric.metric_value = str(val)
-                        session.add(existing_metric)
-                    else:
-                        new_metric = Metric(
-                            id=metric_id,
-                            impl_option_id=payload.impl_option_id,
-                            subject_type="physical_partition",
-                            subject_id=p_id,
-                            metric_name=name,
-                            metric_value=str(val),
-                            metric_unit=unit,
-                            metric_category=category_type,
-                            value_type=val_type,
-                            corner=corner,
-                            workload=workload,
-                            confidence="review",
-                            source_note="Recalculated on component detail save",
-                            created_at=now_iso(),
-                        )
-                        session.add(new_metric)
+                    upsert_auto_derived_partition_metric(
+                        session,
+                        metric_id,
+                        payload.impl_option_id,
+                        p_id,
+                        name,
+                        val,
+                        unit,
+                        category_type,
+                        val_type,
+                        corner,
+                        workload,
+                        "Recalculated on component detail save",
+                    )
 
         if component.parent_id:
             recalculate_component_partitions(session, payload.impl_option_id, component.parent_id)

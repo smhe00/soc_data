@@ -48,7 +48,7 @@ def test_schema_migration_status_is_queryable_and_idempotent(client) -> None:
         version = connection.execute(text("SELECT id, version, updated_at FROM schema_version WHERE id = 'main'")).mappings().one()
         history = connection.execute(text("SELECT id, status, applied_at FROM migration_history ORDER BY id")).mappings().all()
 
-    assert version["version"] == "V7.007"
+    assert version["version"] == "V7.008"
     assert "T" in version["updated_at"]
     assert version["updated_at"].endswith("Z")
     assert [row["id"] for row in history] == [
@@ -59,6 +59,7 @@ def test_schema_migration_status_is_queryable_and_idempotent(client) -> None:
         "V7.005_remove_legacy_parent_residual_rows",
         "V7.006_remove_power_metrics_from_metric_table",
         "V7.007_add_metric_identity_unique_index",
+        "V7.008_add_metric_provenance_fields",
     ]
     assert {row["status"] for row in history} == {"applied"}
     assert all("T" in row["applied_at"] and row["applied_at"].endswith("Z") for row in history)
@@ -68,7 +69,7 @@ def test_schema_migration_status_is_queryable_and_idempotent(client) -> None:
     with backend_app.engine.begin() as connection:
         history_count = connection.execute(text("SELECT COUNT(*) FROM migration_history")).scalar_one()
 
-    assert history_count == 7
+    assert history_count == 8
 
 
 def test_legacy_partial_schema_migration_and_guards_are_idempotent(tmp_path) -> None:
@@ -195,7 +196,7 @@ def test_legacy_partial_schema_migration_and_guards_are_idempotent(tmp_path) -> 
         assert connection.execute(text("SELECT COUNT(*) FROM logicalcomponent WHERE instance_type='parent_residual'")).scalar_one() == 0
         assert connection.execute(text("SELECT COUNT(*) FROM metric WHERE id IN ('M_RES', 'M_POWER')")).scalar_one() == 0
         assert connection.execute(text("SELECT COUNT(*) FROM powerdataset WHERE id='PM_LEGACY'")).scalar_one() == 1
-        assert connection.execute(text("SELECT COUNT(*) FROM migration_history")).scalar_one() == 7
+        assert connection.execute(text("SELECT COUNT(*) FROM migration_history")).scalar_one() == 8
 
     engine.dispose()
 
@@ -224,6 +225,42 @@ def test_metric_identity_migration_dedupes_identical_rows(tmp_path) -> None:
 
     assert rows == ["M_A"]
     assert "ux_metric_identity" in {row[1] for row in indexes}
+
+
+def test_metric_provenance_migration_defaults_and_marks_auto_derived_partition_metrics(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'metric_provenance.db'}", connect_args={"check_same_thread": False})
+
+    with engine.begin() as connection:
+        _create_metric_table(connection)
+        _mark_migrations_applied_before_metric_identity(connection)
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_note, created_at) "
+                "VALUES "
+                "('M_PART_A_LOGIC_AREA', 'S2', 'physical_partition', 'PP_A', 'logic_area', '1.0', 'mm2', 'implementation_area', 'number', 'typical', 'nominal', 'review', 'Physical partition estimate', '2026-01-01'), "
+                "('M_LOG_A_LOGIC_AREA', 'S2', 'logical_component', 'B_A', 'logic_area', '2.0', 'mm2', 'logical_area', 'number', 'typical', 'nominal', 'review', 'Logical estimate', '2026-01-01')"
+            )
+        )
+        migrations.run_schema_migrations(connection, "2026-06-15T12:00:00Z")
+
+        rows = {
+            row["id"]: dict(row)
+            for row in connection.execute(text("SELECT id, source_type, derivation FROM metric ORDER BY id")).mappings().all()
+        }
+
+    engine.dispose()
+
+    assert rows["M_PART_A_LOGIC_AREA"] == {
+        "id": "M_PART_A_LOGIC_AREA",
+        "source_type": "architecture_estimate",
+        "derivation": "derived_from_logical_area",
+    }
+    assert rows["M_LOG_A_LOGIC_AREA"] == {
+        "id": "M_LOG_A_LOGIC_AREA",
+        "source_type": "architecture_estimate",
+        "derivation": "manual",
+    }
 
 
 def test_metric_identity_migration_removes_known_legacy_redundant_rows(tmp_path) -> None:

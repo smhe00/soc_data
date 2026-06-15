@@ -31,6 +31,13 @@ def safe_power_id_part(value: str | None) -> str:
     return (value or "Default").replace(" ", "_").replace("/", "_").replace("-", "_").replace(".", "_").upper()
 
 
+def coalesce_power_dataset_id(physical_mapping_id: str | None = None, power_dataset_id: str | None = None) -> str:
+    dataset_id = (power_dataset_id or physical_mapping_id or "").strip()
+    if not dataset_id:
+        raise HTTPException(status_code=400, detail="power_dataset_id is required.")
+    return dataset_id
+
+
 def register_power_routes(app: FastAPI) -> None:
     @app.get("/api/application-scenarios")
     def get_application_scenarios() -> list[ApplicationScenario]:
@@ -135,6 +142,8 @@ def register_power_routes(app: FastAPI) -> None:
             "source_type": row.source_type,
             "confidence": row.confidence,
             "dataset_version": row.dataset_version,
+            "power_dataset_id": row.id,
+            "physical_mapping_id": row.id,
             "related_physical_mapping_id": row.related_physical_mapping_id,
             "description": row.description,
             "context_json": row.context_json,
@@ -281,7 +290,7 @@ def register_power_routes(app: FastAPI) -> None:
         session: Session,
         project_id: str,
         impl_option_id: str,
-        physical_mapping_id: str,
+        power_dataset_id: str,
         application_scenario_id: str | None = None,
         operating_point_set_id: str | None = None,
         component_id: str | None = None,
@@ -290,13 +299,13 @@ def register_power_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail=f"Unknown project_id: {project_id}")
         if not session.get(ImplOption, impl_option_id):
             raise HTTPException(status_code=400, detail=f"Unknown impl_option_id: {impl_option_id}")
-        power_dataset = session.get(PowerDataset, physical_mapping_id)
+        power_dataset = session.get(PowerDataset, power_dataset_id)
         if not power_dataset:
-            raise HTTPException(status_code=400, detail=f"Unknown power dataset physical_mapping_id: {physical_mapping_id}")
+            raise HTTPException(status_code=400, detail=f"Unknown power_dataset_id: {power_dataset_id}")
         if power_dataset.impl_option_id != impl_option_id:
-            raise HTTPException(status_code=400, detail=f"physical_mapping_id {physical_mapping_id} does not belong to impl_option_id {impl_option_id}")
+            raise HTTPException(status_code=400, detail=f"power_dataset_id {power_dataset_id} does not belong to impl_option_id {impl_option_id}")
         if power_dataset.project_id != project_id:
-            raise HTTPException(status_code=400, detail=f"physical_mapping_id {physical_mapping_id} does not belong to project_id {project_id}")
+            raise HTTPException(status_code=400, detail=f"power_dataset_id {power_dataset_id} does not belong to project_id {project_id}")
         if application_scenario_id and not session.get(ApplicationScenario, application_scenario_id):
             raise HTTPException(status_code=400, detail=f"Unknown application_scenario_id: {application_scenario_id}")
         if operating_point_set_id and not session.get(OperatingPointSet, operating_point_set_id):
@@ -319,15 +328,17 @@ def register_power_routes(app: FastAPI) -> None:
 
 
     @app.get("/api/module-power-usecases")
-    def get_module_power_usecases(impl_option_id: str, physical_mapping_id: str) -> list[dict[str, Any]]:
+    def get_module_power_usecases(impl_option_id: str, physical_mapping_id: str | None = None, power_dataset_id: str | None = None) -> list[dict[str, Any]]:
+        dataset_id = coalesce_power_dataset_id(physical_mapping_id, power_dataset_id)
         with Session(db.engine) as session:
-            rows = module_power_rows(session, impl_option_id, physical_mapping_id)
+            rows = module_power_rows(session, impl_option_id, dataset_id)
             op_names = {row.id: row.name for row in session.exec(select(OperatingPointSet)).all()}
             return [
                 {
                     "id": row.id,
                     "project_id": row.project_id,
                     "impl_option_id": row.impl_option_id,
+                    "power_dataset_id": row.physical_mapping_id,
                     "physical_mapping_id": row.physical_mapping_id,
                     "component_id": row.scope_id,
                     "component_name": row.scope_name,
@@ -344,12 +355,13 @@ def register_power_routes(app: FastAPI) -> None:
 
     @app.post("/api/module-power-usecases")
     def upsert_module_power_usecase(payload: ModulePowerUseCaseInput) -> dict[str, Any]:
+        dataset_id = coalesce_power_dataset_id(payload.physical_mapping_id, payload.power_dataset_id)
         with Session(db.engine) as session:
             validate_power_context(
                 session,
                 payload.project_id,
                 payload.impl_option_id,
-                payload.physical_mapping_id,
+                dataset_id,
                 component_id=payload.component_id,
             )
             if payload.power_value_w < 0:
@@ -374,10 +386,10 @@ def register_power_routes(app: FastAPI) -> None:
                     )
                 )
             row = PowerObservation(
-                id=module_power_observation_id(payload.impl_option_id, payload.physical_mapping_id, payload.component_id, use_case_name, op_id),
+                id=module_power_observation_id(payload.impl_option_id, dataset_id, payload.component_id, use_case_name, op_id),
                 project_id=payload.project_id,
                 impl_option_id=payload.impl_option_id,
-                physical_mapping_id=payload.physical_mapping_id,
+                physical_mapping_id=dataset_id,
                 application_scenario_id="AS_MODULE_LIBRARY",
                 operating_point_set_id=op_id,
                 scope_type="component",
@@ -396,10 +408,11 @@ def register_power_routes(app: FastAPI) -> None:
             )
             session.merge(row)
             session.commit()
-            return get_module_power_usecases(payload.impl_option_id, payload.physical_mapping_id)[0] if False else {
+            return get_module_power_usecases(payload.impl_option_id, power_dataset_id=dataset_id)[0] if False else {
                 "id": row.id,
                 "project_id": row.project_id,
                 "impl_option_id": row.impl_option_id,
+                "power_dataset_id": row.physical_mapping_id,
                 "physical_mapping_id": row.physical_mapping_id,
                 "component_id": row.scope_id,
                 "component_name": row.scope_name,
@@ -440,18 +453,42 @@ def register_power_routes(app: FastAPI) -> None:
             }
 
 
+    def selection_response(row: ApplicationScenarioSelection) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "project_id": row.project_id,
+            "impl_option_id": row.impl_option_id,
+            "power_dataset_id": row.physical_mapping_id,
+            "physical_mapping_id": row.physical_mapping_id,
+            "application_scenario_id": row.application_scenario_id,
+            "component_id": row.component_id,
+            "component_name": row.component_name,
+            "use_case_name": row.use_case_name,
+            "operating_point_set_id": row.operating_point_set_id,
+            "included": row.included,
+            "note": row.note,
+        }
+
+
     @app.get("/api/application-scenario-composition")
-    def get_application_scenario_composition(impl_option_id: str, physical_mapping_id: str, application_scenario_id: str) -> list[ApplicationScenarioSelection]:
+    def get_application_scenario_composition(
+        impl_option_id: str,
+        physical_mapping_id: str | None = None,
+        power_dataset_id: str | None = None,
+        application_scenario_id: str = "",
+    ) -> list[dict[str, Any]]:
+        dataset_id = coalesce_power_dataset_id(physical_mapping_id, power_dataset_id)
         with Session(db.engine) as session:
-            return list(
+            rows = list(
                 session.exec(
                     select(ApplicationScenarioSelection).where(
                         ApplicationScenarioSelection.impl_option_id == impl_option_id,
-                        ApplicationScenarioSelection.physical_mapping_id == physical_mapping_id,
+                        ApplicationScenarioSelection.physical_mapping_id == dataset_id,
                         ApplicationScenarioSelection.application_scenario_id == application_scenario_id,
                     )
                 ).all()
             )
+            return [selection_response(row) for row in rows]
 
 
     POWER_ROLLUP_ABS_TOLERANCE_W = 0.001
@@ -595,19 +632,20 @@ def register_power_routes(app: FastAPI) -> None:
 
     @app.put("/api/application-scenario-composition")
     def update_application_scenario_composition(payload: ApplicationScenarioCompositionUpdate) -> dict[str, Any]:
+        dataset_id = coalesce_power_dataset_id(payload.physical_mapping_id, payload.power_dataset_id)
         with Session(db.engine) as session:
             validate_power_context(
                 session,
                 payload.project_id,
                 payload.impl_option_id,
-                payload.physical_mapping_id,
+                dataset_id,
                 application_scenario_id=payload.application_scenario_id,
             )
             existing = list(
                 session.exec(
                     select(ApplicationScenarioSelection).where(
                         ApplicationScenarioSelection.impl_option_id == payload.impl_option_id,
-                        ApplicationScenarioSelection.physical_mapping_id == payload.physical_mapping_id,
+                        ApplicationScenarioSelection.physical_mapping_id == dataset_id,
                         ApplicationScenarioSelection.application_scenario_id == payload.application_scenario_id,
                     )
                 ).all()
@@ -617,7 +655,7 @@ def register_power_routes(app: FastAPI) -> None:
             pending_selections: list[ApplicationScenarioSelection] = []
             library = {
                 (row.scope_id, row.use_case_name or "Default", row.operating_point_set_id): row
-                for row in module_power_rows(session, payload.impl_option_id, payload.physical_mapping_id)
+                for row in module_power_rows(session, payload.impl_option_id, dataset_id)
             }
             _components_by_id, _parent_by_id, _children_by_parent, ancestors_by_id, _descendants_by_id = component_hierarchy_maps(session)
             for item in payload.selections:
@@ -625,7 +663,7 @@ def register_power_routes(app: FastAPI) -> None:
                     session,
                     payload.project_id,
                     payload.impl_option_id,
-                    payload.physical_mapping_id,
+                    dataset_id,
                     application_scenario_id=payload.application_scenario_id,
                     operating_point_set_id=item.operating_point_set_id,
                     component_id=item.component_id,
@@ -639,10 +677,10 @@ def register_power_routes(app: FastAPI) -> None:
                     )
                 pending_selections.append(
                     ApplicationScenarioSelection(
-                        id=app_selection_id(payload.physical_mapping_id, payload.application_scenario_id, item.component_id, use_case_name, item.operating_point_set_id),
+                        id=app_selection_id(dataset_id, payload.application_scenario_id, item.component_id, use_case_name, item.operating_point_set_id),
                         project_id=payload.project_id,
                         impl_option_id=payload.impl_option_id,
-                        physical_mapping_id=payload.physical_mapping_id,
+                        physical_mapping_id=dataset_id,
                         application_scenario_id=payload.application_scenario_id,
                         component_id=item.component_id,
                         component_name=item.component_name,
@@ -659,8 +697,8 @@ def register_power_routes(app: FastAPI) -> None:
                 session.add(row)
             session.commit()
             return {
-                "selections": get_application_scenario_composition(payload.impl_option_id, payload.physical_mapping_id, payload.application_scenario_id),
-                "summary": application_power_summary(session, payload.impl_option_id, payload.physical_mapping_id, payload.application_scenario_id),
+                "selections": get_application_scenario_composition(payload.impl_option_id, power_dataset_id=dataset_id, application_scenario_id=payload.application_scenario_id),
+                "summary": application_power_summary(session, payload.impl_option_id, dataset_id, payload.application_scenario_id),
             }
 
 
@@ -705,6 +743,7 @@ def register_power_routes(app: FastAPI) -> None:
         return {
             "filters": {
                 "impl_option_id": impl_option_id,
+                "power_dataset_id": physical_mapping_id,
                 "physical_mapping_id": physical_mapping_id,
                 "application_scenario_id": application_scenario_id,
             },
@@ -720,9 +759,15 @@ def register_power_routes(app: FastAPI) -> None:
 
 
     @app.get("/api/application-power-summary")
-    def get_application_power_summary(impl_option_id: str, physical_mapping_id: str, application_scenario_id: str) -> dict[str, Any]:
+    def get_application_power_summary(
+        impl_option_id: str,
+        physical_mapping_id: str | None = None,
+        power_dataset_id: str | None = None,
+        application_scenario_id: str = "",
+    ) -> dict[str, Any]:
+        dataset_id = coalesce_power_dataset_id(physical_mapping_id, power_dataset_id)
         with Session(db.engine) as session:
-            return application_power_summary(session, impl_option_id, physical_mapping_id, application_scenario_id)
+            return application_power_summary(session, impl_option_id, dataset_id, application_scenario_id)
 
 
     @app.get("/api/power-observations")
@@ -730,6 +775,7 @@ def register_power_routes(app: FastAPI) -> None:
         project_id: str | None = None,
         impl_option_id: str | None = None,
         physical_mapping_id: str | None = None,
+        power_dataset_id: str | None = None,
         application_scenario_id: str | None = None,
         operating_point_set_id: str | None = None,
         scope_type: str | None = None,
@@ -738,15 +784,16 @@ def register_power_routes(app: FastAPI) -> None:
         development_stage: str | None = None,
         confidence: str | None = None,
         is_additive: bool | None = None,
-    ) -> list[PowerObservation]:
+    ) -> list[dict[str, Any]]:
+        dataset_id = coalesce_power_dataset_id(physical_mapping_id, power_dataset_id) if physical_mapping_id or power_dataset_id else None
         with Session(db.engine) as session:
             stmt = select(PowerObservation)
             if project_id:
                 stmt = stmt.where(PowerObservation.project_id == project_id)
             if impl_option_id:
                 stmt = stmt.where(PowerObservation.impl_option_id == impl_option_id)
-            if physical_mapping_id:
-                stmt = stmt.where(PowerObservation.physical_mapping_id == physical_mapping_id)
+            if dataset_id:
+                stmt = stmt.where(PowerObservation.physical_mapping_id == dataset_id)
             if application_scenario_id:
                 stmt = stmt.where(PowerObservation.application_scenario_id == application_scenario_id)
             if operating_point_set_id:
@@ -763,24 +810,26 @@ def register_power_routes(app: FastAPI) -> None:
                 stmt = stmt.where(PowerObservation.confidence == confidence)
             if is_additive is not None:
                 stmt = stmt.where(PowerObservation.is_additive == is_additive)
-            return list(session.exec(stmt).all())
+            return [power_observation_response(row) for row in session.exec(stmt).all()]
 
 
     @app.get("/api/power-summary")
     def get_power_summary(
         impl_option_id: str,
-        physical_mapping_id: str,
-        application_scenario_id: str,
-        operating_point_set_id: str,
+        physical_mapping_id: str | None = None,
+        power_dataset_id: str | None = None,
+        application_scenario_id: str = "",
+        operating_point_set_id: str = "",
         statistic_type: str = "average",
         power_type: str = "total",
         time_window_name: str | None = None,
         development_stage: str | None = None,
     ) -> dict[str, Any]:
+        dataset_id = coalesce_power_dataset_id(physical_mapping_id, power_dataset_id)
         with Session(db.engine) as session:
             stmt = select(PowerObservation).where(
                 PowerObservation.impl_option_id == impl_option_id,
-                PowerObservation.physical_mapping_id == physical_mapping_id,
+                PowerObservation.physical_mapping_id == dataset_id,
                 PowerObservation.application_scenario_id == application_scenario_id,
                 PowerObservation.operating_point_set_id == operating_point_set_id,
                 PowerObservation.statistic_type == statistic_type,
@@ -821,7 +870,8 @@ def register_power_routes(app: FastAPI) -> None:
             return {
                 "filters": {
                     "impl_option_id": impl_option_id,
-                    "physical_mapping_id": physical_mapping_id,
+                    "power_dataset_id": dataset_id,
+                    "physical_mapping_id": dataset_id,
                     "application_scenario_id": application_scenario_id,
                     "operating_point_set_id": operating_point_set_id,
                     "statistic_type": statistic_type,
@@ -844,18 +894,45 @@ def register_power_routes(app: FastAPI) -> None:
                     }
                     for o in non_additive_obs
                 ],
-                "observations": [o.dict() for o in observations],
+                "observations": [power_observation_response(o) for o in observations],
             }
 
 
+    def power_observation_response(row: PowerObservation) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "project_id": row.project_id,
+            "impl_option_id": row.impl_option_id,
+            "power_dataset_id": row.physical_mapping_id,
+            "physical_mapping_id": row.physical_mapping_id,
+            "application_scenario_id": row.application_scenario_id,
+            "operating_point_set_id": row.operating_point_set_id,
+            "scope_type": row.scope_type,
+            "scope_id": row.scope_id,
+            "scope_name": row.scope_name,
+            "use_case_name": row.use_case_name,
+            "time_window_name": row.time_window_name,
+            "statistic_type": row.statistic_type,
+            "power_type": row.power_type,
+            "power_value_w": row.power_value_w,
+            "development_stage": row.development_stage,
+            "source_type": row.source_type,
+            "confidence": row.confidence,
+            "is_additive": row.is_additive,
+            "context_json": row.context_json,
+            "note": row.note,
+        }
+
+
     @app.post("/api/power-observations")
-    def create_power_observation(payload: PowerObservationCreate) -> PowerObservation:
+    def create_power_observation(payload: PowerObservationCreate) -> dict[str, Any]:
+        dataset_id = coalesce_power_dataset_id(payload.physical_mapping_id, payload.power_dataset_id)
         with Session(db.engine) as session:
             validate_power_context(
                 session,
                 payload.project_id,
                 payload.impl_option_id,
-                payload.physical_mapping_id,
+                dataset_id,
                 application_scenario_id=payload.application_scenario_id,
                 operating_point_set_id=payload.operating_point_set_id,
                 component_id=payload.scope_id if payload.scope_type == "component" else None,
@@ -868,7 +945,7 @@ def register_power_routes(app: FastAPI) -> None:
                 id=obs_id,
                 project_id=payload.project_id,
                 impl_option_id=payload.impl_option_id,
-                physical_mapping_id=payload.physical_mapping_id,
+                physical_mapping_id=dataset_id,
                 application_scenario_id=payload.application_scenario_id,
                 operating_point_set_id=payload.operating_point_set_id,
                 scope_type=payload.scope_type,
@@ -888,11 +965,12 @@ def register_power_routes(app: FastAPI) -> None:
             session.add(obs)
             session.commit()
             session.refresh(obs)
-            return obs
+            return power_observation_response(obs)
 
 
     @app.put("/api/power-observations/{observation_id}")
-    def update_power_observation(observation_id: str, payload: PowerObservationCreate) -> PowerObservation:
+    def update_power_observation(observation_id: str, payload: PowerObservationCreate) -> dict[str, Any]:
+        dataset_id = coalesce_power_dataset_id(payload.physical_mapping_id, payload.power_dataset_id)
         with Session(db.engine) as session:
             obs = session.get(PowerObservation, observation_id)
             if not obs:
@@ -901,7 +979,7 @@ def register_power_routes(app: FastAPI) -> None:
                 session,
                 payload.project_id,
                 payload.impl_option_id,
-                payload.physical_mapping_id,
+                dataset_id,
                 application_scenario_id=payload.application_scenario_id,
                 operating_point_set_id=payload.operating_point_set_id,
                 component_id=payload.scope_id if payload.scope_type == "component" else None,
@@ -911,6 +989,11 @@ def register_power_routes(app: FastAPI) -> None:
         
             # Update fields
             obs.scope_type = payload.scope_type
+            obs.project_id = payload.project_id
+            obs.impl_option_id = payload.impl_option_id
+            obs.physical_mapping_id = dataset_id
+            obs.application_scenario_id = payload.application_scenario_id
+            obs.operating_point_set_id = payload.operating_point_set_id
             obs.scope_id = payload.scope_id
             obs.scope_name = payload.scope_name
             obs.use_case_name = payload.use_case_name
@@ -926,7 +1009,7 @@ def register_power_routes(app: FastAPI) -> None:
             session.add(obs)
             session.commit()
             session.refresh(obs)
-            return obs
+            return power_observation_response(obs)
 
 
     @app.delete("/api/power-observations/{observation_id}")

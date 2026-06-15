@@ -11,7 +11,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-15 |
-| Current batch | P0.2 NULL metric identity follow-up complete |
+| Current batch | P0.3 Power Dataset naming cleanup and P0.4 Metric provenance complete |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -34,6 +34,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 3 | Address ChatGPT P0.1 review items | `backend/migrations.py`, `backend/db.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 4 | Add metric identity uniqueness and duplicate protection | `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `tests/test_schema_migrations.py`, `tests/test_import_validation.py` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 5 | Normalize NULL metric identity fields before unique index | `backend/migrations.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
+| 6 | P0.3 Power Dataset naming cleanup and P0.4 Metric provenance | `backend/power.py`, `backend/schemas.py`, `backend/models.py`, `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `backend/seed.py`, frontend power types/API, tests | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 
 ## Blocking Questions
 
@@ -68,6 +69,13 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Normalized legacy `metric.workload` NULL/empty values to `nominal` before metric identity duplicate scanning.
 - Added a clear migration failure for NULL/empty `impl_option_id`, `subject_type`, `subject_id`, or `metric_name`.
 - Added tests proving NULL/empty corner/workload rows are normalized before dedupe, required identity fields fail clearly, and `ux_metric_identity` blocks duplicate normalized identities.
+- Introduced `power_dataset_id` as the preferred Power Dataset API field while preserving `physical_mapping_id` in requests and responses.
+- Kept `/api/physical-mappings` as a compatibility alias for `/api/power-datasets`.
+- Added V7.008 metric provenance fields: `source_type` and `derivation`.
+- Defaulted existing/imported metrics to `source_type='architecture_estimate'` and `derivation='manual'`.
+- Marked auto-derived physical partition area/shape metrics as `source_type='architecture_estimate'` and `derivation='derived_from_logical_area'`.
+- Protected approved or tool-extracted/PTPX/simulation/silicon metric rows from silent auto-derived physical partition recalculation overwrites.
+- Verified local mergeability with `git merge-tree --write-tree HEAD origin/master`.
 
 ### In Progress
 
@@ -76,17 +84,18 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 ### Next
 
 1. Await ChatGPT review on PR #2.
-2. Continue to P0.3/P0.4 only after the next review.
-3. Preserve existing metric API behavior.
+2. Continue to the next Phase-2 batch only after the next review.
+3. Preserve existing API compatibility.
 
 ## Validation Log
 
 | Command | Result | Notes |
 |---|---|---|
-| `uv run pytest` | Passed | 18 tests passed; existing FastAPI deprecation warnings only. |
+| `uv run pytest` | Passed | 21 tests passed; existing FastAPI deprecation warnings only. |
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |
+| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check. |
 
 ## Final Reviewer Checklist
 
@@ -98,6 +107,6 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - [x] `uv run python scripts/check_phase1.py` passes.
 - [x] `cd frontend && npm run build` passes.
 - [x] No destructive DB field rename without compatibility alias.
-- [ ] No silent overwrite of high-confidence/tool-extracted metrics.
+- [x] No silent overwrite of high-confidence/tool-extracted metrics.
 - [ ] Power Dataset is no longer described as physical partition mapping in new code.
 - [ ] Final PR summary is complete.

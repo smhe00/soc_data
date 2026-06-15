@@ -116,7 +116,7 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
     ),
     "metrics": (
         Metric,
-        ["id", "impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
+        ["id", "impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_type", "derivation", "source_note", "created_at"],
         {"impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "value_type", "corner", "workload", "confidence"},
     ),
 }
@@ -200,6 +200,8 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
         row["metric_value"] = str(row["metric_value"])
         row["metric_unit"] = row.get("metric_unit") or ""
         row["metric_category"] = row.get("metric_category") or ""
+        row["source_type"] = row.get("source_type") or "architecture_estimate"
+        row["derivation"] = row.get("derivation") or "manual"
         row["source_note"] = row.get("source_note") or ""
         row["created_at"] = row.get("created_at") or created
         if not row.get("id"):
