@@ -1435,7 +1435,7 @@ Alembic
 ```text
 backend/
 ├── main.py
-├── soc_3dic.db
+├── demo_soc_3dic.db
 ├── requirements.txt
 ├── models.py
 ├── seed.py

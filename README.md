@@ -48,7 +48,7 @@ uv sync
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The backend creates `backend/soc_3dic.db` on startup.
+The backend creates `backend/demo_soc_3dic.db` on startup.
 
 Stop the backend from the same terminal with `Ctrl + C`.
 
@@ -141,7 +141,7 @@ For LAN or public access, make sure the host firewall/security group allows TCP 
 The built-in demo database is:
 
 ```text
-backend/soc_3dic.db
+backend/demo_soc_3dic.db
 ```
 
 Additional user-created SQLite databases are stored under:
