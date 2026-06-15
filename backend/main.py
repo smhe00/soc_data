@@ -286,6 +286,20 @@ def component_path(session: Session, parent_id: str | None, name: str) -> str:
     return f"{parent.hierarchy_path}/{name}"
 
 
+def ensure_unique_component_path(session: Session, project_id: str, hierarchy_path: str, component_id: str | None = None) -> None:
+    duplicate = session.exec(
+        select(LogicalComponent).where(
+            LogicalComponent.project_id == project_id,
+            LogicalComponent.hierarchy_path == hierarchy_path,
+        )
+    ).first()
+    if duplicate and duplicate.id != component_id:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Logical component hierarchy_path already exists in project {project_id}: {hierarchy_path}",
+        )
+
+
 def descendant_component_ids(session: Session, component_id: str) -> set[str]:
     rows = session.exec(select(LogicalComponent)).all()
     children: dict[str, list[str]] = {}
@@ -798,6 +812,24 @@ def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str |
         if component.parent_id:
             children_by_parent.setdefault(component.parent_id, []).append(component)
 
+    components_by_path: dict[tuple[str, str], list[LogicalComponent]] = {}
+    for component in components:
+        components_by_path.setdefault((component.project_id, component.hierarchy_path), []).append(component)
+    for (project_id, hierarchy_path), rows in components_by_path.items():
+        if len(rows) <= 1:
+            continue
+        ids = ", ".join(row.id for row in rows)
+        issues.append(
+            make_quality_issue(
+                "High",
+                "Duplicate logical hierarchy path",
+                f"Project {project_id} has multiple logical components at {hierarchy_path}: {ids}.",
+                "Keep one logical component row for this hierarchy path and express repeated instances with logical_instance_count.",
+                "logical_component",
+                rows[0].id,
+            )
+        )
+
     def self_area_by_category(component: LogicalComponent) -> dict[str, float]:
         available = metrics_by_subject.get(("logical_component", component.id), {})
         child_rows = children_by_parent.get(component.id, [])
@@ -1169,6 +1201,8 @@ def create_logical_component(payload: LogicalComponentInput) -> dict[str, Any]:
             raise HTTPException(status_code=409, detail=f"Logical component already exists: {component_id}")
         if payload.module_definition_id and not session.get(ModuleDefinition, payload.module_definition_id):
             raise HTTPException(status_code=400, detail=f"Unknown module_definition_id: {payload.module_definition_id}")
+        hierarchy_path = component_path(session, payload.parent_id, name)
+        ensure_unique_component_path(session, payload.project_id, hierarchy_path, component_id)
         row = LogicalComponent(
             id=component_id,
             project_id=payload.project_id,
@@ -1178,7 +1212,7 @@ def create_logical_component(payload: LogicalComponentInput) -> dict[str, Any]:
             instance_type=payload.instance_type.strip() or "block",
             resource_type=payload.resource_type.strip() or "logic",
             function_domain=payload.function_domain.strip() or "General",
-            hierarchy_path=component_path(session, payload.parent_id, name),
+            hierarchy_path=hierarchy_path,
             logical_instance_count=payload.logical_instance_count,
             owner_team=payload.owner_team.strip() or "Architecture Team",
             visibility_level=payload.visibility_level.strip() or "team",
@@ -1214,6 +1248,8 @@ def update_logical_component(component_id: str, payload: LogicalComponentInput) 
             raise HTTPException(status_code=400, detail=f"Unknown parent_id: {payload.parent_id}")
         if payload.module_definition_id and not session.get(ModuleDefinition, payload.module_definition_id):
             raise HTTPException(status_code=400, detail=f"Unknown module_definition_id: {payload.module_definition_id}")
+        hierarchy_path = component_path(session, payload.parent_id, name)
+        ensure_unique_component_path(session, payload.project_id, hierarchy_path, component_id)
 
         row.project_id = payload.project_id
         row.parent_id = payload.parent_id or None
@@ -1226,7 +1262,7 @@ def update_logical_component(component_id: str, payload: LogicalComponentInput) 
         row.owner_team = payload.owner_team.strip() or "Architecture Team"
         row.visibility_level = payload.visibility_level.strip() or "team"
         row.description = payload.description or ""
-        row.hierarchy_path = component_path(session, row.parent_id, row.name)
+        row.hierarchy_path = hierarchy_path
         row.updated_at = now_iso()
         session.add(row)
         update_component_subtree_paths(session, row)

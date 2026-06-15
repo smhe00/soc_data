@@ -211,6 +211,20 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
     tier_impl_option_ids.update(existing_refs.get("tier_implOptions", {}))
     component_ids = {row["id"] for row in all_rows["logical_components"]} | existing_refs.get("logical_components", set())
     partition_ids = {row["id"] for row in all_rows["physical_partitions"]} | existing_refs.get("physical_partitions", set())
+    existing_component_paths = existing_refs.get("logical_component_paths", {})
+    workbook_component_paths: dict[tuple[str, str], list[str]] = {}
+    for row in all_rows["logical_components"]:
+        workbook_component_paths.setdefault((row["project_id"], row["hierarchy_path"]), []).append(row["id"])
+    for (project_id, hierarchy_path), ids in workbook_component_paths.items():
+        if len(set(ids)) > 1:
+            errors.append(
+                f"logical_components {', '.join(ids)} duplicate hierarchy_path {hierarchy_path} in project {project_id}; use logical_instance_count for repeated instances"
+            )
+        existing_id = existing_component_paths.get((project_id, hierarchy_path))
+        if existing_id and existing_id not in ids:
+            errors.append(
+                f"logical_component hierarchy_path {hierarchy_path} in project {project_id} already belongs to {existing_id}; cannot import duplicate path for {', '.join(ids)}"
+            )
 
     for row in all_rows["implOptions"]:
         if row["project_id"] not in project_ids:
@@ -271,13 +285,15 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
 
 def existing_reference_ids(session: Session) -> dict[str, Any]:
     tiers = session.exec(select(Tier)).all()
+    components = session.exec(select(LogicalComponent)).all()
     return {
         "projects": {row.id for row in session.exec(select(Project)).all()},
         "module_definitions": {row.id for row in session.exec(select(ModuleDefinition)).all()},
         "implOptions": {row.id for row in session.exec(select(ImplOption)).all()},
         "tiers": {row.id for row in tiers},
         "tier_implOptions": {row.id: row.impl_option_id for row in tiers},
-        "logical_components": {row.id for row in session.exec(select(LogicalComponent)).all()},
+        "logical_components": {row.id for row in components},
+        "logical_component_paths": {(row.project_id, row.hierarchy_path): row.id for row in components},
         "physical_partitions": {row.id for row in session.exec(select(PhysicalPartition)).all()},
     }
 
