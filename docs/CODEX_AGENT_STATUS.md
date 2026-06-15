@@ -10,7 +10,7 @@
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-15 |
 | Current batch | P0.1 schema version and migration history complete; next P0.2 metric identity uniqueness |
-| PR | TBD |
+| PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
 ## Working Assumptions
@@ -27,6 +27,7 @@
 |---|---|---|---|---|
 | 0 | Read real Phase-2 plan and prepare branch | `docs/CODEX_PHASE2_HARDENING_PLAN.md`, `docs/CODEX_AGENT_STATUS.md` | Complete | Not run |
 | 1 | Add explicit schema version and migration history | `backend/models.py`, `backend/migrations.py`, `backend/db.py`, `tests/test_schema_migrations.py` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
+| 2 | Open draft PR for ongoing Phase-2 hardening | `docs/CODEX_AGENT_STATUS.md` | Complete | PR #2 created as draft |
 
 ## Blocking Questions
 
@@ -45,6 +46,7 @@
 - Added `backend/migrations.py` with idempotent V7.001-V7.006 migration runner.
 - Routed existing SQLite compatibility cleanup through the migration runner without changing API behavior.
 - Added a focused migration idempotency/status test.
+- Opened draft PR: https://github.com/smhe00/soc_data/pull/2.
 
 ### In Progress
 
