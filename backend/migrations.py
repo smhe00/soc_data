@@ -7,8 +7,14 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 
-CURRENT_SCHEMA_VERSION = "V7.006"
+CURRENT_SCHEMA_VERSION = "V7.007"
 SCHEMA_VERSION_ID = "main"
+METRIC_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name", "corner", "workload")
+LEGACY_REDUNDANT_METRIC_IDS = {
+    "M_IMPL_OPTION_AREA",
+    "M_PART_GPU_LOGIC_AREA_TOP",
+    "M_PART_GPU_LOGIC_AREA_MID",
+}
 
 
 @dataclass(frozen=True)
@@ -85,6 +91,14 @@ def _record_migration(connection: Connection, migration: Migration, applied_at: 
             "note": migration.note,
         },
     )
+
+
+def _is_migration_applied(connection: Connection, migration: Migration) -> bool:
+    row = connection.execute(
+        text("SELECT 1 FROM migration_history WHERE id=:id AND status='applied'"),
+        {"id": migration.id},
+    ).first()
+    return row is not None
 
 
 def _set_schema_version(connection: Connection, version: str, updated_at: str) -> None:
@@ -190,6 +204,69 @@ def _remove_power_metrics_from_metric_table(connection: Connection, _: str) -> N
     )
 
 
+def _add_metric_identity_unique_index(connection: Connection, _: str) -> None:
+    if not _table_exists(connection, "metric"):
+        return
+
+    duplicate_groups = connection.execute(
+        text(
+            "SELECT impl_option_id, subject_type, subject_id, metric_name, corner, workload, COUNT(*) AS duplicate_count "
+            "FROM metric "
+            "GROUP BY impl_option_id, subject_type, subject_id, metric_name, corner, workload "
+            "HAVING COUNT(*) > 1"
+        )
+    ).mappings().all()
+    for group in duplicate_groups:
+        rows = connection.execute(
+            text(
+                "SELECT id, metric_value, metric_unit, metric_category, value_type, confidence, source_note "
+                "FROM metric "
+                "WHERE impl_option_id=:impl_option_id "
+                "AND subject_type=:subject_type "
+                "AND subject_id=:subject_id "
+                "AND metric_name=:metric_name "
+                "AND corner=:corner "
+                "AND workload=:workload "
+                "ORDER BY id"
+            ),
+            {column: group[column] for column in METRIC_IDENTITY_COLUMNS},
+        ).mappings().all()
+        legacy_ids = [row["id"] for row in rows if row["id"] in LEGACY_REDUNDANT_METRIC_IDS]
+        if legacy_ids and len(legacy_ids) < len(rows):
+            for metric_id in legacy_ids:
+                connection.execute(text("DELETE FROM metric WHERE id=:metric_id"), {"metric_id": metric_id})
+            rows = [row for row in rows if row["id"] not in LEGACY_REDUNDANT_METRIC_IDS]
+        if len(rows) <= 1:
+            continue
+
+        distinct_values = {
+            (
+                row["metric_value"],
+                row["metric_unit"],
+                row["metric_category"],
+                row["value_type"],
+                row["confidence"],
+                row["source_note"],
+            )
+            for row in rows
+        }
+        if len(distinct_values) > 1:
+            identity = ", ".join(f"{column}={group[column]}" for column in METRIC_IDENTITY_COLUMNS)
+            ids = ", ".join(row["id"] for row in rows)
+            raise RuntimeError(f"Conflicting duplicate metric identity blocks migration: {identity}; rows: {ids}")
+
+        redundant_ids = [row["id"] for row in rows[1:]]
+        for metric_id in redundant_ids:
+            connection.execute(text("DELETE FROM metric WHERE id=:metric_id"), {"metric_id": metric_id})
+
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_metric_identity "
+            "ON metric (impl_option_id, subject_type, subject_id, metric_name, corner, workload)"
+        )
+    )
+
+
 MIGRATIONS = [
     Migration(
         version="V7.001",
@@ -233,12 +310,35 @@ MIGRATIONS = [
         note="Keeps application power outside the generic metric table.",
         apply=_remove_power_metrics_from_metric_table,
     ),
+    Migration(
+        version="V7.007",
+        name="add_metric_identity_unique_index",
+        checksum="metric.identity.unique_index",
+        note="Deduplicates identical metric facts and enforces metric identity uniqueness.",
+        apply=_add_metric_identity_unique_index,
+    ),
 ]
 
 
 def run_schema_migrations(connection: Connection, applied_at: str) -> None:
     _ensure_tracking_tables(connection)
     for migration in MIGRATIONS:
+        if _is_migration_applied(connection, migration):
+            continue
         migration.apply(connection, applied_at)
         _record_migration(connection, migration, applied_at)
     _set_schema_version(connection, CURRENT_SCHEMA_VERSION, applied_at)
+
+
+def run_legacy_compatibility_guards(connection: Connection, applied_at: str) -> None:
+    """Keep old SQLite databases safe when legacy rows are reintroduced.
+
+    Schema migrations above are recorded once. These guards intentionally run at
+    startup because old workbooks or hand-edited databases can reintroduce
+    legacy parent_residual rows, power metrics, or physicalmapping-only power
+    datasets after the migration history has already been recorded.
+    """
+
+    _migrate_legacy_physical_mapping_to_power_dataset(connection, applied_at)
+    _remove_legacy_parent_residual_rows(connection, applied_at)
+    _remove_power_metrics_from_metric_table(connection, applied_at)

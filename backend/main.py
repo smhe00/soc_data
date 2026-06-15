@@ -812,6 +812,26 @@ def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str |
         if component.parent_id:
             children_by_parent.setdefault(component.parent_id, []).append(component)
 
+    metrics_by_identity: dict[tuple[str, str, str, str, str, str], list[Metric]] = {}
+    for row in metrics:
+        identity = (row.impl_option_id, row.subject_type, row.subject_id, row.metric_name, row.corner, row.workload)
+        metrics_by_identity.setdefault(identity, []).append(row)
+    for identity, rows in metrics_by_identity.items():
+        if len(rows) <= 1:
+            continue
+        ids = ", ".join(row.id for row in rows)
+        identity_detail = "/".join(identity)
+        issues.append(
+            make_quality_issue(
+                "High",
+                "Duplicate metric identity",
+                f"Metric identity {identity_detail} has multiple rows: {ids}.",
+                "Keep one metric row for each impl_option, subject, metric_name, corner, and workload.",
+                "metric",
+                rows[0].id,
+            )
+        )
+
     components_by_path: dict[tuple[str, str], list[LogicalComponent]] = {}
     for component in components:
         components_by_path.setdefault((component.project_id, component.hierarchy_path), []).append(component)

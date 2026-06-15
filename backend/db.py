@@ -28,6 +28,10 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def database_id(path: Path) -> str:
     return path.stem
 
@@ -76,4 +80,5 @@ def create_db_and_tables() -> None:
 
 def ensure_sqlite_schema_compatibility() -> None:
     with engine.begin() as connection:
-        migrations.run_schema_migrations(connection, now_iso())
+        migrations.run_schema_migrations(connection, now_utc_iso())
+        migrations.run_legacy_compatibility_guards(connection, now_utc_iso())

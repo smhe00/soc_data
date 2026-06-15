@@ -1,5 +1,7 @@
 # Codex Agent Status
 
+STATUS: READY_FOR_CHATGPT_REVIEW
+
 > Persistent coordination file for `smhe00/soc_data` Phase-2 hardening.  
 > Codex should update this file on branch `codex/phase2-hardening` before and after each meaningful batch of changes.
 
@@ -9,7 +11,7 @@
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-15 |
-| Current batch | P0.1 schema version and migration history complete; next P0.2 metric identity uniqueness |
+| Current batch | P0.1 review follow-up and P0.2 metric identity uniqueness complete |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -28,12 +30,15 @@
 | 0 | Read real Phase-2 plan and prepare branch | `docs/CODEX_PHASE2_HARDENING_PLAN.md`, `docs/CODEX_AGENT_STATUS.md` | Complete | Not run |
 | 1 | Add explicit schema version and migration history | `backend/models.py`, `backend/migrations.py`, `backend/db.py`, `tests/test_schema_migrations.py` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 2 | Open draft PR for ongoing Phase-2 hardening | `docs/CODEX_AGENT_STATUS.md` | Complete | PR #2 created as draft |
+| 3 | Address ChatGPT P0.1 review items | `backend/migrations.py`, `backend/db.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
+| 4 | Add metric identity uniqueness and duplicate protection | `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `tests/test_schema_migrations.py`, `tests/test_import_validation.py` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 
 ## Blocking Questions
 
 | ID | Question | Impact | Proposed safe default | Status |
 |---|---|---|---|---|
 | Q1 | Should existing legacy compatibility statements be represented as migration history even when the schema already has those columns? | Affects how much historical migration detail appears in `migration_history`. | Record idempotent migration rows for the compatibility migrations and keep legacy cleanup safe. | Resolved by implementation |
+| Q2 | Should migration history use date-only timestamps from `now_iso()`? | Migration history is audit-like metadata. | Use UTC ISO timestamps with seconds precision for migration metadata while preserving existing date-only `now_iso()` behavior elsewhere. | Resolved by implementation |
 
 ## Change Summary
 
@@ -47,36 +52,46 @@
 - Routed existing SQLite compatibility cleanup through the migration runner without changing API behavior.
 - Added a focused migration idempotency/status test.
 - Opened draft PR: https://github.com/smhe00/soc_data/pull/2.
+- Changed schema migrations to run recorded migrations only when not already applied.
+- Split repeated legacy data cleanup into `run_legacy_compatibility_guards()`.
+- Switched migration metadata timestamps to UTC ISO seconds precision.
+- Added old/partial SQLite coverage for missing columns, parent residual cleanup, power metric cleanup, legacy `physicalmapping` to `powerdataset`, and idempotent reruns.
+- Added V7.007 metric identity uniqueness migration.
+- Deduplicated identical metric identity rows before creating `ux_metric_identity`.
+- Kept conflicting duplicate metric identities as hard migration failures, except for three known legacy redundant metric IDs that are dropped only when a canonical row for the same identity exists.
+- Added import-time duplicate metric identity validation.
+- Dropped known redundant legacy metric rows during import when a canonical identity exists, preventing the old template from reintroducing rows removed by migration.
+- Added duplicate metric identity quality issue reporting for existing dirty data.
 
 ### In Progress
 
-- Not started.
+- None.
 
 ### Next
 
-1. Start P0.2 metric identity duplicate detection and import-time protection.
-2. Add uniqueness migration only after scanning/cleaning duplicate metric identities safely.
+1. Await ChatGPT review on PR #2.
+2. Continue with the next Phase-2 batch after review, likely P0.3/P0.4 depending on comments.
 3. Preserve existing metric API behavior.
 
 ## Validation Log
 
 | Command | Result | Notes |
 |---|---|---|
-| `uv run pytest` | Passed | 8 tests passed; existing FastAPI deprecation warnings only. |
-| `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors. |
+| `uv run pytest` | Passed | 15 tests passed; existing FastAPI deprecation warnings only. |
+| `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |
 
 ## Final Reviewer Checklist
 
-- [ ] Existing demo database starts successfully.
+- [x] Existing demo database starts successfully.
 - [ ] New empty database can be created from UI/API.
-- [ ] Demo seed still produces expected Phase-1 counts.
+- [x] Demo seed still produces expected Phase-1 counts.
 - [x] `uv run pytest` passes.
 - [x] `uv run python scripts/verify_import.py` passes.
 - [x] `uv run python scripts/check_phase1.py` passes.
 - [x] `cd frontend && npm run build` passes.
-- [ ] No destructive DB field rename without compatibility alias.
+- [x] No destructive DB field rename without compatibility alias.
 - [ ] No silent overwrite of high-confidence/tool-extracted metrics.
 - [ ] Power Dataset is no longer described as physical partition mapping in new code.
 - [ ] Final PR summary is complete.
