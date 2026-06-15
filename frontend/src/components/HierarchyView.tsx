@@ -141,48 +141,6 @@ function filterTree(nodes: TreeBlock[], query: string): TreeBlock[] {
     .filter((node): node is TreeBlock => node !== null);
 }
 
-function countTreeNodes(nodes: TreeBlock[]): number {
-  return nodes.reduce((total, node) => total + 1 + countTreeNodes(node.children), 0);
-}
-
-function foldedInstanceCount(node: TreeBlock): number {
-  return Math.max(1, node.logical_instance_count || 1, node.absolute_logical_instance_count || 1);
-}
-
-function foldRepeatedSiblings(nodes: TreeBlock[]): TreeBlock[] {
-  const groups = new Map<string, TreeBlock[]>();
-  nodes.forEach((node) => {
-    const key = [node.parent ?? "root", node.name.trim().toLowerCase(), node.type, node.resource, node.domain].join("|");
-    const group = groups.get(key);
-    if (group) group.push(node);
-    else groups.set(key, [node]);
-  });
-
-  const folded = Array.from(groups.values()).map((group) => {
-    const ordered = [...group].sort((left, right) => right.children.length - left.children.length);
-    const primary = ordered[0];
-    const mergedChildren = foldRepeatedSiblings(group.flatMap((node) => node.children));
-    if (group.length === 1) {
-      return { ...primary, children: mergedChildren };
-    }
-
-    const count = group.reduce((total, node) => total + foldedInstanceCount(node), 0);
-    const ids = group.map((node) => node.id).join(", ");
-    return {
-      ...primary,
-      children: mergedChildren,
-      folded_instance_count: count,
-      folded_instance_title: `${count} repeated logical instance rows folded here (${ids})`,
-    };
-  });
-
-  return folded.sort((left, right) => nodes.indexOf(groupOriginalNode(nodes, left)) - nodes.indexOf(groupOriginalNode(nodes, right)));
-}
-
-function groupOriginalNode(nodes: TreeBlock[], foldedNode: TreeBlock): TreeBlock {
-  return nodes.find((node) => node.id === foldedNode.id) ?? foldedNode;
-}
-
 function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0 }: TreeNodeProps): JSX.Element {
   const hasChildren = node.children.length > 0;
   const expanded = expandedIds.has(node.id);
@@ -190,13 +148,11 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
   const mappingClosed = hasChildren ? node.subtree_mapping_closed : node.own_mapping_closed;
   const localInstanceCount = node.logical_instance_count || 1;
   const totalInstanceCount = node.absolute_logical_instance_count || localInstanceCount;
-  const displayInstanceCount = Math.max(totalInstanceCount, node.folded_instance_count ?? 1);
-  const isReplicated = localInstanceCount > 1 || totalInstanceCount > 1 || displayInstanceCount > 1;
+  const isReplicated = localInstanceCount > 1 || totalInstanceCount > 1;
   const instanceTitle =
-    node.folded_instance_title ??
-    (totalInstanceCount !== localInstanceCount
+    totalInstanceCount !== localInstanceCount
       ? `${localInstanceCount} instance(s) under this parent, ${totalInstanceCount} total along hierarchy`
-      : `${localInstanceCount} logical instance(s)`);
+      : `${localInstanceCount} logical instance(s)`;
   return (
     <div>
       <div
@@ -237,7 +193,7 @@ function TreeNode({ node, selectedId, onSelect, expandedIds, onToggle, depth = 0
                 <span className={`h-2.5 w-2 rounded-sm border ${active ? "border-indigo-400 bg-indigo-200" : "border-sky-300 bg-sky-200"}`} />
                 <span className={`h-2.5 w-2 rounded-sm border ${active ? "border-indigo-500 bg-indigo-300" : "border-sky-400 bg-sky-300"}`} />
               </span>
-              x{displayInstanceCount}
+              x{totalInstanceCount}
             </span>
           )}
           {mappingClosed === false && (
@@ -800,8 +756,7 @@ export function HierarchyView({
     });
   }, [tree, selectedId]);
 
-  const visibleTree = useMemo(() => foldRepeatedSiblings(filterTree(tree, searchQuery)), [tree, searchQuery]);
-  const visibleModuleCount = useMemo(() => countTreeNodes(visibleTree), [visibleTree]);
+  const visibleTree = useMemo(() => filterTree(tree, searchQuery), [tree, searchQuery]);
   const displayedExpandedIds = useMemo(() => {
     if (!searchQuery.trim()) return expandedIds;
     return new Set(collectExpandableIds(visibleTree));
@@ -908,21 +863,10 @@ export function HierarchyView({
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
       <Card
         title="Block Hierarchy"
-        subtitle={visibleModuleCount === blocks.length ? `${blocks.length} modules` : `${visibleModuleCount} visible / ${blocks.length} modules`}
+        subtitle={`${blocks.length} modules`}
         icon={GitBranch}
         right={
           <div className="flex items-center gap-2">
-            <span
-              className="hidden items-center gap-1.5 rounded-full border border-sky-100 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 md:inline-flex"
-              title="Repeated logical modules are shown once with a folded instance count."
-            >
-              <span className="flex -space-x-1" aria-hidden="true">
-                <span className="h-2.5 w-2 rounded-sm border border-sky-200 bg-sky-100" />
-                <span className="h-2.5 w-2 rounded-sm border border-sky-300 bg-sky-200" />
-                <span className="h-2.5 w-2 rounded-sm border border-sky-400 bg-sky-300" />
-              </span>
-              folded xN
-            </span>
             <button
               aria-label="Expand all blocks"
               className="grid h-8 w-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
