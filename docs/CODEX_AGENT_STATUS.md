@@ -11,7 +11,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-16 |
-| Current batch | P0.5 follow-up complete: corner/workload-aware metric lookup |
+| Current batch | Final PR-readiness batch complete |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -38,6 +38,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 7 | P0.3/P0.4 review follow-up | `backend/main.py`, `backend/power.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 8 | P0.5 service extraction | `backend/main.py`, `backend/services/*`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 9 | P0.5 metric lookup follow-up | `backend/services/metric_service.py`, `backend/main.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
+| 10 | Final PR readiness | `README.md`, `frontend/src/api/power.ts`, `frontend/src/components/ApplicationPowerView.tsx`, `frontend/src/types/power.ts`, `tests/test_db_switch.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 
 ## Blocking Questions
 
@@ -95,6 +96,13 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Made dashboard/implementation power reads explicitly use `workload='peak'`, preserving the seeded `total_power=45.3` behavior.
 - Added regression coverage for same `metric_name` with a non-default corner/workload so component area reads do not collapse metric identities.
 - Added dashboard power regression coverage to preserve peak power display.
+- Verified PR mergeability locally against latest `origin/master` with `git fetch origin master; git merge-tree --write-tree HEAD origin/master`, which returned tree `71bb7ca4d71fefe5bb1107c27627f72c00920306`.
+- Confirmed GitHub connector reports PR #2 `mergeable: true` for head `7c0123d94522e6def7c856877f246de41b823453` before the final readiness commit.
+- Added API coverage proving a new empty SQLite database can be created with `POST /api/databases` using `seed_demo=false`, remains active, has `project_count=0`, and serves an empty `/api/projects` response.
+- Updated frontend Application Power writes to send `power_dataset_id` as the primary field while retaining `physical_mapping_id` as an optional compatibility alias in request types.
+- Removed the unused frontend `getPhysicalMappings()` helper and `PhysicalMapping` type alias so new frontend code uses Power Dataset naming.
+- Updated README Application Power endpoint examples and semantics to use `/api/power-datasets` and `power_dataset_id`; legacy `/api/physical-mappings` and `physical_mapping_id` are documented only as compatibility aliases.
+- Completed the final PR body summary and validation count.
 
 ### In Progress
 
@@ -110,16 +118,16 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 
 | Command | Result | Notes |
 |---|---|---|
-| `uv run pytest` | Passed | 25 tests passed; existing FastAPI deprecation warnings only. |
+| `uv run pytest` | Passed | 26 tests passed; existing FastAPI deprecation warnings only. |
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |
-| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check. |
+| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check; latest run returned tree `71bb7ca4d71fefe5bb1107c27627f72c00920306`. |
 
 ## Final Reviewer Checklist
 
 - [x] Existing demo database starts successfully.
-- [ ] New empty database can be created from UI/API.
+- [x] New empty database can be created from UI/API.
 - [x] Demo seed still produces expected Phase-1 counts.
 - [x] `uv run pytest` passes.
 - [x] `uv run python scripts/verify_import.py` passes.
@@ -127,5 +135,5 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - [x] `cd frontend && npm run build` passes.
 - [x] No destructive DB field rename without compatibility alias.
 - [x] No silent overwrite of high-confidence/tool-extracted metrics.
-- [ ] Power Dataset is no longer described as physical partition mapping in new code.
-- [ ] Final PR summary is complete.
+- [x] Power Dataset is no longer described as physical partition mapping in new code.
+- [x] Final PR summary is complete.

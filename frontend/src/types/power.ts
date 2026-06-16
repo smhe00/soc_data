@@ -184,8 +184,6 @@ export interface PowerDataset {
   updated_at: string;
 }
 
-export type PhysicalMapping = PowerDataset;
-
 export interface OperatingPointSet {
   id: string;
   project_id: string;

@@ -386,14 +386,13 @@ DELETE /api/application-scenarios/{scenario_id}
 GET /api/power-datasets?impl_option_id=S2
 POST /api/power-datasets
 PUT /api/power-datasets/{dataset_id}
-GET /api/physical-mappings?impl_option_id=S2
 GET /api/operating-point-sets
-GET /api/module-power-usecases?impl_option_id=S2&physical_mapping_id=PM_3DIC_A
+GET /api/module-power-usecases?impl_option_id=S2&power_dataset_id=PM_3DIC_A
 POST /api/module-power-usecases
 DELETE /api/module-power-usecases/{usecase_id}
-GET /api/application-scenario-composition?impl_option_id=S2&physical_mapping_id=PM_3DIC_A&application_scenario_id=AS_CAMERA_4K60
+GET /api/application-scenario-composition?impl_option_id=S2&power_dataset_id=PM_3DIC_A&application_scenario_id=AS_CAMERA_4K60
 PUT /api/application-scenario-composition
-GET /api/application-power-summary?impl_option_id=S2&physical_mapping_id=PM_3DIC_A&application_scenario_id=AS_CAMERA_4K60
+GET /api/application-power-summary?impl_option_id=S2&power_dataset_id=PM_3DIC_A&application_scenario_id=AS_CAMERA_4K60
 ```
 ## Application Power
 
@@ -402,11 +401,11 @@ The Application Power tab provides scenario-based power modeling and analysis.
 ### Data Modeling Principles
 Power is decoupled from static component attributes and modeled as `PowerObservation` (conditional observations). Power values are determined by the combination of:
 - **Implementation Option** (mapped to `impl_option`)
-- **Power Dataset** (mapped to `powerdataset`; selected through the compatibility field name `physical_mapping_id`)
+- **Power Dataset** (mapped to `powerdataset`; selected through the preferred field name `power_dataset_id`)
 - **Application Scenario** (mapped to `application_scenario`)
 - **Operating Point Set / Profile** (mapped to `operating_point_set`)
 
-In the Application Power UI, `Power Dataset` means one power data baseline or back-annotation set, such as early architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement. It is not the day-to-day physical partition mapping editor. The legacy `/api/physical-mappings` endpoint remains as a compatibility alias for `/api/power-datasets`.
+In the Application Power UI, `Power Dataset` means one power data baseline or back-annotation set, such as early architecture estimate, RTL/PTPX simulation, post-PnR power, or silicon measurement. It is not the day-to-day physical partition mapping editor. The legacy `/api/physical-mappings` endpoint and `physical_mapping_id` request/response field remain compatibility aliases for `/api/power-datasets` and `power_dataset_id`.
 
 ### Additive vs Non-additive Power
 Observations are marked with `is_additive`:
@@ -429,7 +428,7 @@ The current demo-stage Application Power page uses a simpler two-layer model:
 A unique module power value is identified by:
 
 ```text
-impl_option_id + physical_mapping_id + component_id + use_case_name + operating_point_set_id
+impl_option_id + power_dataset_id + component_id + use_case_name + operating_point_set_id
 ```
 
-Here `physical_mapping_id` should be read as the selected Power Dataset id. An application scenario total is the sum of the checked module use case/Profile rows. Tier, hard macro, power rail, and shared-resource breakdowns remain future extensions.
+Here `power_dataset_id` is the selected Power Dataset id. Existing SQLite storage and legacy API payloads may still expose `physical_mapping_id`; treat it only as a compatibility alias for the same Power Dataset id. An application scenario total is the sum of the checked module use case/Profile rows. Tier, hard macro, power rail, and shared-resource breakdowns remain future extensions.
