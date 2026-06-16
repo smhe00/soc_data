@@ -11,7 +11,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-16 |
-| Current batch | Final PR-readiness batch complete |
+| Current batch | Final pre-merge verification complete |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -39,6 +39,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 8 | P0.5 service extraction | `backend/main.py`, `backend/services/*`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 9 | P0.5 metric lookup follow-up | `backend/services/metric_service.py`, `backend/main.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 10 | Final PR readiness | `README.md`, `frontend/src/api/power.ts`, `frontend/src/components/ApplicationPowerView.tsx`, `frontend/src/types/power.ts`, `tests/test_db_switch.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
+| 11 | Final pre-merge verification | `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 
 ## Blocking Questions
 
@@ -96,13 +97,16 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Made dashboard/implementation power reads explicitly use `workload='peak'`, preserving the seeded `total_power=45.3` behavior.
 - Added regression coverage for same `metric_name` with a non-default corner/workload so component area reads do not collapse metric identities.
 - Added dashboard power regression coverage to preserve peak power display.
-- Verified PR mergeability locally against latest `origin/master` with `git fetch origin master; git merge-tree --write-tree HEAD origin/master`, which returned tree `0bfe3d2a1128aa87603b8114677636ca2efabbad` at final readiness head `c23f415add37095d0097d532323a3f797eb0b452`.
+- Verified PR mergeability locally against latest `origin/master` with `git fetch origin master; git merge-tree --write-tree HEAD origin/master`, which returned tree `933075b7ce8eeaf4b86a8db6ebcd564861113999` at final pre-merge head `b98bb4d51ab8312271fea7ae764b84e27535c185`.
 - Confirmed GitHub connector reports PR #2 `mergeable: true` for head `7c0123d94522e6def7c856877f246de41b823453` before the final readiness commit.
 - Added API coverage proving a new empty SQLite database can be created with `POST /api/databases` using `seed_demo=false`, remains active, has `project_count=0`, and serves an empty `/api/projects` response.
 - Updated frontend Application Power writes to send `power_dataset_id` as the primary field while retaining `physical_mapping_id` as an optional compatibility alias in request types.
 - Removed the unused frontend `getPhysicalMappings()` helper and `PhysicalMapping` type alias so new frontend code uses Power Dataset naming.
 - Updated README Application Power endpoint examples and semantics to use `/api/power-datasets` and `power_dataset_id`; legacy `/api/physical-mappings` and `physical_mapping_id` are documented only as compatibility aliases.
 - Completed the final PR body summary and validation count.
+- Per user request, completed one final overall verification before merging PR #2 to `master`.
+- Final pre-merge verification passed: 26 pytest tests, import verification, Phase-1 smoke, frontend build, and clean merge-tree against latest `origin/master`.
+- PR #2 was authorized by the user for merge to `master`; keep GitHub as primary remote and Gitee as backup remote after merge.
 
 ### In Progress
 
@@ -110,8 +114,8 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 
 ### Next
 
-1. Await ChatGPT review on PR #2.
-2. Continue to the next Phase-2 batch only after the next review.
+1. Merge PR #2 to `master` per user authorization.
+2. Push/sync `master` to GitHub primary remote and Gitee backup remote.
 3. Preserve existing API compatibility.
 
 ## Validation Log
@@ -122,7 +126,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |
-| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check; final readiness head returned tree `0bfe3d2a1128aa87603b8114677636ca2efabbad`. |
+| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check; final pre-merge head returned tree `933075b7ce8eeaf4b86a8db6ebcd564861113999`. |
 
 ## Final Reviewer Checklist
 
