@@ -96,7 +96,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Made dashboard/implementation power reads explicitly use `workload='peak'`, preserving the seeded `total_power=45.3` behavior.
 - Added regression coverage for same `metric_name` with a non-default corner/workload so component area reads do not collapse metric identities.
 - Added dashboard power regression coverage to preserve peak power display.
-- Verified PR mergeability locally against latest `origin/master` with `git fetch origin master; git merge-tree --write-tree HEAD origin/master`, which returned tree `71bb7ca4d71fefe5bb1107c27627f72c00920306`.
+- Verified PR mergeability locally against latest `origin/master` with `git fetch origin master; git merge-tree --write-tree HEAD origin/master`, which returned tree `0bfe3d2a1128aa87603b8114677636ca2efabbad` at final readiness head `c23f415add37095d0097d532323a3f797eb0b452`.
 - Confirmed GitHub connector reports PR #2 `mergeable: true` for head `7c0123d94522e6def7c856877f246de41b823453` before the final readiness commit.
 - Added API coverage proving a new empty SQLite database can be created with `POST /api/databases` using `seed_demo=false`, remains active, has `project_count=0`, and serves an empty `/api/projects` response.
 - Updated frontend Application Power writes to send `power_dataset_id` as the primary field while retaining `physical_mapping_id` as an optional compatibility alias in request types.
@@ -122,7 +122,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |
-| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check; latest run returned tree `71bb7ca4d71fefe5bb1107c27627f72c00920306`. |
+| `git merge-tree --write-tree HEAD origin/master` | Passed | Clean non-destructive mergeability check; final readiness head returned tree `0bfe3d2a1128aa87603b8114677636ca2efabbad`. |
 
 ## Final Reviewer Checklist
 
