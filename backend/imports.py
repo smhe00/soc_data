@@ -116,7 +116,7 @@ IMPORT_SHEETS: dict[str, tuple[type[SQLModel], list[str], set[str]]] = {
     ),
     "metrics": (
         Metric,
-        ["id", "impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_note", "created_at"],
+        ["id", "impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "metric_unit", "metric_category", "value_type", "corner", "workload", "confidence", "source_type", "derivation", "source_note", "created_at"],
         {"impl_option_id", "subject_type", "subject_id", "metric_name", "metric_value", "value_type", "corner", "workload", "confidence"},
     ),
 }
@@ -126,6 +126,12 @@ ALLOWED_VALUE_TYPES = {"number", "text", "boolean"}
 ALLOWED_CONFIDENCE = {"approved", "review", "draft"}
 ALLOWED_PARTITION_TYPES = {"full", "partial"}
 ALLOWED_PARTITION_RESOURCE_CATEGORIES = {"logic", "sram", "block"}
+METRIC_IDENTITY_FIELDS = ("impl_option_id", "subject_type", "subject_id", "metric_name", "corner", "workload")
+LEGACY_REDUNDANT_METRIC_IDS = {
+    "M_IMPL_OPTION_AREA",
+    "M_PART_GPU_LOGIC_AREA_TOP",
+    "M_PART_GPU_LOGIC_AREA_MID",
+}
 
 
 def normalize_cell(value: Any) -> Any:
@@ -194,10 +200,35 @@ def prepare_import_rows(all_rows: dict[str, list[dict[str, Any]]]) -> None:
         row["metric_value"] = str(row["metric_value"])
         row["metric_unit"] = row.get("metric_unit") or ""
         row["metric_category"] = row.get("metric_category") or ""
+        row["source_type"] = row.get("source_type") or "architecture_estimate"
+        row["derivation"] = row.get("derivation") or "manual"
         row["source_note"] = row.get("source_note") or ""
         row["created_at"] = row.get("created_at") or created
         if not row.get("id"):
             row["id"] = metric_id(row)
+
+
+def drop_redundant_legacy_metric_rows(all_rows: dict[str, list[dict[str, Any]]], existing_refs: dict[str, Any]) -> None:
+    existing_metric_identities = existing_refs.get("metric_identities", {})
+    workbook_canonical_ids: dict[tuple[str, str, str, str, str, str], set[str]] = {}
+    for row in all_rows["metrics"]:
+        identity = tuple(str(row[field]) for field in METRIC_IDENTITY_FIELDS)
+        if row["id"] not in LEGACY_REDUNDANT_METRIC_IDS:
+            workbook_canonical_ids.setdefault(identity, set()).add(row["id"])
+
+    filtered_metrics: list[dict[str, Any]] = []
+    for row in all_rows["metrics"]:
+        if row["id"] not in LEGACY_REDUNDANT_METRIC_IDS:
+            filtered_metrics.append(row)
+            continue
+
+        identity = tuple(str(row[field]) for field in METRIC_IDENTITY_FIELDS)
+        existing_id = existing_metric_identities.get(identity)
+        has_canonical = (existing_id and existing_id != row["id"]) or bool(workbook_canonical_ids.get(identity))
+        if not has_canonical:
+            filtered_metrics.append(row)
+
+    all_rows["metrics"] = filtered_metrics
 
 
 def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_refs: dict[str, Any] | None = None) -> list[str]:
@@ -212,6 +243,7 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
     component_ids = {row["id"] for row in all_rows["logical_components"]} | existing_refs.get("logical_components", set())
     partition_ids = {row["id"] for row in all_rows["physical_partitions"]} | existing_refs.get("physical_partitions", set())
     existing_component_paths = existing_refs.get("logical_component_paths", {})
+    existing_metric_identities = existing_refs.get("metric_identities", {})
     workbook_component_paths: dict[tuple[str, str], list[str]] = {}
     for row in all_rows["logical_components"]:
         workbook_component_paths.setdefault((row["project_id"], row["hierarchy_path"]), []).append(row["id"])
@@ -224,6 +256,22 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
         if existing_id and existing_id not in ids:
             errors.append(
                 f"logical_component hierarchy_path {hierarchy_path} in project {project_id} already belongs to {existing_id}; cannot import duplicate path for {', '.join(ids)}"
+            )
+
+    workbook_metric_identities: dict[tuple[str, str, str, str, str, str], list[str]] = {}
+    for row in all_rows["metrics"]:
+        identity = tuple(str(row[field]) for field in METRIC_IDENTITY_FIELDS)
+        workbook_metric_identities.setdefault(identity, []).append(row["id"])
+    for identity, ids in workbook_metric_identities.items():
+        distinct_ids = sorted(set(ids))
+        if len(distinct_ids) > 1:
+            errors.append(
+                f"metrics {', '.join(distinct_ids)} duplicate metric identity {'/'.join(identity)}; keep one row per impl_option, subject, metric_name, corner, and workload"
+            )
+        existing_id = existing_metric_identities.get(identity)
+        if existing_id and existing_id not in distinct_ids:
+            errors.append(
+                f"metric identity {'/'.join(identity)} already belongs to {existing_id}; cannot import duplicate identity for {', '.join(distinct_ids)}"
             )
 
     for row in all_rows["implOptions"]:
@@ -286,6 +334,7 @@ def validate_import_rows(all_rows: dict[str, list[dict[str, Any]]], existing_ref
 def existing_reference_ids(session: Session) -> dict[str, Any]:
     tiers = session.exec(select(Tier)).all()
     components = session.exec(select(LogicalComponent)).all()
+    metrics = session.exec(select(Metric)).all()
     return {
         "projects": {row.id for row in session.exec(select(Project)).all()},
         "module_definitions": {row.id for row in session.exec(select(ModuleDefinition)).all()},
@@ -294,6 +343,9 @@ def existing_reference_ids(session: Session) -> dict[str, Any]:
         "tier_implOptions": {row.id: row.impl_option_id for row in tiers},
         "logical_components": {row.id for row in components},
         "logical_component_paths": {(row.project_id, row.hierarchy_path): row.id for row in components},
+        "metric_identities": {
+            (row.impl_option_id, row.subject_type, row.subject_id, row.metric_name, row.corner, row.workload): row.id for row in metrics
+        },
         "physical_partitions": {row.id for row in session.exec(select(PhysicalPartition)).all()},
     }
 
@@ -493,7 +545,8 @@ def register_import_routes(app: FastAPI) -> None:
 
         imported: dict[str, int] = {}
         with Session(db.engine) as session:
-            existing_refs = existing_reference_ids(session) if not is_global_team(team) else None
+            existing_refs = existing_reference_ids(session)
+            drop_redundant_legacy_metric_rows(all_rows, existing_refs)
             errors = validate_import_rows(all_rows, existing_refs)
             errors.extend(validate_team_import_scope(all_rows, session, team, impl_option_id))
             if errors:

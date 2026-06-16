@@ -632,7 +632,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
       const savedUseCase = await upsertModulePowerUseCase({
         project_id: projectId,
         impl_option_id: selectedImplOptionId,
-        physical_mapping_id: selectedPowerDatasetId,
+        power_dataset_id: selectedPowerDatasetId,
         component_id: node.id,
         component_name: node.name,
         use_case_name: useCaseName,
@@ -709,7 +709,7 @@ export function ApplicationPowerView({ implOptions }: ApplicationPowerViewProps)
       const result = await updateApplicationScenarioComposition({
         project_id: projectId,
         impl_option_id: selectedImplOptionId,
-        physical_mapping_id: selectedPowerDatasetId,
+        power_dataset_id: selectedPowerDatasetId,
         application_scenario_id: selectedApplicationScenarioId,
         selections,
       });

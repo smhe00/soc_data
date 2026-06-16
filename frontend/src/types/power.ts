@@ -38,6 +38,7 @@ export interface PowerObservation {
   id: string;
   project_id: string;
   impl_option_id: string;
+  power_dataset_id: string;
   physical_mapping_id: string;
   application_scenario_id: string;
   operating_point_set_id: string;
@@ -60,6 +61,7 @@ export interface PowerObservation {
 export interface PowerSummary {
   filters: {
     impl_option_id: string;
+    power_dataset_id: string;
     physical_mapping_id: string;
     application_scenario_id: string;
     operating_point_set_id: string;
@@ -87,6 +89,7 @@ export interface ModulePowerUseCase {
   id: string;
   project_id: string;
   impl_option_id: string;
+  power_dataset_id: string;
   physical_mapping_id: string;
   component_id: string;
   component_name: string;
@@ -102,6 +105,7 @@ export interface ApplicationScenarioSelection {
   id: string;
   project_id: string;
   impl_option_id: string;
+  power_dataset_id: string;
   physical_mapping_id: string;
   application_scenario_id: string;
   component_id: string;
@@ -115,6 +119,7 @@ export interface ApplicationScenarioSelection {
 export interface ApplicationPowerSummary {
   filters: {
     impl_option_id: string;
+    power_dataset_id: string;
     physical_mapping_id: string;
     application_scenario_id: string;
   };
@@ -168,6 +173,8 @@ export interface PowerDataset {
   source_type: string;
   confidence: string;
   dataset_version: string;
+  power_dataset_id: string;
+  physical_mapping_id: string;
   related_physical_mapping_id: string | null;
   mapping_version: string;
   description: string;
@@ -176,8 +183,6 @@ export interface PowerDataset {
   created_at: string;
   updated_at: string;
 }
-
-export type PhysicalMapping = PowerDataset;
 
 export interface OperatingPointSet {
   id: string;

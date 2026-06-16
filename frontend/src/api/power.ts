@@ -1,7 +1,6 @@
 import { apiGet, apiJson } from "./client";
 import type {
   ApplicationScenario,
-  PhysicalMapping,
   PowerDataset,
   OperatingPointSet,
   PowerSummary,
@@ -42,11 +41,6 @@ export function deleteApplicationScenario(id: string): Promise<{
   );
 }
 
-export function getPhysicalMappings(implOptionId?: string): Promise<PhysicalMapping[]> {
-  const path = implOptionId ? `/api/physical-mappings?impl_option_id=${encodeURIComponent(implOptionId)}` : "/api/physical-mappings";
-  return apiGet<PhysicalMapping[]>(path);
-}
-
 export function getPowerDatasets(implOptionId?: string): Promise<PowerDataset[]> {
   const path = implOptionId ? `/api/power-datasets?impl_option_id=${encodeURIComponent(implOptionId)}` : "/api/power-datasets";
   return apiGet<PowerDataset[]>(path);
@@ -56,21 +50,22 @@ export function getOperatingPointSets(): Promise<OperatingPointSet[]> {
   return apiGet<OperatingPointSet[]>("/api/operating-point-sets");
 }
 
-export function getPowerObservations(implOptionId: string, physicalMappingId: string): Promise<PowerObservation[]> {
-  return apiGet<PowerObservation[]>(`/api/power-observations?impl_option_id=${encodeURIComponent(implOptionId)}&physical_mapping_id=${encodeURIComponent(physicalMappingId)}`);
+export function getPowerObservations(implOptionId: string, powerDatasetId: string): Promise<PowerObservation[]> {
+  return apiGet<PowerObservation[]>(`/api/power-observations?impl_option_id=${encodeURIComponent(implOptionId)}&power_dataset_id=${encodeURIComponent(powerDatasetId)}`);
 }
 
-export function getModulePowerUseCases(implOptionId: string, physicalMappingId: string): Promise<ModulePowerUseCase[]> {
+export function getModulePowerUseCases(implOptionId: string, powerDatasetId: string): Promise<ModulePowerUseCase[]> {
   const params = new URLSearchParams();
   params.set("impl_option_id", implOptionId);
-  params.set("physical_mapping_id", physicalMappingId);
+  params.set("power_dataset_id", powerDatasetId);
   return apiGet<ModulePowerUseCase[]>(`/api/module-power-usecases?${params.toString()}`);
 }
 
 export interface ModulePowerUseCaseInput {
   project_id: string;
   impl_option_id: string;
-  physical_mapping_id: string;
+  power_dataset_id: string;
+  physical_mapping_id?: string;
   component_id: string;
   component_name: string;
   use_case_name: string;
@@ -91,12 +86,12 @@ export function deleteModulePowerUseCase(id: string): Promise<{ success: boolean
 
 export function getApplicationScenarioComposition(
   implOptionId: string,
-  physicalMappingId: string,
+  powerDatasetId: string,
   applicationScenarioId: string,
 ): Promise<ApplicationScenarioSelection[]> {
   const params = new URLSearchParams();
   params.set("impl_option_id", implOptionId);
-  params.set("physical_mapping_id", physicalMappingId);
+  params.set("power_dataset_id", powerDatasetId);
   params.set("application_scenario_id", applicationScenarioId);
   return apiGet<ApplicationScenarioSelection[]>(`/api/application-scenario-composition?${params.toString()}`);
 }
@@ -104,7 +99,8 @@ export function getApplicationScenarioComposition(
 export interface ApplicationScenarioCompositionPayload {
   project_id: string;
   impl_option_id: string;
-  physical_mapping_id: string;
+  power_dataset_id: string;
+  physical_mapping_id?: string;
   application_scenario_id: string;
   selections: Array<{
     component_id: string;
@@ -125,19 +121,20 @@ export function updateApplicationScenarioComposition(payload: ApplicationScenari
 
 export function getApplicationPowerSummary(
   implOptionId: string,
-  physicalMappingId: string,
+  powerDatasetId: string,
   applicationScenarioId: string,
 ): Promise<ApplicationPowerSummary> {
   const params = new URLSearchParams();
   params.set("impl_option_id", implOptionId);
-  params.set("physical_mapping_id", physicalMappingId);
+  params.set("power_dataset_id", powerDatasetId);
   params.set("application_scenario_id", applicationScenarioId);
   return apiGet<ApplicationPowerSummary>(`/api/application-power-summary?${params.toString()}`);
 }
 
 export interface PowerSummaryFilters {
   impl_option_id: string;
-  physical_mapping_id: string;
+  power_dataset_id: string;
+  physical_mapping_id?: string;
   application_scenario_id: string;
   operating_point_set_id: string;
   statistic_type?: string;
@@ -149,7 +146,7 @@ export interface PowerSummaryFilters {
 export function getPowerSummary(filters: PowerSummaryFilters): Promise<PowerSummary> {
   const params = new URLSearchParams();
   params.set("impl_option_id", filters.impl_option_id);
-  params.set("physical_mapping_id", filters.physical_mapping_id);
+  params.set("power_dataset_id", filters.power_dataset_id);
   params.set("application_scenario_id", filters.application_scenario_id);
   params.set("operating_point_set_id", filters.operating_point_set_id);
   
@@ -164,7 +161,8 @@ export function getPowerSummary(filters: PowerSummaryFilters): Promise<PowerSumm
 export interface PowerObservationInput {
   project_id: string;
   impl_option_id: string;
-  physical_mapping_id: string;
+  power_dataset_id: string;
+  physical_mapping_id?: string;
   application_scenario_id: string;
   operating_point_set_id: string;
   scope_type: string;

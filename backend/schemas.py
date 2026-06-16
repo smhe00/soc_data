@@ -52,7 +52,8 @@ class LogicalComponentDeleteInput(BaseModel):
 class PowerObservationCreate(BaseModel):
     project_id: str
     impl_option_id: str
-    physical_mapping_id: str
+    physical_mapping_id: str | None = None
+    power_dataset_id: str | None = None
     application_scenario_id: str = "AS_default"
     operating_point_set_id: str
     
@@ -90,7 +91,8 @@ class PowerDatasetInput(BaseModel):
 class ModulePowerUseCaseInput(BaseModel):
     project_id: str
     impl_option_id: str
-    physical_mapping_id: str
+    physical_mapping_id: str | None = None
+    power_dataset_id: str | None = None
     component_id: str
     component_name: str
     use_case_name: str = "Default"
@@ -120,7 +122,8 @@ class ApplicationScenarioSelectionInput(BaseModel):
 class ApplicationScenarioCompositionUpdate(BaseModel):
     project_id: str
     impl_option_id: str
-    physical_mapping_id: str
+    physical_mapping_id: str | None = None
+    power_dataset_id: str | None = None
     application_scenario_id: str
     selections: list[ApplicationScenarioSelectionInput]
 

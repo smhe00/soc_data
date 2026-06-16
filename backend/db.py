@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import text
 from sqlmodel import SQLModel, create_engine
 
 from . import config
+from . import migrations
 from . import models as models  # Registers SQLModel metadata.
 
 
@@ -27,6 +26,10 @@ def get_engine():
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def database_id(path: Path) -> str:
@@ -77,76 +80,5 @@ def create_db_and_tables() -> None:
 
 def ensure_sqlite_schema_compatibility() -> None:
     with engine.begin() as connection:
-        rows = connection.execute(text("PRAGMA table_info(logicalcomponent)")).fetchall()
-        columns = {row[1] for row in rows}
-        if "owner_team" not in columns:
-            connection.execute(text("ALTER TABLE logicalcomponent ADD COLUMN owner_team VARCHAR DEFAULT 'Architecture Team'"))
-        if "visibility_level" not in columns:
-            connection.execute(text("ALTER TABLE logicalcomponent ADD COLUMN visibility_level VARCHAR DEFAULT 'team'"))
-        partition_rows = connection.execute(text("PRAGMA table_info(physicalpartition)")).fetchall()
-        partition_columns = {row[1] for row in partition_rows}
-        if "content_share" not in partition_columns:
-            connection.execute(text("ALTER TABLE physicalpartition ADD COLUMN content_share FLOAT DEFAULT 1"))
-            connection.execute(
-                text(
-                    "UPDATE physicalpartition "
-                    "SET content_share = CASE WHEN partition_type = 'full' THEN 1 ELSE partition_ratio END"
-                )
-            )
-        if "resource_category" not in partition_columns:
-            connection.execute(text("ALTER TABLE physicalpartition ADD COLUMN resource_category VARCHAR DEFAULT 'block'"))
-        process_rows = connection.execute(text("PRAGMA table_info(processnode)")).fetchall()
-        process_columns = {row[1] for row in process_rows}
-        if "logic_area_scale" not in process_columns:
-            connection.execute(text("ALTER TABLE processnode ADD COLUMN logic_area_scale FLOAT DEFAULT 1"))
-        if "sram_area_scale" not in process_columns:
-            connection.execute(text("ALTER TABLE processnode ADD COLUMN sram_area_scale FLOAT DEFAULT 1"))
-        if "block_area_scale" not in process_columns:
-            connection.execute(text("ALTER TABLE processnode ADD COLUMN block_area_scale FLOAT DEFAULT 1"))
-        connection.execute(text("UPDATE physicalpartition SET partition_type = 'partial' WHERE partition_type = 'residual'"))
-        connection.execute(
-            text(
-                "UPDATE physicalpartition "
-                "SET logical_component_id = ("
-                "SELECT parent_id FROM logicalcomponent WHERE logicalcomponent.id = physicalpartition.logical_component_id"
-                ") "
-                "WHERE logical_component_id IN ("
-                "SELECT id FROM logicalcomponent WHERE instance_type = 'parent_residual' AND parent_id IS NOT NULL"
-                ")"
-            )
-        )
-        connection.execute(
-            text(
-                "DELETE FROM metric "
-                "WHERE subject_type = 'logical_component' "
-                "AND subject_id IN (SELECT id FROM logicalcomponent WHERE instance_type = 'parent_residual')"
-            )
-        )
-        connection.execute(text("DELETE FROM logicalcomponent WHERE instance_type = 'parent_residual'"))
-        connection.execute(
-            text(
-                "DELETE FROM metric "
-                "WHERE metric_name = 'power' "
-                "AND subject_type IN ('logical_component', 'physical_partition')"
-            )
-        )
-        powerdataset_rows = connection.execute(text("PRAGMA table_info(powerdataset)")).fetchall()
-        physicalmapping_rows = connection.execute(text("PRAGMA table_info(physicalmapping)")).fetchall()
-        if powerdataset_rows and physicalmapping_rows:
-            connection.execute(
-                text(
-                    "INSERT INTO powerdataset ("
-                    "id, project_id, impl_option_id, name, dataset_type, development_stage, source_type, "
-                    "confidence, dataset_version, related_physical_mapping_id, description, context_json, "
-                    "created_at, updated_at"
-                    ") "
-                    "SELECT pm.id, io.project_id, pm.impl_option_id, pm.name, "
-                    "'architecture_estimate', 'architecture_estimate', 'legacy_physical_mapping', "
-                    "'review', COALESCE(NULLIF(pm.mapping_version, ''), 'V01'), pm.id, "
-                    "COALESCE(pm.description, ''), COALESCE(pm.mapping_json, ''), :created_at, :updated_at "
-                    "FROM physicalmapping pm "
-                    "JOIN imploption io ON io.id = pm.impl_option_id "
-                    "WHERE NOT EXISTS (SELECT 1 FROM powerdataset pd WHERE pd.id = pm.id)"
-                ),
-                {"created_at": now_iso(), "updated_at": now_iso()},
-            )
+        migrations.run_schema_migrations(connection, now_utc_iso())
+        migrations.run_legacy_compatibility_guards(connection, now_utc_iso())
