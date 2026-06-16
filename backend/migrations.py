@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 
-CURRENT_SCHEMA_VERSION = "V7.008"
+CURRENT_SCHEMA_VERSION = "V7.009"
 SCHEMA_VERSION_ID = "main"
 METRIC_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name", "corner", "workload")
 METRIC_REQUIRED_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name")
@@ -307,6 +307,158 @@ def _add_metric_provenance_fields(connection: Connection, _: str) -> None:
     )
 
 
+def _reference_count(connection: Connection, table_name: str, where_clause: str, params: dict[str, str]) -> int:
+    if not _table_exists(connection, table_name):
+        return 0
+    return connection.execute(text(f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"), params).scalar_one()
+
+
+def _remove_duplicate_logical_component_paths(connection: Connection, _: str) -> None:
+    if not _table_exists(connection, "logicalcomponent"):
+        return
+
+    duplicate_groups = connection.execute(
+        text(
+            "SELECT project_id, hierarchy_path "
+            "FROM logicalcomponent "
+            "GROUP BY project_id, hierarchy_path "
+            "HAVING COUNT(*) > 1"
+        )
+    ).mappings().all()
+
+    for group in duplicate_groups:
+        rows = connection.execute(
+            text(
+                "SELECT id, created_at, updated_at "
+                "FROM logicalcomponent "
+                "WHERE project_id=:project_id AND hierarchy_path=:hierarchy_path "
+                "ORDER BY id"
+            ),
+            {"project_id": group["project_id"], "hierarchy_path": group["hierarchy_path"]},
+        ).mappings().all()
+
+        scored_rows: list[tuple[int, str, dict[str, str]]] = []
+        for row in rows:
+            params = {"component_id": row["id"]}
+            child_count = _reference_count(connection, "logicalcomponent", "parent_id=:component_id", params)
+            logical_metric_count = _reference_count(
+                connection,
+                "metric",
+                "subject_type='logical_component' AND subject_id=:component_id",
+                params,
+            )
+            partition_count = _reference_count(connection, "physicalpartition", "logical_component_id=:component_id", params)
+            power_count = _reference_count(
+                connection,
+                "powerobservation",
+                "scope_type='component' AND scope_id=:component_id",
+                params,
+            )
+            selection_count = _reference_count(connection, "applicationscenarioselection", "component_id=:component_id", params)
+            responsibility_count = _reference_count(connection, "responsibilityassignment", "logical_component_id=:component_id", params)
+            score = (
+                logical_metric_count * 100
+                + power_count * 50
+                + selection_count * 50
+                + responsibility_count * 25
+                + partition_count * 5
+                + child_count
+            )
+            scored_rows.append((score, row["id"], dict(row)))
+
+        scored_rows.sort(key=lambda item: (-item[0], item[1]))
+        keep_id = scored_rows[0][1]
+        keep_name = connection.execute(
+            text("SELECT name FROM logicalcomponent WHERE id=:keep_id"),
+            {"keep_id": keep_id},
+        ).scalar_one()
+
+        for score, component_id, _row in scored_rows[1:]:
+            params = {"component_id": component_id}
+            if _table_exists(connection, "metric"):
+                duplicate_metrics = connection.execute(
+                    text(
+                        "SELECT id, impl_option_id, metric_name, corner, workload "
+                        "FROM metric "
+                        "WHERE subject_type='logical_component' AND subject_id=:component_id"
+                    ),
+                    params,
+                ).mappings().all()
+                for metric in duplicate_metrics:
+                    conflict = connection.execute(
+                        text(
+                            "SELECT id FROM metric "
+                            "WHERE subject_type='logical_component' "
+                            "AND subject_id=:keep_id "
+                            "AND impl_option_id=:impl_option_id "
+                            "AND metric_name=:metric_name "
+                            "AND corner=:corner "
+                            "AND workload=:workload"
+                        ),
+                        {
+                            "keep_id": keep_id,
+                            "impl_option_id": metric["impl_option_id"],
+                            "metric_name": metric["metric_name"],
+                            "corner": metric["corner"],
+                            "workload": metric["workload"],
+                        },
+                    ).first()
+                    if conflict:
+                        raise RuntimeError(
+                            "Conflicting duplicate logical component metric blocks migration: "
+                            f"project_id={group['project_id']}, hierarchy_path={group['hierarchy_path']}; "
+                            f"keep={keep_id}, duplicate={component_id}, metric={metric['id']}"
+                        )
+
+            if _table_exists(connection, "physicalpartition"):
+                connection.execute(
+                    text("UPDATE physicalpartition SET logical_component_id=:keep_id WHERE logical_component_id=:component_id"),
+                    {"keep_id": keep_id, "component_id": component_id},
+                )
+            if _table_exists(connection, "metric"):
+                connection.execute(
+                    text(
+                        "UPDATE metric SET subject_id=:keep_id "
+                        "WHERE subject_type='logical_component' AND subject_id=:component_id"
+                    ),
+                    {"keep_id": keep_id, "component_id": component_id},
+                )
+            if _table_exists(connection, "powerobservation"):
+                connection.execute(
+                    text(
+                        "UPDATE powerobservation SET scope_id=:keep_id "
+                        "WHERE scope_type='component' AND scope_id=:component_id"
+                    ),
+                    {"keep_id": keep_id, "component_id": component_id},
+                )
+            if _table_exists(connection, "applicationscenarioselection"):
+                connection.execute(
+                    text(
+                        "UPDATE applicationscenarioselection "
+                        "SET component_id=:keep_id, component_name=:keep_name "
+                        "WHERE component_id=:component_id"
+                    ),
+                    {"keep_id": keep_id, "keep_name": keep_name, "component_id": component_id},
+                )
+            if _table_exists(connection, "responsibilityassignment"):
+                connection.execute(
+                    text("UPDATE responsibilityassignment SET logical_component_id=:keep_id WHERE logical_component_id=:component_id"),
+                    {"keep_id": keep_id, "component_id": component_id},
+                )
+            connection.execute(
+                text("UPDATE logicalcomponent SET parent_id=:keep_id WHERE parent_id=:component_id"),
+                {"keep_id": keep_id, "component_id": component_id},
+            )
+            connection.execute(text("DELETE FROM logicalcomponent WHERE id=:component_id"), params)
+
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_logical_component_project_path "
+            "ON logicalcomponent (project_id, hierarchy_path)"
+        )
+    )
+
+
 MIGRATIONS = [
     Migration(
         version="V7.001",
@@ -364,6 +516,13 @@ MIGRATIONS = [
         note="Adds metric provenance fields and marks auto-derived physical partition area metrics.",
         apply=_add_metric_provenance_fields,
     ),
+    Migration(
+        version="V7.009",
+        name="add_logical_component_path_unique_index",
+        checksum="logicalcomponent.project_id.hierarchy_path.unique_index",
+        note="Removes empty duplicate logical component path rows and enforces one row per project hierarchy path.",
+        apply=_remove_duplicate_logical_component_paths,
+    ),
 ]
 
 
@@ -389,3 +548,4 @@ def run_legacy_compatibility_guards(connection: Connection, applied_at: str) -> 
     _migrate_legacy_physical_mapping_to_power_dataset(connection, applied_at)
     _remove_legacy_parent_residual_rows(connection, applied_at)
     _remove_power_metrics_from_metric_table(connection, applied_at)
+    _remove_duplicate_logical_component_paths(connection, applied_at)
