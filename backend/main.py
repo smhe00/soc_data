@@ -41,6 +41,27 @@ from backend.schemas import (
 from backend.imports import register_import_routes
 from backend.power import register_power_routes, safe_power_id_part
 from backend.seed import database_has_project_data, seed_data
+from backend.services.area_rollup import (
+    component_required_resource_categories,
+    logical_area_summary,
+    partition_base_area_for_category,
+    process_scale_for_category,
+)
+from backend.services.metric_service import (
+    metric_number,
+    metrics_for,
+    upsert_auto_derived_partition_metric,
+    upsert_web_metric,
+)
+from backend.services.partition_mapping import (
+    ALLOWED_PARTITION_RESOURCE_CATEGORIES,
+    ALLOWED_PARTITION_TYPES,
+    canonical_partition_name,
+    normalized_content_share,
+    normalized_resource_category,
+    partition_equivalent_instances,
+)
+from backend.services.quality_rules import make_quality_issue
 
 
 def __getattr__(name: str) -> Any:
@@ -71,27 +92,6 @@ app.add_middleware(
 
 register_power_routes(app)
 register_import_routes(app)
-
-
-ALLOWED_PARTITION_TYPES = {"full", "partial"}
-ALLOWED_PARTITION_RESOURCE_CATEGORIES = {"logic", "sram", "block"}
-PROTECTED_AUTO_DERIVED_METRIC_SOURCES = {"tool_extracted", "ptpx", "simulation", "silicon_measurement"}
-AUTO_DERIVED_PARTITION_METRIC_SOURCE = "architecture_estimate"
-AUTO_DERIVED_PARTITION_METRIC_DERIVATION = "derived_from_logical_area"
-
-
-def number_or_zero(value: Any) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def metric_id(row: dict[str, Any]) -> str:
-    return (
-        f"{row['impl_option_id']}-{row['subject_type']}-{row['subject_id']}-"
-        f"{row['metric_name']}-{row['corner']}-{row['workload']}"
-    )
 
 
 @app.on_event("startup")
@@ -173,193 +173,6 @@ def select_database(payload: DatabaseSelectInput) -> dict[str, Any]:
     db.create_db_and_tables()
     db.ensure_sqlite_schema_compatibility()
     return {"active_id": database_id(db.ACTIVE_DATABASE_PATH), "database": database_info(db.ACTIVE_DATABASE_PATH), "databases": [database_info(db_path) for db_path in database_paths()]}
-
-
-def metrics_for(session: Session, impl_option_id: str, subject_type: str, subject_id: str) -> dict[str, Metric]:
-    rows = session.exec(
-        select(Metric).where(
-            Metric.impl_option_id == impl_option_id,
-            Metric.subject_type == subject_type,
-            Metric.subject_id == subject_id,
-        )
-    ).all()
-    return {row.metric_name: row for row in rows}
-
-
-def metric_number(metrics: dict[str, Metric], name: str) -> float:
-    return number_or_zero(metrics[name].metric_value) if name in metrics else 0
-
-
-def find_metric_by_identity(
-    session: Session,
-    impl_option_id: str,
-    subject_type: str,
-    subject_id: str,
-    metric_name: str,
-    corner: str,
-    workload: str,
-) -> Metric | None:
-    return session.exec(
-        select(Metric).where(
-            Metric.impl_option_id == impl_option_id,
-            Metric.subject_type == subject_type,
-            Metric.subject_id == subject_id,
-            Metric.metric_name == metric_name,
-            Metric.corner == corner,
-            Metric.workload == workload,
-        )
-    ).first()
-
-
-def can_overwrite_with_auto_derived_metric(metric: Metric) -> bool:
-    source_type = (metric.source_type or "").strip()
-    if source_type in PROTECTED_AUTO_DERIVED_METRIC_SOURCES:
-        return False
-    if (metric.confidence or "").strip() == "approved":
-        return False
-    return True
-
-
-def upsert_web_metric(
-    session: Session,
-    metric_id: str,
-    impl_option_id: str,
-    subject_type: str,
-    subject_id: str,
-    name: str,
-    value: object,
-    unit: str,
-    category_type: str,
-    value_type: str,
-    corner: str,
-    workload: str,
-    source_note: str,
-) -> None:
-    existing_metric = session.get(Metric, metric_id) or find_metric_by_identity(
-        session, impl_option_id, subject_type, subject_id, name, corner, workload
-    )
-    if existing_metric:
-        existing_metric.metric_value = str(value)
-        existing_metric.metric_unit = unit
-        existing_metric.metric_category = category_type
-        existing_metric.value_type = value_type
-        existing_metric.corner = corner
-        existing_metric.workload = workload
-        existing_metric.source_type = "web_ui"
-        existing_metric.derivation = "manual"
-        existing_metric.source_note = source_note
-        session.add(existing_metric)
-        return
-
-    session.add(
-        Metric(
-            id=metric_id,
-            impl_option_id=impl_option_id,
-            subject_type=subject_type,
-            subject_id=subject_id,
-            metric_name=name,
-            metric_value=str(value),
-            metric_unit=unit,
-            metric_category=category_type,
-            value_type=value_type,
-            corner=corner,
-            workload=workload,
-            confidence="review",
-            source_type="web_ui",
-            derivation="manual",
-            source_note=source_note,
-            created_at=now_iso(),
-        )
-    )
-
-
-def upsert_auto_derived_partition_metric(
-    session: Session,
-    metric_id: str,
-    impl_option_id: str,
-    partition_id: str,
-    name: str,
-    value: object,
-    unit: str,
-    category_type: str,
-    value_type: str,
-    corner: str,
-    workload: str,
-    source_note: str,
-) -> None:
-    existing_metric = session.get(Metric, metric_id) or find_metric_by_identity(
-        session, impl_option_id, "physical_partition", partition_id, name, corner, workload
-    )
-    if existing_metric:
-        if can_overwrite_with_auto_derived_metric(existing_metric):
-            existing_metric.metric_value = str(value)
-            existing_metric.metric_unit = unit
-            existing_metric.metric_category = category_type
-            existing_metric.value_type = value_type
-            existing_metric.corner = corner
-            existing_metric.workload = workload
-            existing_metric.confidence = "review"
-            existing_metric.source_type = AUTO_DERIVED_PARTITION_METRIC_SOURCE
-            existing_metric.derivation = AUTO_DERIVED_PARTITION_METRIC_DERIVATION
-            existing_metric.source_note = source_note
-            session.add(existing_metric)
-        return
-
-    session.add(
-        Metric(
-            id=metric_id,
-            impl_option_id=impl_option_id,
-            subject_type="physical_partition",
-            subject_id=partition_id,
-            metric_name=name,
-            metric_value=str(value),
-            metric_unit=unit,
-            metric_category=category_type,
-            value_type=value_type,
-            corner=corner,
-            workload=workload,
-            confidence="review",
-            source_type=AUTO_DERIVED_PARTITION_METRIC_SOURCE,
-            derivation=AUTO_DERIVED_PARTITION_METRIC_DERIVATION,
-            source_note=source_note,
-            created_at=now_iso(),
-        )
-    )
-
-
-def normalized_content_share(partition_type: str, value: float | None) -> float:
-    if partition_type == "full":
-        return 1.0
-    return float(value if value is not None else 1.0)
-
-
-def normalized_resource_category(value: str | None) -> str:
-    return value if value in ALLOWED_PARTITION_RESOURCE_CATEGORIES else "block"
-
-
-def partition_equivalent_instances(partition: PhysicalPartition) -> float:
-    return partition.physical_instance_count * normalized_content_share(partition.partition_type, partition.content_share)
-
-
-def canonical_partition_name(component_name: str, category: str, tier_id: str, partition_type: str, partial_index: int = 0) -> str:
-    base_name = f"{component_name}_{category}_{tier_id}"
-    return f"{base_name}_P{partial_index}" if partition_type == "partial" else base_name
-
-
-def component_required_resource_categories(session: Session, component: LogicalComponent, impl_option_id: str) -> set[str]:
-    metrics = metrics_for(session, impl_option_id, "logical_component", component.id)
-    area_summary = logical_area_summary(session, component, impl_option_id)
-    metric_names = {
-        "logic": "residual_logic_area" if area_summary["has_children"] else "logic_area",
-        "sram": "residual_sram_area" if area_summary["has_children"] else "sram_area",
-        "block": "residual_block_area" if area_summary["has_children"] else "block_area",
-    }
-    categories: set[str] = set()
-    for category, metric_name in metric_names.items():
-        value = area_summary[metric_name] if area_summary["has_children"] else metric_number(metrics, metric_name)
-        if value > 0:
-            categories.add(category)
-    return categories
 
 
 def is_global_team(team: str | None) -> bool:
@@ -523,31 +336,6 @@ def partition_ui(session: Session, partition: PhysicalPartition) -> dict[str, An
     }
 
 
-def logical_area_summary(session: Session, component: LogicalComponent, impl_option_id: str) -> dict[str, Any]:
-    metrics = metrics_for(session, impl_option_id, "logical_component", component.id)
-    total = {
-        "logic_area": metric_number(metrics, "logic_area"),
-        "sram_area": metric_number(metrics, "sram_area"),
-        "block_area": metric_number(metrics, "block_area"),
-    }
-    child_rows = session.exec(select(LogicalComponent).where(LogicalComponent.parent_id == component.id)).all()
-    child_sum = {"logic_area": 0.0, "sram_area": 0.0, "block_area": 0.0}
-    for child in child_rows:
-        child_metrics = metrics_for(session, impl_option_id, "logical_component", child.id)
-        for metric_name in child_sum:
-            child_sum[metric_name] += metric_number(child_metrics, metric_name)
-    residual = {metric_name: round(total[metric_name] - child_sum[metric_name], 4) for metric_name in total}
-    return {
-        "has_children": bool(child_rows),
-        "child_logic_area": round(child_sum["logic_area"], 4),
-        "child_sram_area": round(child_sum["sram_area"], 4),
-        "child_block_area": round(child_sum["block_area"], 4),
-        "residual_logic_area": residual["logic_area"],
-        "residual_sram_area": residual["sram_area"],
-        "residual_block_area": residual["block_area"],
-    }
-
-
 def descendant_component_ids(session: Session, component_id: str) -> set[str]:
     rows = session.exec(select(LogicalComponent)).all()
     children_by_parent: dict[str, list[str]] = {}
@@ -562,27 +350,6 @@ def descendant_component_ids(session: Session, component_id: str) -> set[str]:
         ids.update(child_ids)
         stack.extend(child_ids)
     return ids
-
-
-def process_scale_for_category(process: ProcessNode | None, category: str) -> float:
-    if not process:
-        return 1
-    if category == "logic":
-        return process.logic_area_scale
-    if category == "sram":
-        return process.sram_area_scale
-    return process.block_area_scale
-
-
-def partition_base_area_for_category(partition_row: dict[str, Any]) -> float:
-    category = partition_row["resource_category"]
-    if category == "logic":
-        return partition_row["logic_area"]
-    if category == "sram":
-        return partition_row["sram_area"]
-    if category == "block":
-        return partition_row["block_area"]
-    return partition_row["logic_area"] + partition_row["sram_area"] + partition_row["block_area"]
 
 
 def component_tier_area_distribution(session: Session, component: LogicalComponent, impl_option_id: str) -> list[dict[str, Any]]:
@@ -890,25 +657,6 @@ def impl_option_detail_impact_errors(session: Session, impl_option_id: str, payl
     if payload.package_escape.bottom_tier_id and payload.package_escape.bottom_tier_id not in new_tier_set:
         errors.append(f"Package escape bottom_tier_id {payload.package_escape.bottom_tier_id} is not in this implementation.")
     return errors
-
-
-def make_quality_issue(
-    severity: str,
-    title: str,
-    detail: str,
-    action: str,
-    entity_type: str,
-    entity_id: str,
-) -> dict[str, str]:
-    return {
-        "id": f"{entity_type}:{entity_id}:{title}".replace(" ", "_").lower(),
-        "severity": severity,
-        "title": title,
-        "detail": detail,
-        "action": action,
-        "entity_type": entity_type,
-        "entity_id": entity_id,
-    }
 
 
 def quality_issues_for(session: Session, impl_option_id: str = "S2", team: str | None = None) -> list[dict[str, str]]:

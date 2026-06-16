@@ -10,8 +10,8 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | Field | Value |
 |---|---|
 | Branch | `codex/phase2-hardening` |
-| Last updated | 2026-06-15 |
-| Current batch | P0.3/P0.4 follow-up complete: identity-aware metric upsert and alias conflict checks |
+| Last updated | 2026-06-16 |
+| Current batch | P0.5 backend route/service boundary refactor complete |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -36,6 +36,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 5 | Normalize NULL metric identity fields before unique index | `backend/migrations.py`, `tests/test_schema_migrations.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed |
 | 6 | P0.3 Power Dataset naming cleanup and P0.4 Metric provenance | `backend/power.py`, `backend/schemas.py`, `backend/models.py`, `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `backend/seed.py`, frontend power types/API, tests | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 7 | P0.3/P0.4 review follow-up | `backend/main.py`, `backend/power.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
+| 8 | P0.5 service extraction | `backend/main.py`, `backend/services/*`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 
 ## Blocking Questions
 
@@ -82,6 +83,12 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Updated unprotected same-identity metric rows deterministically instead of inserting duplicate generated ids.
 - Rejected conflicting `power_dataset_id` / `physical_mapping_id` aliases with HTTP 400.
 - Added TODO notes for DB-compatibility naming that still uses `physical_mapping_id` internally.
+- Added `backend/services/metric_service.py` for metric lookup, numeric conversion, identity-aware web writes, and protected auto-derived partition metric writes.
+- Added `backend/services/partition_mapping.py` for allowed partition categories/types, canonical partition naming, content share normalization, and equivalent instance calculation.
+- Added `backend/services/area_rollup.py` for logical self/residual area summaries, resource-category detection, and process-scaled area helper functions.
+- Added `backend/services/quality_rules.py` for quality issue response construction.
+- Reduced `backend/main.py` by importing these low-risk service helpers while preserving existing route paths and response shapes.
+- Checked for circular import risk with import/template verification; no circular import issue was observed.
 
 ### In Progress
 
