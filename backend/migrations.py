@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 
-CURRENT_SCHEMA_VERSION = "V7.009"
+CURRENT_SCHEMA_VERSION = "V7.010"
 SCHEMA_VERSION_ID = "main"
 METRIC_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name", "corner", "workload")
 METRIC_REQUIRED_IDENTITY_COLUMNS = ("impl_option_id", "subject_type", "subject_id", "metric_name")
@@ -15,6 +15,10 @@ LEGACY_REDUNDANT_METRIC_IDS = {
     "M_IMPL_OPTION_AREA",
     "M_PART_GPU_LOGIC_AREA_TOP",
     "M_PART_GPU_LOGIC_AREA_MID",
+}
+LEGACY_REDUNDANT_COMPONENTS = {
+    "B30": ("NPU_MAC_ARRAY", "SOC_TOP/NPU_TOP/NPU_MAC_ARRAY"),
+    "B8": ("NPU_SRAM_BANK", "SOC_TOP/NPU_TOP/NPU_SRAM_BANK"),
 }
 
 
@@ -459,6 +463,61 @@ def _remove_duplicate_logical_component_paths(connection: Connection, _: str) ->
     )
 
 
+def _remove_legacy_redundant_logical_components(connection: Connection, _: str) -> None:
+    if not _table_exists(connection, "logicalcomponent"):
+        return
+
+    component_ids: list[str] = []
+    for component_id, (name, hierarchy_path) in LEGACY_REDUNDANT_COMPONENTS.items():
+        row = connection.execute(
+            text(
+                "SELECT id FROM logicalcomponent "
+                "WHERE id=:component_id AND name=:name AND hierarchy_path=:hierarchy_path"
+            ),
+            {"component_id": component_id, "name": name, "hierarchy_path": hierarchy_path},
+        ).first()
+        if row:
+            component_ids.append(component_id)
+
+    for component_id in component_ids:
+        params = {"component_id": component_id}
+        if _table_exists(connection, "powerobservation"):
+            power_count = _reference_count(
+                connection,
+                "powerobservation",
+                "scope_type='component' AND scope_id=:component_id",
+                params,
+            )
+            if power_count:
+                raise RuntimeError(f"Legacy redundant component {component_id} has power observations; refusing to remove it")
+        if _table_exists(connection, "applicationscenarioselection"):
+            selection_count = _reference_count(connection, "applicationscenarioselection", "component_id=:component_id", params)
+            if selection_count:
+                raise RuntimeError(f"Legacy redundant component {component_id} has scenario selections; refusing to remove it")
+
+        partition_ids: list[str] = []
+        if _table_exists(connection, "physicalpartition"):
+            partition_ids = connection.execute(
+                text("SELECT id FROM physicalpartition WHERE logical_component_id=:component_id"),
+                params,
+            ).scalars().all()
+        if _table_exists(connection, "metric"):
+            for partition_id in partition_ids:
+                connection.execute(
+                    text("DELETE FROM metric WHERE subject_type='physical_partition' AND subject_id=:partition_id"),
+                    {"partition_id": partition_id},
+                )
+            connection.execute(
+                text("DELETE FROM metric WHERE subject_type='logical_component' AND subject_id=:component_id"),
+                params,
+            )
+        if _table_exists(connection, "responsibilityassignment"):
+            connection.execute(text("DELETE FROM responsibilityassignment WHERE logical_component_id=:component_id"), params)
+        if _table_exists(connection, "physicalpartition"):
+            connection.execute(text("DELETE FROM physicalpartition WHERE logical_component_id=:component_id"), params)
+        connection.execute(text("DELETE FROM logicalcomponent WHERE id=:component_id"), params)
+
+
 MIGRATIONS = [
     Migration(
         version="V7.001",
@@ -523,6 +582,13 @@ MIGRATIONS = [
         note="Removes empty duplicate logical component path rows and enforces one row per project hierarchy path.",
         apply=_remove_duplicate_logical_component_paths,
     ),
+    Migration(
+        version="V7.010",
+        name="remove_legacy_redundant_npu_children",
+        checksum="logicalcomponent.legacy_redundant_npu_children.cleanup",
+        note="Removes redundant NPU child rows that came from a legacy duplicate NPU_TOP workbook branch.",
+        apply=_remove_legacy_redundant_logical_components,
+    ),
 ]
 
 
@@ -549,3 +615,4 @@ def run_legacy_compatibility_guards(connection: Connection, applied_at: str) -> 
     _remove_legacy_parent_residual_rows(connection, applied_at)
     _remove_power_metrics_from_metric_table(connection, applied_at)
     _remove_duplicate_logical_component_paths(connection, applied_at)
+    _remove_legacy_redundant_logical_components(connection, applied_at)

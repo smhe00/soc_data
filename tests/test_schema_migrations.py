@@ -48,7 +48,7 @@ def test_schema_migration_status_is_queryable_and_idempotent(client) -> None:
         version = connection.execute(text("SELECT id, version, updated_at FROM schema_version WHERE id = 'main'")).mappings().one()
         history = connection.execute(text("SELECT id, status, applied_at FROM migration_history ORDER BY id")).mappings().all()
 
-    assert version["version"] == "V7.009"
+    assert version["version"] == "V7.010"
     assert "T" in version["updated_at"]
     assert version["updated_at"].endswith("Z")
     assert [row["id"] for row in history] == [
@@ -61,6 +61,7 @@ def test_schema_migration_status_is_queryable_and_idempotent(client) -> None:
         "V7.007_add_metric_identity_unique_index",
         "V7.008_add_metric_provenance_fields",
         "V7.009_add_logical_component_path_unique_index",
+        "V7.010_remove_legacy_redundant_npu_children",
     ]
     assert {row["status"] for row in history} == {"applied"}
     assert all("T" in row["applied_at"] and row["applied_at"].endswith("Z") for row in history)
@@ -70,7 +71,7 @@ def test_schema_migration_status_is_queryable_and_idempotent(client) -> None:
     with backend_app.engine.begin() as connection:
         history_count = connection.execute(text("SELECT COUNT(*) FROM migration_history")).scalar_one()
 
-    assert history_count == 9
+    assert history_count == 10
 
 
 def test_legacy_partial_schema_migration_and_guards_are_idempotent(tmp_path) -> None:
@@ -197,7 +198,7 @@ def test_legacy_partial_schema_migration_and_guards_are_idempotent(tmp_path) -> 
         assert connection.execute(text("SELECT COUNT(*) FROM logicalcomponent WHERE instance_type='parent_residual'")).scalar_one() == 0
         assert connection.execute(text("SELECT COUNT(*) FROM metric WHERE id IN ('M_RES', 'M_POWER')")).scalar_one() == 0
         assert connection.execute(text("SELECT COUNT(*) FROM powerdataset WHERE id='PM_LEGACY'")).scalar_one() == 1
-        assert connection.execute(text("SELECT COUNT(*) FROM migration_history")).scalar_one() == 9
+        assert connection.execute(text("SELECT COUNT(*) FROM migration_history")).scalar_one() == 10
 
     engine.dispose()
 
@@ -362,6 +363,85 @@ def test_logical_component_path_migration_removes_empty_duplicate_rows(tmp_path)
     assert child_parent == "B_GPU"
     assert partition == "B_GPU"
     assert "ux_logical_component_project_path" in {row[1] for row in indexes}
+
+
+def test_legacy_redundant_npu_children_migration_removes_related_rows(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy_npu_children.db'}", connect_args={"check_same_thread": False})
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE logicalcomponent ("
+                "id VARCHAR PRIMARY KEY, project_id VARCHAR, parent_id VARCHAR, module_definition_id VARCHAR, "
+                "name VARCHAR, instance_type VARCHAR, resource_type VARCHAR, function_domain VARCHAR, "
+                "hierarchy_path VARCHAR, logical_instance_count INTEGER, description VARCHAR, "
+                "created_at VARCHAR, updated_at VARCHAR"
+                ")"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE physicalpartition ("
+                "id VARCHAR PRIMARY KEY, impl_option_id VARCHAR, logical_component_id VARCHAR, tier_id VARCHAR, "
+                "partition_name VARCHAR, partition_type VARCHAR, resource_category VARCHAR, physical_instance_count INTEGER, "
+                "partition_ratio FLOAT, content_share FLOAT, description VARCHAR"
+                ")"
+            )
+        )
+        _create_metric_table(connection)
+        for migration in migrations.MIGRATIONS:
+            if migration.version >= "V7.010":
+                continue
+            migrations._ensure_tracking_tables(connection)
+            connection.execute(
+                text(
+                    "INSERT INTO migration_history "
+                    "(id, version, name, applied_at, checksum, status, note) "
+                    "VALUES (:id, :version, :name, '2026-06-15T11:00:00Z', :checksum, 'applied', '')"
+                ),
+                {"id": migration.id, "version": migration.version, "name": migration.name, "checksum": migration.checksum},
+            )
+        connection.execute(
+            text(
+                "INSERT INTO logicalcomponent "
+                "(id, project_id, parent_id, module_definition_id, name, instance_type, resource_type, function_domain, hierarchy_path, logical_instance_count, description, created_at, updated_at) "
+                "VALUES "
+                "('B_NPU', 'P001', 'B0', NULL, 'NPU_TOP', 'subsystem', 'logic+memory', 'AI', 'SOC_TOP/NPU_TOP', 1, '', '2026-06-15', '2026-06-15'), "
+                "('B30', 'P001', 'B_NPU', NULL, 'NPU_MAC_ARRAY', 'block', 'logic', 'AI Compute', 'SOC_TOP/NPU_TOP/NPU_MAC_ARRAY', 4, '', '2026-06-16', '2026-06-16'), "
+                "('B8', 'P001', 'B_NPU', NULL, 'NPU_SRAM_BANK', 'macro_group', 'memory', 'AI Memory', 'SOC_TOP/NPU_TOP/NPU_SRAM_BANK', 2, '', '2026-06-16', '2026-06-16')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO physicalpartition "
+                "(id, impl_option_id, logical_component_id, tier_id, partition_name, partition_type, resource_category, physical_instance_count, partition_ratio, content_share, description) "
+                "VALUES "
+                "('PP_NPU_MAC_ARRAY_logic_T0', 'S2', 'B30', 'T0', 'NPU_MAC_ARRAY_logic_T0', 'full', 'logic', 4, 1, 1, ''), "
+                "('PP_NPU_SRAM_BANK_sram_T1', 'S2', 'B8', 'T1', 'NPU_SRAM_BANK_sram_T1', 'full', 'sram', 2, 1, 1, '')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_note, created_at) "
+                "VALUES "
+                "('M_LOG_B30_LOGIC_AREA', 'S2', 'logical_component', 'B30', 'logic_area', '10.6', 'mm2', 'logical_area', 'number', 'typical', 'nominal', 'draft', '', '2026-06-15'), "
+                "('M_LOG_B8_SRAM_AREA', 'S2', 'logical_component', 'B8', 'sram_area', '7.6', 'mm2', 'logical_area', 'number', 'typical', 'nominal', 'draft', '', '2026-06-15'), "
+                "('M_PART_MAC_LOGIC_AREA', 'S2', 'physical_partition', 'PP_NPU_MAC_ARRAY_logic_T0', 'logic_area', '10.6', 'mm2', 'implementation_area', 'number', 'typical', 'nominal', 'draft', '', '2026-06-15')"
+            )
+        )
+
+        migrations.run_schema_migrations(connection, "2026-06-15T12:00:00Z")
+
+        component_ids = connection.execute(text("SELECT id FROM logicalcomponent ORDER BY id")).scalars().all()
+        partition_count = connection.execute(text("SELECT COUNT(*) FROM physicalpartition")).scalar_one()
+        metric_count = connection.execute(text("SELECT COUNT(*) FROM metric")).scalar_one()
+
+    engine.dispose()
+
+    assert component_ids == ["B_NPU"]
+    assert partition_count == 0
+    assert metric_count == 0
 
 
 def test_metric_identity_migration_normalizes_null_corner_workload_before_dedupe(tmp_path) -> None:
