@@ -11,7 +11,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 |---|---|
 | Branch | `codex/phase2-hardening` |
 | Last updated | 2026-06-16 |
-| Current batch | P0.5 backend route/service boundary refactor complete |
+| Current batch | P0.5 follow-up complete: corner/workload-aware metric lookup |
 | PR | https://github.com/smhe00/soc_data/pull/2 |
 | Blocking status | Not blocked |
 
@@ -37,6 +37,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 | 6 | P0.3 Power Dataset naming cleanup and P0.4 Metric provenance | `backend/power.py`, `backend/schemas.py`, `backend/models.py`, `backend/migrations.py`, `backend/imports.py`, `backend/main.py`, `backend/seed.py`, frontend power types/API, tests | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 7 | P0.3/P0.4 review follow-up | `backend/main.py`, `backend/power.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 | 8 | P0.5 service extraction | `backend/main.py`, `backend/services/*`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
+| 9 | P0.5 metric lookup follow-up | `backend/services/metric_service.py`, `backend/main.py`, `tests/test_phase1_api.py`, `docs/CODEX_AGENT_STATUS.md` | Complete | `uv run pytest`; `uv run python scripts\verify_import.py`; `uv run python scripts\check_phase1.py`; `cd frontend && npm run build` passed; `git merge-tree --write-tree HEAD origin/master` clean |
 
 ## Blocking Questions
 
@@ -89,6 +90,11 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 - Added `backend/services/quality_rules.py` for quality issue response construction.
 - Reduced `backend/main.py` by importing these low-risk service helpers while preserving existing route paths and response shapes.
 - Checked for circular import risk with import/template verification; no circular import issue was observed.
+- Made `metrics_for()` deterministic by filtering on explicit `corner` and `workload`, defaulting to `typical` / `nominal`.
+- Kept existing area and rollup reads on the default `typical` / `nominal` metric identity.
+- Made dashboard/implementation power reads explicitly use `workload='peak'`, preserving the seeded `total_power=45.3` behavior.
+- Added regression coverage for same `metric_name` with a non-default corner/workload so component area reads do not collapse metric identities.
+- Added dashboard power regression coverage to preserve peak power display.
 
 ### In Progress
 
@@ -104,7 +110,7 @@ STATUS: READY_FOR_CHATGPT_REVIEW
 
 | Command | Result | Notes |
 |---|---|---|
-| `uv run pytest` | Passed | 24 tests passed; existing FastAPI deprecation warnings only. |
+| `uv run pytest` | Passed | 25 tests passed; existing FastAPI deprecation warnings only. |
 | `uv run python scripts/verify_import.py` | Passed | Import template round trip returned no errors; redundant legacy metric rows were filtered. |
 | `uv run python scripts/check_phase1.py` | Passed | Expected Phase-1 counts and camera power summary preserved. |
 | `cd frontend && npm run build` | Passed | Vite build completed. |

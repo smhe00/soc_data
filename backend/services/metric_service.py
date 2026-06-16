@@ -27,12 +27,21 @@ def metric_id(row: dict[str, Any]) -> str:
     )
 
 
-def metrics_for(session: Session, impl_option_id: str, subject_type: str, subject_id: str) -> dict[str, Metric]:
+def metrics_for(
+    session: Session,
+    impl_option_id: str,
+    subject_type: str,
+    subject_id: str,
+    corner: str = "typical",
+    workload: str = "nominal",
+) -> dict[str, Metric]:
     rows = session.exec(
         select(Metric).where(
             Metric.impl_option_id == impl_option_id,
             Metric.subject_type == subject_type,
             Metric.subject_id == subject_id,
+            Metric.corner == corner,
+            Metric.workload == workload,
         )
     ).all()
     return {row.metric_name: row for row in rows}

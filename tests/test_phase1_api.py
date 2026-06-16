@@ -18,6 +18,7 @@ def test_demo_seed_counts_and_quality(client: TestClient) -> None:
     assert len(partitions) == 144
     assert quality_issues == []
     assert dashboard["metrics"]["partition_count"] == 144
+    assert dashboard["metrics"]["total_power"] == 45.3
     assert not [row for row in components if row["type"] == "parent_residual"]
     assert not [row for row in partitions if row["partition_type"] == "residual"]
 
@@ -328,6 +329,25 @@ def test_metric_provenance_defaults_and_auto_derived_protection(client: TestClie
         "source_type": "tool_extracted",
         "derivation": "ptpx_report",
     }
+
+
+def test_component_area_uses_default_corner_workload_metric(client: TestClient) -> None:
+    before = next(row for row in client.get("/api/components?impl_option_id=S2").json() if row["id"] == "B_NPU_TENSOR")
+    assert before["logic_area"] != 999.0
+
+    with backend_app.engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO metric "
+                "(id, impl_option_id, subject_type, subject_id, metric_name, metric_value, metric_unit, metric_category, value_type, corner, workload, confidence, source_type, derivation, source_note, created_at) "
+                "VALUES "
+                "('M_LOG_B_NPU_TENSOR_LOGIC_AREA_STRESS', 'S2', 'logical_component', 'B_NPU_TENSOR', 'logic_area', '999.0', 'mm2', 'logical_area', 'number', 'slow', 'stress', 'review', 'simulation', 'manual', 'non-default corner workload', '2026-06-16')"
+            )
+        )
+
+    after = next(row for row in client.get("/api/components?impl_option_id=S2").json() if row["id"] == "B_NPU_TENSOR")
+    assert after["logic_area"] == before["logic_area"]
+    assert after["logic_area"] != 999.0
 
 
 def test_auto_derived_metric_skips_protected_same_identity_with_custom_id(client: TestClient) -> None:

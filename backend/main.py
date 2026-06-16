@@ -549,8 +549,9 @@ def build_component_tree(items: list[dict[str, Any]], parent: str | None = None)
 
 def impl_option_ui(session: Session, impl_option: ImplOption) -> dict[str, Any]:
     metrics = metrics_for(session, impl_option.id, "impl_option", impl_option.id)
+    peak_metrics = metrics_for(session, impl_option.id, "impl_option", impl_option.id, workload="peak")
     area = metric_number(metrics, "area")
-    power = metric_number(metrics, "power")
+    power = metric_number(peak_metrics, "power")
     return {
         "id": impl_option.id,
         "project_id": impl_option.project_id,
@@ -1527,7 +1528,7 @@ def get_tiers(impl_option_id: str = "S2") -> list[dict[str, Any]]:
                 "thickness_um": tier.thickness_um,
                 "area": tier.area_limit_mm2,
                 "area_limit_mm2": tier.area_limit_mm2,
-                "power": metric_number(metrics_for(session, impl_option_id, "tier", tier.id), "power"),
+                "power": metric_number(metrics_for(session, impl_option_id, "tier", tier.id, workload="peak"), "power"),
                 "utilization": metric_number(metrics_for(session, impl_option_id, "tier", tier.id), "utilization"),
                 "interconnect": "HB < 1um" if tier.id == "T0" else "HB + TSV" if tier.id == "T1" else "TSV < 5um",
                 "description": tier.description,
